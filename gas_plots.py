@@ -8,7 +8,7 @@ import math
 from scipy.stats import ks_2samp
 from matplotlib.transforms import Bbox
 import difflib
-
+import scipy.stats as stats
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, GB21, use_gb21=False, soloplot=None,exclude_names=None,logx=False,logy=False,background_image=None,manual_limits=None, legend_loc ='best' , truescale=False):
     """possible x_column: 'Distance (Mpc)', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
