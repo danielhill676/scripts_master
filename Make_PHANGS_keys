@@ -1,0 +1,169 @@
+from astropy.table import Table
+from astroquery.ipac.ned import Ned
+
+llamatab = Table.read('/Users/administrator/Astro/LLAMA/llama_main_properties.fits',format='fits')
+
+imaging_list = [
+    "ESO021", "ESO137", "MCG523", "NGC1079", "NGC1947", "NGC2992", "NGC3175",
+    "NGC3749", "NGC4224", "NGC4260", "NGC5037", "NGC5506", "NGC5845", "NGC6814", "NGC718", "NGC7582",
+    "ESO093", "ESO208", "MCG514", "MCG630", "NGC1315", "NGC1375", "NGC2110", "NGC3081", "NGC3717",
+    "NGC3783", "NGC4235", "NGC4593", "NGC5128", "NGC5728", "NGC5921", "NGC7172", "NGC7213", "NGC7727"
+]
+
+def Make_PHANGS_keys(lines, chan_width, statwt_edge_kms, phys_res, ang_res):
+    """
+    makes PHANGS keys for all LLAMA objects
+    
+    Parameters:
+    lines: ['co21', etc..]
+    chan_width: channel width in km/s
+    statwt_edge_kms: don't know what this is
+    phys_res: physical resolution in pc
+    ang_res: angular resolution in arcsec"""
+
+    # append to key files in alphabetical order
+
+#     with open('/Users/administrator/Astro/LLAMA/ALMA/phangs_imaging_scripts-master/LLAMA/LLAMA_keys/config_definitions.txt','w') as config_key:
+#         config_key.write(f"""
+#         line_product    {lines[0]}      {{'line_tag':'{lines[0]}','channel_kms':{chan_width},'statwt_edge_kms':{statwt_edge_kms}}}
+#         line_product    {lines[0]}      {{"fitorder":0,"combinespw":False,"lines_to_flag":["co21"]}}
+
+#         interf_config   12m       {{'array_tags':['12m']}}
+#         interf_config   12m       {{'clean_scales_arcsec':[0,1,2.5,5.0]}}
+#         """)
+    
+#     with open('/Users/administrator/Astro/LLAMA/ALMA/phangs_imaging_scripts-master/LLAMA/LLAMA_keys/derived_key.txt','w') as derived_key:
+#         derived_key.write(f"""
+#         all		all	convolve_kw	{{}}
+
+#         all		all	noise_kw	{{'spec_box':5,'iterations':3}}
+
+#         all		all	strictmask_kw	{{'hi_thresh':4.0,'hi_nchan':2,'lo_thresh':2.0,'lo_nchan':2}}
+#         all		all	strictmask_kw	{{'grow_xy':0,'grow_v':0}}
+#         all		all	strictmask_kw	{{'min_pix':None,'min_area':None}}
+
+#         all		all	broadmask_kw	{{}}
+
+#         12m		co21	phys_res	{{{phys_res}}}
+#         12m		co21	ang_res		{{{ang_res}}}
+#         12m		co21	moments		['strictmom0','broadmom0']
+#         """)
+
+#     with open('/Users/administrator/Astro/LLAMA/ALMA/phangs_imaging_scripts-master/LLAMA/LLAMA_keys/dir_key.txt','w') as dir_key:
+#         dir_key.write(f"""
+#         # directory key
+#         """)
+#         for i in range(len(llamatab)):
+#             if llamatab['id'][i] in imaging_list:
+#                 dir_key.write(f"""\n {llamatab['id'][i]}   {llamatab['id'][i]}
+#                            """)
+#             else:
+#                 continue
+    
+#     with open('/Users/administrator/Astro/LLAMA/ALMA/phangs_imaging_scripts-master/LLAMA/LLAMA_keys/distance_key.txt','w') as distance_key:
+#         distance_key.write(f"""
+#         # distance key
+#         \ntarget,dist
+#         """)
+#         for i in range(len(llamatab)):
+#             if llamatab['id'][i] in imaging_list:
+#                 distance_key.write(f"""\n{llamatab['id'][i]},{llamatab['D [Mpc]'][i]}
+#                            """)
+#             else:
+#                 continue
+
+#     with open('/Users/administrator/Astro/LLAMA/ALMA/phangs_imaging_scripts-master/LLAMA/LLAMA_keys/imaging_recipes.txt','w') as imaging_key:
+#         imaging_key.write(f"""
+#         # imaging key
+#         all      {lines[0]}         all           cube_mosaic.clean
+#         12m      {lines[0]}         all           cube_mosaic.clean
+#         all      {lines[0]}         singlescale   cube_mosaic.clean
+#         """)
+
+#     with open('/Users/administrator/Astro/LLAMA/ALMA/phangs_imaging_scripts-master/LLAMA/LLAMA_keys/master_key.txt','w') as master_key:
+#         master_key.write(f"""
+# # Locations
+
+# key_dir        	     /data/c3040163/llama/alma/phangs_imaging_scripts-master/LLAMA/LLAMA_keys
+# cleanmask_root		 /data/c3040163/llama/alma/phangs_imaging_scripts-master/LLAMA/cleanmasks/
+# imaging_root		 /data/c3040163/llama/alma/phangs_imaging_scripts-master/LLAMA/imaging/
+# postprocess_root	 /data/c3040163/llama/alma/phangs_imaging_scripts-master/LLAMA/postprocess/
+# derived_root		 /data/c3040163/llama/alma/phangs_imaging_scripts-master/LLAMA/derived/
+# release_root		 /data/c3040163/llama/alma/phangs_imaging_scripts-master/LLAMA/release/
+# """)
+
+#         for i in range(len(llamatab)):
+#             if llamatab['id'][i] in imaging_list:
+#                 master_key.write(f"""\nms_root			/data/c3040163/llama/alma/raw/{llamatab['id'][i]}/
+#                            """)
+#             else:
+#                 continue
+        
+#         master_key.write(f"""# Data files
+
+# ms_key			ms_file_key.txt
+# singledish_key		singledish_key.txt
+# cleanmask_key		cleanmask_key.txt
+# distance_key		distance_key.txt
+
+# # Definitions and mapping
+
+# config_key		config_definitions.txt
+# target_key		target_definitions.txt
+# moment_key		moment_key.txt
+# derived_key		derived_key.txt
+# imaging_key		imaging_recipes.txt
+# linmos_key		linearmosaic_definitions.txt
+# override_key		overrides.txt
+# dir_key			dir_key.txt
+#                     """)
+
+        
+
+
+    # with open('/Users/administrator/Astro/LLAMA/ALMA/phangs_imaging_scripts-master/LLAMA/LLAMA_keys/ms_file_key.txt' ,'w') as ms_key:
+    #     ms_key.write(f"""
+    #                  """)
+
+
+    # with open('/Users/administrator/Astro/LLAMA/ALMA/phangs_imaging_scripts-master/LLAMA/LLAMA_keys/target_definitions.txt','w') as target_key:
+    with open('/Users/administrator/Astro/LLAMA/ALMA/phangs_imaging_scripts-master/full_run_newkeys/keys/target_definitions.txt','w') as target_key:
+        target_key.write(f"""
+        # target key
+        """)
+        for i in range(len(llamatab)):
+            if llamatab['id'][i] in imaging_list:
+                Ned_table = Ned.query_object(llamatab['name'][i])
+
+                RA = Ned_table['RA'][0]
+                DEC = Ned_table['DEC'][0]
+                RA_sex = RA / 15.0
+                RA_h = int(RA_sex)
+                RA_m = int((RA_sex - RA_h) * 60)
+                RA_s = ((RA_sex - RA_h) * 60 - RA_m) * 60
+                RA_s = round(RA_s, 1)
+                sign = '-' if DEC < 0 else '+'
+                DEC_abs = abs(DEC)
+                DEC_d = int(DEC_abs)
+                DEC_m = int((DEC_abs - DEC_d) * 60)
+                DEC_s = int(round(((DEC_abs - DEC_d) * 60 - DEC_m) * 60))
+                if DEC_s == 60:
+                    DEC_s = 0
+                    DEC_m += 1
+                if DEC_m == 60:
+                    DEC_m = 0
+                    DEC_d += 1
+                DEC_d = f"{sign}{DEC_d:02d}"
+
+                z = llamatab['redshift'][i]
+                v = Ned_table['Velocity'][0]
+
+                target_key.write(f"""\n{llamatab['id'][i]}   {RA_h:02d}h{RA_m:02d}m{RA_s:04.1f}s  {DEC_d}d{DEC_m:02d}m{DEC_s:02d}s  {v} 2000
+                           """)
+            else:
+                continue
+    
+phys_res = {'60pc': 60.0, '90pc': 90.0, '120pc': 120.0, '150pc': 150.0}
+ang_res = {'2as': 2.0}
+
+Make_PHANGS_keys(['co21'], 30.0, 0.5, phys_res, ang_res)
