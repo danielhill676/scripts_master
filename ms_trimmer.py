@@ -44,14 +44,14 @@ def ms_frame_from_phase(phase0):
         return 'icrs'
 
 # ---------------- user params ----------------
-name = 'NGC2110'
+name = 'NGC4593'
 row = llamatab[llamatab['id'] == name]
 if len(row) == 0:
     raise RuntimeError(f"No entry '{name}' found in llama table")
 
 D_Mpc = float(row['D [Mpc]'][0])
 
-input_ms = 'uid___A002_X1093ae8_X77c9.ms'
+input_ms = 'uid___A002_Xc8b2b0_X5659.ms'
 output_ms = 'trimmed_' + input_ms
 
 # ensure these are plain floats

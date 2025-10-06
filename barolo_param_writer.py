@@ -18,38 +18,6 @@ imaging_list = [
     "NGC6814", "NGC7172", "NGC718", "NGC7213", "NGC7582", "NGC7727"
 ]
 
-def make_barolo_fits(infile, outfile):
-    with fits.open(infile, memmap=True) as hdul:
-        hdu = hdul[0]
-
-        # Work with the header only (don’t load all data)
-        header = hdu.header.copy()
-
-        # Derive ndim safely (squeeze only changes shape, not data)
-        ndim = hdu.data.squeeze().ndim  
-
-        # Update NAXIS and clean out old NAXISj
-        header["NAXIS"] = ndim
-        for key in list(header.keys()):
-            if key.startswith("NAXIS") and key != "NAXIS":
-                del header[key]
-
-        # Add back correct NAXISj entries
-        shape = hdu.data.squeeze().shape
-        for i in range(ndim):
-            header[f"NAXIS{i+1}"] = shape[-(i+1)]
-
-        # Ensure float32, but write lazily without expanding in RAM
-        # Use scale_back to force BITPIX = -32
-        hdu.header["BITPIX"] = -32  
-
-        # Write only the header + reference to data
-        hdu_scaled = fits.PrimaryHDU(data=hdu.data, header=header)
-        hdu_scaled.scale("float32")  # avoid casting whole cube in RAM
-        hdu_scaled.writeto(outfile, overwrite=True)
-
-    print(f"✅ Wrote cleaned Barolo FITS: {outfile}")
-
 def format_coord(value):
     """Ensure RA/DEC values have explicit + or - and add 'd' for degrees."""
     val_str = str(value)
@@ -71,7 +39,7 @@ def write_barolo_params(infolder, outfolder):
         if not file.endswith('.fits'):
             continue
 
-        name = file.removesuffix('.fits')
+        name = file.removesuffix('.subcube.fits')
         filepath = os.path.join(infolder, file)
 
         # Cross-match with LLAMA table
@@ -80,14 +48,8 @@ def write_barolo_params(infolder, outfolder):
             print(f"⚠️  Skipping {name}: not found in llama_main_properties.fits")
             continue
 
-        barolo_fits_path = infolder+'/barolo/'+file
-
-        if name in ['NGC7582']:
-
-            make_barolo_fits(filepath,barolo_fits_path)
-
         # Load FITS header of cleaned cube
-        header = fits.getheader(barolo_fits_path)
+        header = fits.getheader(filepath)
         BMAJ = header.get("BMAJ", 0) * 3600  # degrees → arcsec
 
         PA = row['PA'][0]
@@ -108,7 +70,7 @@ def write_barolo_params(infolder, outfolder):
             f.write(f"""
 # BBarolo 3DFIT parameter file (simple model for inner 1 kpc)
 # -------------------------
-FITSFILE    {barolo_fits_path}
+FITSFILE    {filepath}
 THREADS     4
 
 /////////// 3DFIT parameters /////////////
@@ -153,16 +115,20 @@ DISTANCE    {D_Mpc}
         # Append command to execution script
         with open(execfile, 'a') as f:
             f.write(f"bbarolo -p {name}.par\n")
-        print(f"✅ Wrote {barolo_fits_path}, {parfile}, and appended command to barolo_execute.sh")
+        print(f"✅ Wrote {filepath}, {parfile}, and appended command to barolo_execute.sh")
 
 
 # Run for active + inactive galaxies
 write_barolo_params(
-    '/Users/administrator/Astro/LLAMA/ALMA/AGN',
+    '/Users/administrator/Astro/LLAMA/ALMA/AGN/subcubes',
     '/Users/administrator/Astro/LLAMA/ALMA/barolo'
 )
 write_barolo_params(
-    '/Users/administrator/Astro/LLAMA/ALMA/inactive',
+    '/Users/administrator/Astro/LLAMA/ALMA/CO32/AGN/subcubes',
+    '/Users/administrator/Astro/LLAMA/ALMA/barolo'
+)
+write_barolo_params(
+    '/Users/administrator/Astro/LLAMA/ALMA/inactive/subcubes',
     '/Users/administrator/Astro/LLAMA/ALMA/barolo'
 )
 

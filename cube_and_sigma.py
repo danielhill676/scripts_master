@@ -19,6 +19,9 @@ from astropy.io import fits
 from astropy.constants import c
 import warnings
 from astroquery.ipac.ned import Ned
+from astroquery.exceptions import RemoteServiceError
+import requests
+import time
 
 warnings.filterwarnings("ignore", category=UserWarning, message="WCS1 is missing card PV2_2")
 warnings.filterwarnings("ignore", category=UserWarning, message="WCS1 is missing card PV2_1")
@@ -42,10 +45,10 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
         """
 
     for name in os.listdir(folder):
-        name_short = name.removesuffix('.fits')
+        if not name.endswith('.fits'):
+            continue  # Skip anything that isn’t a FITS file
 
-        if name == '.DS_Store':    
-            continue
+        name_short = name.removesuffix('.fits')
 
         # if name_short not in ['ESO137']:
         #     continue
@@ -63,9 +66,29 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
             if llamatab['id'][i] == f'{name_short}':
                 D = llamatab['D [Mpc]'][i]
                 z = llamatab['redshift'][i]
-                Ned_table = Ned.query_object(llamatab['name'][i])
-                RA = Ned_table['RA'][0]
-                DEC = Ned_table['DEC'][0]
+                
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        Ned_table = Ned.query_object(llamatab['name'][i])
+                        RA = Ned_table['RA'][0]
+                        DEC = Ned_table['DEC'][0]
+                        break  # success, exit retry loop
+                    except (requests.exceptions.ConnectionError, RemoteServiceError, requests.exceptions.ReadTimeout) as e:
+                        print(f"⚠️  NED query failed for {llamatab['name'][i]} (attempt {attempt+1}/{max_retries}): {e}")
+                        if attempt < max_retries - 1:
+                            print("Retrying in 5 seconds...")
+                            time.sleep(5)
+                        else:
+                            print("❌ All NED attempts failed.")
+                            # fallback: if your FITS table already includes RA/DEC, use them
+                            if 'RA' in llamatab.colnames and 'DEC' in llamatab.colnames:
+                                RA = llamatab['RA'][i]
+                                DEC = llamatab['DEC'][i]
+                                print(f"Using fallback RA/DEC from llamatab for {llamatab['name'][i]}.")
+                            else:
+                                print(f"Skipping {llamatab['name'][i]} — no coordinates available.")
+                                continue
 
 
 
@@ -131,7 +154,15 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
         # NOTE: experiment with different velocity ranges
 
         BMAJ = fits.open(f"{folder}/{name}")[0].header['BMAJ']
-        BMIN = fits.open(f"{folder}/{name}")[0].header['BMIN']  
+        BMIN = fits.open(f"{folder}/{name}")[0].header['BMIN']
+
+                # Save the subcube
+        subcube_hdu = fits.PrimaryHDU(subcube)
+        subcube_path = f'{folder}/subcubes/{name_short}.subcube.fits'
+        subcube_hdu.writeto(subcube_path, overwrite=True)
+        print(f"subcube image saved to {subcube_path}")
+
+
 
         def image_plot(ord, moment0=None):
             """ ord = moment order index """
@@ -292,8 +323,8 @@ print('Beginning AGN CO imaging...')
 AGN_21 = r"/Users/administrator/Astro/LLAMA/ALMA/AGN"
 AGN_32 = r"/Users/administrator/Astro/LLAMA/ALMA/CO32/AGN"
 
-cube_imaging(AGN_21,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV, square=True)
-cube_imaging(AGN_32,CO3_2,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV,square=True)
+#cube_imaging(AGN_21,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV, square=True)
+#cube_imaging(AGN_32,CO3_2,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV,square=True)
 
 
 print('Beginning inactive galaxy CO imaging...')
