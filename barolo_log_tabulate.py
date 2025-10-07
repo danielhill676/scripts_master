@@ -1,7 +1,7 @@
 import re
 import pandas as pd
 
-log_path = "/Users/administrator/Astro/LLAMA/ALMA/barolo/barolo1.log"
+log_path = "/Users/administrator/Astro/LLAMA/ALMA/barolo/barolo.log"
 with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
     log_text = f.read()
 

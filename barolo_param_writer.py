@@ -117,7 +117,7 @@ DISTANCE    {D_Mpc}
             f.write(f"bbarolo -p {name}.par\n")
         print(f"✅ Wrote {filepath}, {parfile}, and appended command to barolo_execute.sh")
 
-
+os.system('rm -f /Users/administrator/Astro/LLAMA/ALMA/barolo/barolo_execute.sh')
 # Run for active + inactive galaxies
 write_barolo_params(
     '/Users/administrator/Astro/LLAMA/ALMA/AGN/subcubes',
