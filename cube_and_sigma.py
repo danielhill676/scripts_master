@@ -355,7 +355,7 @@ cube_imaging(AGN_32,CO3_2,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',
 print('Beginning inactive galaxy CO imaging...')
 inactive = r"/Users/administrator/Astro/LLAMA/ALMA/inactive"
 
-# cube_imaging(inactive,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/inactive_images',FOV,square=True)
+cube_imaging(inactive,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/inactive_images',FOV,square=True)
 
 et=time.time()
 runtime=et-st
