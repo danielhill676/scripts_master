@@ -35,6 +35,26 @@ def get_errorbars(df, colname):
 
     return None
 
+def is_categorical(series):
+    """Return True if a Series is categorical or contains mostly non-numeric values."""
+    # Ensure it's not empty
+    if series.empty:
+        return False
+
+    # Check dtype directly
+    if isinstance(series.dtype, pd.CategoricalDtype):
+        return True
+
+    # Try converting to numeric — if most fail, treat as categorical
+    s = series.dropna().astype(str)
+    numeric = pd.to_numeric(s, errors='coerce')
+    non_numeric_fraction = numeric.isna().mean()
+
+    if non_numeric_fraction > 0.5:
+        print(f"Detected non-numeric string data, treating as categorical. Example values: {s.unique()[:5]}")
+        return True
+    return False
+
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, GB21, use_gb21=False, soloplot=None,exclude_names=None,logx=False,logy=False,background_image=None,manual_limits=None, legend_loc ='best' , truescale=False):
     """possible x_column: 'Distance (Mpc)', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
@@ -42,9 +62,18 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     # Load galaxy data
     df_AGN = pd.DataFrame(AGN_data)
     df_inactive = pd.DataFrame(inactive_data)
-    print('df_inactive')
     common_columns = df_AGN.columns.intersection(df_inactive.columns)
     df_combined = pd.concat([df_AGN[common_columns], df_inactive[common_columns]], ignore_index=True)
+
+    for df_name, df in [('AGN', df_AGN), ('inactive', df_inactive)]:
+        if "Bar" in df.columns:
+            df["Bar"] = (
+                df["Bar"]
+                .astype(str)
+                .str.strip()
+                .replace(["", "nan", "None", "NaN"], np.nan)
+                .astype("category")
+            )
 
     # Load LLAMA table
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
@@ -92,15 +121,34 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     merged_inactive = pd.merge(df_combined, fit_data_inactive, left_on='id', right_on='Galaxy_clean',how='right')
     merged_inactive = pd.merge(merged_inactive, inactive_bol, left_on='Name_clean', right_on='Name_clean',how='left')
 
-    # Clean AGN data
-    merged_AGN[x_column] = pd.to_numeric(merged_AGN[x_column], errors='coerce')
-    merged_AGN[y_column] = pd.to_numeric(merged_AGN[y_column], errors='coerce')
-    merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
+    for df in [merged_AGN, merged_inactive]:
+        if "Bar" in df.columns:
+            df["Bar"] = df["Bar"].astype(str).str.strip().replace("", np.nan)
+            df["Bar"] = df["Bar"].astype("category")
 
-    # Clean inactive data
-    merged_inactive[x_column] = pd.to_numeric(merged_inactive[x_column], errors='coerce')
-    merged_inactive[y_column] = pd.to_numeric(merged_inactive[y_column], errors='coerce')
-    merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
+            # Determine if axes are categorical
+    is_x_categorical = is_categorical(merged_AGN[x_column].dropna())
+    is_y_categorical = is_categorical(merged_AGN[y_column].dropna())
+    if is_x_categorical:
+        print(f"Detected categorical x-axis: {x_column}")
+    if is_y_categorical:
+        print(f"Detected categorical y-axis: {y_column}")
+
+    if not is_x_categorical and not is_y_categorical:
+
+        # Clean AGN data
+        merged_AGN[x_column] = pd.to_numeric(merged_AGN[x_column], errors='coerce')
+        merged_AGN[y_column] = pd.to_numeric(merged_AGN[y_column], errors='coerce')
+        merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
+
+        # Clean inactive data
+        merged_inactive[x_column] = pd.to_numeric(merged_inactive[x_column], errors='coerce')
+        merged_inactive[y_column] = pd.to_numeric(merged_inactive[y_column], errors='coerce')
+        merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
+
+    else:
+        merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
+        merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
 
      # --- Exclude names here ---
     if exclude_names is not None:
@@ -143,6 +191,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
     yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
 
+
     if soloplot == 'AGN':
         if x_agn.empty or y_agn.empty:
             print("No valid AGN data to plot.")
@@ -159,207 +208,373 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             print("No valid Y data to plot.")
             return
 
-    # KS test only if both are present
-    if soloplot is None:
-        statistic, p_value = ks_2samp(y_inactive, y_agn)
-        print(f'{y_column} stats')
-        print(f"KS statistic: {statistic}")
-        print(f"P-value: {p_value}")
-        if p_value < 0.05:
-            print("Distributions differ.")
-        else:
-            print("Distributions may be the same.")
-
     # Set up figure
-    figsize = 8
-    if truescale == True:
+
+    if not is_x_categorical and not is_y_categorical:
+
+        figsize = 8
+        if truescale == True:
+            if manual_limits is not None:
+                xratio = (manual_limits[1] - manual_limits[0]) / (manual_limits[3] - manual_limits[2]) * 1.3
+                yratio = (manual_limits[3] - manual_limits[2]) / (manual_limits[1] - manual_limits[0])
+                fig = plt.figure(figsize=(figsize * xratio, figsize * yratio))
+        else:
+            fig = plt.figure(figsize=((figsize*1.1)*1.3, figsize*0.92))
+        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
+        ax_scatter = fig.add_subplot(gs[0])
+        ax_scatter.set_facecolor('none')
+
+            # KS test only if both are present
+        if soloplot is None:
+            statistic, p_value = ks_2samp(y_inactive, y_agn)
+            print(f'{y_column} stats')
+            print(f"KS statistic: {statistic}")
+            print(f"P-value: {p_value}")
+            if p_value < 0.05:
+                print("Distributions differ.")
+            else:
+                print("Distributions may be the same.")
+
+            # Axis limits
+        data_x = []
+        data_y = []
+        if soloplot in (None, 'AGN'):
+            data_x.append(x_agn)
+            data_y.append(y_agn)
+        if soloplot in (None, 'inactive'):
+            data_x.append(x_inactive)
+            data_y.append(y_inactive)
+        if soloplot is None and use_gb21:
+            data_x.append(x_gb21)
+            data_y.append(y_gb21)
+
+        all_x = pd.concat(data_x)
+        all_y = pd.concat(data_y)
+
+
+        # set limits:
+
         if manual_limits is not None:
-            xratio = (manual_limits[1] - manual_limits[0]) / (manual_limits[3] - manual_limits[2]) * 1.3
-            yratio = (manual_limits[3] - manual_limits[2]) / (manual_limits[1] - manual_limits[0])
-            fig = plt.figure(figsize=(figsize * xratio, figsize * yratio))
-    else:
-        fig = plt.figure(figsize=((figsize*1.1)*1.3, figsize*0.92))
-    gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
-    ax_scatter = fig.add_subplot(gs[0])
-    ax_scatter.set_facecolor('none')
+            xlower, xupper, ylower, yupper = manual_limits
+            xlower, xupper, ylower, yupper = float(xlower), float(xupper), float(ylower), float(yupper)
+        else:
+            xspan = all_x.max() - all_x.min()
+            yspan = all_y.max() - all_y.min()
+            pad_x = (0.05 * xspan) if xspan > 0 else 0.1
+            pad_y = (0.05 * yspan) if yspan > 0 else 0.05
+            xlower = all_x.min() - pad_x
+            xupper = all_x.max() + pad_x
+            ylower = all_y.min() - pad_y
+            yupper = all_y.max() + pad_y
 
-        # Axis limits
-    data_x = []
-    data_y = []
-    if soloplot in (None, 'AGN'):
-        data_x.append(x_agn)
-        data_y.append(y_agn)
-    if soloplot in (None, 'inactive'):
-        data_x.append(x_inactive)
-        data_y.append(y_inactive)
-    if soloplot is None and use_gb21:
-        data_x.append(x_gb21)
-        data_y.append(y_gb21)
+        if logx:
+            # prefer the manual lower if positive, otherwise pick 0.9 * min positive data
+            if xlower <= 0:
+                positives = all_x[all_x > 0]
+                if positives.empty:
+                    raise ValueError("Cannot use log x-axis: no positive x values available")
+                xlower = float(positives.min()) * 0.9
+                print("Adjusted x lower bound for log scale to", xlower)
+        if logy:
+            if ylower <= 0:
+                positives = all_y[all_y > 0]
+                if positives.empty:
+                    raise ValueError("Cannot use log y-axis: no positive y values available")
+                ylower = float(positives.min()) * 0.9
+                print("Adjusted y lower bound for log scale to", ylower)
 
-    all_x = pd.concat(data_x)
-    all_y = pd.concat(data_y)
+            # Background image:
+
+        if background_image is not None:
+            try:
+                img = plt.imread(background_image)
+                ax_img = fig.add_axes(ax_scatter.get_position(), zorder=-1)
+                extent = [xlower, xupper, ylower, yupper]
+                ax_img.imshow(img, extent=extent,
+                origin='upper', alpha=1.0, aspect='auto', interpolation='none')
+                ax_img.axis('off')
+
+            except Exception as e:
+                # avoid referencing ax_scatter before it's defined in other flows
+                print(f"Could not load background image: {e}")
+
+        # Plot scatter points
+        if soloplot in (None, 'AGN'):
+            ax_scatter.errorbar(
+                x_agn, y_agn,
+                xerr=xerr_agn, yerr=yerr_agn,
+                fmt="s", color="red", label="LLAMA AGN", markersize=6,
+                capsize=2, elinewidth=1, alpha=0.8
+            )
+            for x, y, name in zip(x_agn, y_agn, names_agn):
+                ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='darkred', zorder=10)
+
+        if soloplot in (None, 'inactive'):
+            ax_scatter.errorbar(
+                x_inactive, y_inactive,
+                xerr=xerr_inactive, yerr=yerr_inactive,
+                fmt="v", color="blue", label="LLAMA Inactive", markersize=6,
+                capsize=2, elinewidth=1, alpha=0.8
+            )
+            for x, y, name in zip(x_inactive, y_inactive, names_inactive):
+                ax_scatter.text(float(x), float(y), name, fontsize=7, color='navy', zorder=10)
+
+        # apply scale and limits
+        if logx:
+            ax_scatter.set_xscale("log")
+        if logy:
+            ax_scatter.set_yscale("log")
+
+        ax_scatter.set_xlim(xlower, xupper)
+        ax_scatter.set_ylim(ylower, yupper)
+
+        # Histogram bin edges
+
+        y_for_bins = all_y[(all_y >= ylower) & (all_y <= yupper)]
+        if y_for_bins.empty:
+            y_for_bins = all_y
+        bin_edges = np.histogram_bin_edges(y_for_bins, bins=7)
+
+        # Scatter labels
+        ax_scatter.set_xlabel(x_column)
+        ax_scatter.set_ylabel(y_column)
+        ax_scatter.grid(True)
+        leg = ax_scatter.legend(loc=legend_loc)
+        leg.set_zorder(30)
+        ax_scatter.set_title(f'{y_column} vs {x_column}')
+
+    # Histogram subplot
+        ax_hist = fig.add_subplot(gs[1], sharey=ax_scatter)
+
+        if soloplot in (None, 'AGN'):
+            ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
+                        color='red', alpha=0.4, label='AGN')
+            median_agn = np.median(y_agn)
+            ax_hist.axhline(median_agn, color='red', linestyle='--')
+            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn, 
+                        f"{median_agn:.2f}", color='red', fontsize=8, va='center')
+
+        if soloplot in (None, 'inactive'):
+            ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
+                        color='blue', alpha=0.4, label='Inactive')
+            median_inactive = np.median(y_inactive)
+            ax_hist.axhline(median_inactive, color='blue', linestyle='--')
+            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive, 
+                        f"{median_inactive:.2f}", color='blue', fontsize=8, va='center')
+
+        if soloplot is None and use_gb21:
+            ax_hist.hist(y_gb21, bins=bin_edges, orientation='horizontal', 
+                        color='green', alpha=0.4, label='GB21')
+            median_gb21 = np.median(y_gb21)
+            ax_hist.axhline(median_gb21, color='green', linestyle='--')
+            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_gb21, 
+                        f"{median_gb21:.2f}", color='green', fontsize=8, va='center')
+
+        ax_hist.axis('off')
+
+        # Save
+        suffix = f"_{soloplot}" if soloplot else ""
+        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
+        plt.savefig(output_path)
+        print(f"Saved plot to: {output_path}")
+
+        diffs = []
+        valid_pairs = 0
+
+        for _, row in df_pairs.iterrows():
+            agn_name = row["Active Galaxy"].strip()
+            inactive_name = row["Inactive Galaxy"].strip()
+
+            agn_val = merged_AGN.loc[merged_AGN["Name_clean"] == agn_name, y_column]
+            inactive_val = merged_inactive.loc[merged_inactive["Name_clean"] == inactive_name, y_column]
+
+            if not agn_val.empty and not inactive_val.empty:
+                diff = float(agn_val.values[0]) - float(inactive_val.values[0])
+                if diff == diff:  # Check for NaN
+                    diffs.append(diff)
+                    valid_pairs += 1
+
+        diffs = np.array(diffs)
+        diffs = diffs[np.isfinite(diffs)]
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.hist(diffs, bins=10, color="grey", alpha=0.4, edgecolor="black")
+        ax.axvline(np.median(diffs), color="red", linestyle="--", label=f"Median = {np.median(diffs):.2f}")
+        ax.axvline(np.percentile(diffs,25), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,25):.2f}")
+        ax.axvline(np.percentile(diffs,75), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,75):.2f}")
+        ax.axvline(0, color="black", linestyle="solid")  # reference line
+
+        ax.set_xlabel(f"Δ {y_column} (AGN - Inactive)")
+        ax.set_ylabel("Number of pairs")
+        ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
+        ax.legend()
+
+        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/pair_diffs/{y_column}_pair_differences.png'
+        plt.savefig(output_path)
+        print(f"Saved matched-pairs plot to: {output_path}")
+
+    elif is_x_categorical or is_y_categorical:
+        figsize = 8
+        if truescale == True:
+            if manual_limits is not None:
+                xratio = (manual_limits[1] - manual_limits[0]) / (manual_limits[3] - manual_limits[2]) * 1.3
+                yratio = (manual_limits[3] - manual_limits[2]) / (manual_limits[1] - manual_limits[0])
+                fig = plt.figure(figsize=(figsize * xratio, figsize * yratio))
+        else:
+            fig = plt.figure(figsize=((figsize*1.1)*1.3, figsize*0.92))
+        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
+        ax_bar = fig.add_subplot(gs[0])
+        ax_bar.set_facecolor('none')
+                    # Axis limits
+        data_x = []
+        data_y = []
+        if soloplot in (None, 'AGN'):
+            data_x.append(x_agn)
+            data_y.append(y_agn)
+        if soloplot in (None, 'inactive'):
+            data_x.append(x_inactive)
+            data_y.append(y_inactive)
+        if soloplot is None and use_gb21:
+            data_x.append(x_gb21)
+            data_y.append(y_gb21)
+
+        all_x = pd.concat(data_x)
+        all_y = pd.concat(data_y)
+
+        if is_x_categorical:
+            cat_order = sorted(set(x_agn.dropna()) | set(x_inactive.dropna()))
+            agn_median = []
+            inactive_median = []
+            agn_std = []
+            inactive_std = []
+
+            for cat in cat_order:
+                agn_vals = merged_AGN_clean.loc[merged_AGN_clean[x_column] == cat, y_column].dropna()
+                inact_vals = merged_inactive_clean.loc[merged_inactive_clean[x_column] == cat, y_column].dropna()
+
+                if len(agn_vals) > 0:
+                    agn_median.append(np.nanmedian(agn_vals))
+                    agn_std.append(np.nanstd(agn_vals))
+                else:
+                    agn_median.append(np.nan)
+                    agn_std.append(np.nan)
+
+                if len(inact_vals) > 0:
+                    inactive_median.append(np.nanmedian(inact_vals))
+                    inactive_std.append(np.nanstd(inact_vals))
+                else:
+                    inactive_median.append(np.nan)
+                    inactive_std.append(np.nan)
+
+            x = np.arange(len(cat_order))
+            width = 0.35
+
+            ax_bar.bar(x - width/2, agn_median, width, yerr=agn_std, label="AGN", color="red", alpha=0.7, capsize=4)
+            ax_bar.bar(x + width/2, inactive_median, width, yerr=inactive_std, label="Inactive", color="blue", alpha=0.7, capsize=4)
+            ax_bar.set_xticks(x)
+            ax_bar.set_xticklabels(cat_order, rotation=45, ha="right")
+            ax_bar.set_xlabel(x_column)
+            ax_bar.set_ylabel(y_column)
+            ax_bar.grid(True)
+            leg = ax_bar.legend(loc=legend_loc)
+            leg.set_zorder(30)
+            ax_bar.set_title(f'{y_column} vs {x_column}')
+
+            if manual_limits is not None:
+                xlower, xupper, ylower, yupper = manual_limits
+                xlower, xupper, ylower, yupper = float(xlower), float(xupper), float(ylower), float(yupper)
+            else:
+                yspan = all_y.max() - all_y.min()
+                pad_y = (0.05 * yspan) if yspan > 0 else 0.05
+                ylower = all_y.min() - pad_y
+                yupper = all_y.max() + pad_y
+
+                    # Histogram bin edges
+
+            y_for_bins = all_y[(all_y >= ylower) & (all_y <= yupper)]
+            if y_for_bins.empty:
+                y_for_bins = all_y
+            bin_edges = np.histogram_bin_edges(y_for_bins, bins=7)
+
+            # Histogram subplot
+            ax_hist = fig.add_subplot(gs[1], sharey=ax_bar)
+
+            if soloplot in (None, 'AGN'):
+                ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
+                            color='red', alpha=0.4, label='AGN')
+                median_agn = np.median(y_agn)
+                ax_hist.axhline(median_agn, color='red', linestyle='--')
+                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn, 
+                            f"{median_agn:.2f}", color='red', fontsize=8, va='center')
+
+            if soloplot in (None, 'inactive'):
+                ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
+                            color='blue', alpha=0.4, label='Inactive')
+                median_inactive = np.median(y_inactive)
+                ax_hist.axhline(median_inactive, color='blue', linestyle='--')
+                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive, 
+                            f"{median_inactive:.2f}", color='blue', fontsize=8, va='center')
+
+            if soloplot is None and use_gb21:
+                ax_hist.hist(y_gb21, bins=bin_edges, orientation='horizontal', 
+                            color='green', alpha=0.4, label='GB21')
+                median_gb21 = np.median(y_gb21)
+                ax_hist.axhline(median_gb21, color='green', linestyle='--')
+                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_gb21, 
+                            f"{median_gb21:.2f}", color='green', fontsize=8, va='center')
+
+            ax_hist.axis('off')
+
+                    # Save
+            suffix = f"_{soloplot}" if soloplot else ""
+            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
+            plt.savefig(output_path)
+            print(f"Saved plot to: {output_path}")
 
 
-    # set limits:
+        elif is_y_categorical:
+            cat_order = sorted(set(y_agn.dropna()) | set(y_inactive.dropna()))
+            agn_median = []
+            inactive_median = []
+            agn_std = []
+            inactive_std = []
 
-    if manual_limits is not None:
-        xlower, xupper, ylower, yupper = manual_limits
-        xlower, xupper, ylower, yupper = float(xlower), float(xupper), float(ylower), float(yupper)
-    else:
-        xspan = all_x.max() - all_x.min()
-        yspan = all_y.max() - all_y.min()
-        pad_x = (0.05 * xspan) if xspan > 0 else 0.1
-        pad_y = (0.05 * yspan) if yspan > 0 else 0.05
-        xlower = all_x.min() - pad_x
-        xupper = all_x.max() + pad_x
-        ylower = all_y.min() - pad_y
-        yupper = all_y.max() + pad_y
+            for cat in cat_order:
+                agn_vals = merged_AGN_clean.loc[merged_AGN_clean[y_column] == cat, x_column].dropna()
+                inact_vals = merged_inactive_clean.loc[merged_inactive_clean[y_column] == cat, x_column].dropna()
 
-    if logx:
-        # prefer the manual lower if positive, otherwise pick 0.9 * min positive data
-        if xlower <= 0:
-            positives = all_x[all_x > 0]
-            if positives.empty:
-                raise ValueError("Cannot use log x-axis: no positive x values available")
-            xlower = float(positives.min()) * 0.9
-            print("Adjusted x lower bound for log scale to", xlower)
-    if logy:
-        if ylower <= 0:
-            positives = all_y[all_y > 0]
-            if positives.empty:
-                raise ValueError("Cannot use log y-axis: no positive y values available")
-            ylower = float(positives.min()) * 0.9
-            print("Adjusted y lower bound for log scale to", ylower)
+                if len(agn_vals) > 0:
+                    agn_median.append(np.nanmedian(agn_vals))
+                    agn_std.append(np.nanstd(agn_vals))
+                else:
+                    agn_median.append(np.nan)
+                    agn_std.append(np.nan)
 
-        # Background image:
+                if len(inact_vals) > 0:
+                    inactive_median.append(np.nanmedian(inact_vals))
+                    inactive_std.append(np.nanstd(inact_vals))
+                else:
+                    inactive_median.append(np.nan)
+                    inactive_std.append(np.nan)
 
-    if background_image is not None:
-        try:
-            img = plt.imread(background_image)
-            ax_img = fig.add_axes(ax_scatter.get_position(), zorder=-1)
-            extent = [xlower, xupper, ylower, yupper]
-            ax_img.imshow(img, extent=extent,
-              origin='upper', alpha=1.0, aspect='auto', interpolation='none')
-            ax_img.axis('off')
+            y = np.arange(len(cat_order))
+            height = 0.35
 
-        except Exception as e:
-            # avoid referencing ax_scatter before it's defined in other flows
-            print(f"Could not load background image: {e}")
+            ax_bar.barh(y - height/2, agn_median, height, xerr=agn_std, label="AGN", color="red", alpha=0.7, capsize=4)
+            ax_bar.barh(y + height/2, inactive_median, height, xerr=inactive_std, label="Inactive", color="blue", alpha=0.7, capsize=4)
+            ax_bar.set_yticks(y)
+            ax_bar.set_yticklabels(cat_order)
+            ax_bar.set_xlabel(x_column)
+            ax_bar.set_ylabel(y_column)
+            ax_bar.grid(True)
+            leg = ax_bar.legend(loc=legend_loc)
+            leg.set_zorder(30)
+            ax_bar.set_title(f'{y_column} vs {x_column}')
+            suffix = f"_{soloplot}" if soloplot else ""
+            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
+            plt.savefig(output_path)
+            print(f"Saved plot to: {output_path}")
 
-    # Plot scatter points
-    if soloplot in (None, 'AGN'):
-        ax_scatter.errorbar(
-            x_agn, y_agn,
-            xerr=xerr_agn, yerr=yerr_agn,
-            fmt="s", color="red", label="LLAMA AGN", markersize=6,
-            capsize=2, elinewidth=1, alpha=0.8
-        )
-        for x, y, name in zip(x_agn, y_agn, names_agn):
-            ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='darkred', zorder=10)
-
-    if soloplot in (None, 'inactive'):
-        ax_scatter.errorbar(
-            x_inactive, y_inactive,
-            xerr=xerr_inactive, yerr=yerr_inactive,
-            fmt="v", color="blue", label="LLAMA Inactive", markersize=6,
-            capsize=2, elinewidth=1, alpha=0.8
-        )
-        for x, y, name in zip(x_inactive, y_inactive, names_inactive):
-            ax_scatter.text(float(x), float(y), name, fontsize=7, color='navy', zorder=10)
-
-    # apply scale and limits
-    if logx:
-        ax_scatter.set_xscale("log")
-    if logy:
-        ax_scatter.set_yscale("log")
-
-    ax_scatter.set_xlim(xlower, xupper)
-    ax_scatter.set_ylim(ylower, yupper)
-
-    # Histogram bin edges
-
-    y_for_bins = all_y[(all_y >= ylower) & (all_y <= yupper)]
-    if y_for_bins.empty:
-        y_for_bins = all_y
-    bin_edges = np.histogram_bin_edges(y_for_bins, bins=7)
-
-    # Scatter labels
-    ax_scatter.set_xlabel(x_column)
-    ax_scatter.set_ylabel(y_column)
-    ax_scatter.grid(True)
-    leg = ax_scatter.legend(loc=legend_loc)
-    leg.set_zorder(30)
-    ax_scatter.set_title(f'{y_column} vs {x_column}')
-
-# Histogram subplot
-    ax_hist = fig.add_subplot(gs[1], sharey=ax_scatter)
-
-    if soloplot in (None, 'AGN'):
-        ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
-                    color='red', alpha=0.4, label='AGN')
-        median_agn = np.median(y_agn)
-        ax_hist.axhline(median_agn, color='red', linestyle='--')
-        ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn, 
-                    f"{median_agn:.2f}", color='red', fontsize=8, va='center')
-
-    if soloplot in (None, 'inactive'):
-        ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
-                    color='blue', alpha=0.4, label='Inactive')
-        median_inactive = np.median(y_inactive)
-        ax_hist.axhline(median_inactive, color='blue', linestyle='--')
-        ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive, 
-                    f"{median_inactive:.2f}", color='blue', fontsize=8, va='center')
-
-    if soloplot is None and use_gb21:
-        ax_hist.hist(y_gb21, bins=bin_edges, orientation='horizontal', 
-                    color='green', alpha=0.4, label='GB21')
-        median_gb21 = np.median(y_gb21)
-        ax_hist.axhline(median_gb21, color='green', linestyle='--')
-        ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_gb21, 
-                    f"{median_gb21:.2f}", color='green', fontsize=8, va='center')
-
-    ax_hist.axis('off')
-
-    # Save
-    suffix = f"_{soloplot}" if soloplot else ""
-    output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
-    plt.savefig(output_path)
-    print(f"Saved plot to: {output_path}")
-
-    diffs = []
-    valid_pairs = 0
-
-    for _, row in df_pairs.iterrows():
-        agn_name = row["Active Galaxy"].strip()
-        inactive_name = row["Inactive Galaxy"].strip()
-
-        agn_val = merged_AGN.loc[merged_AGN["Name_clean"] == agn_name, y_column]
-        inactive_val = merged_inactive.loc[merged_inactive["Name_clean"] == inactive_name, y_column]
-
-        if not agn_val.empty and not inactive_val.empty:
-            diff = float(agn_val.values[0]) - float(inactive_val.values[0])
-            if diff == diff:  # Check for NaN
-                diffs.append(diff)
-                valid_pairs += 1
-
-    diffs = np.array(diffs)
-    diffs = diffs[np.isfinite(diffs)]
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.hist(diffs, bins=10, color="grey", alpha=0.4, edgecolor="black")
-    ax.axvline(np.median(diffs), color="red", linestyle="--", label=f"Median = {np.median(diffs):.2f}")
-    ax.axvline(np.percentile(diffs,25), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,25):.2f}")
-    ax.axvline(np.percentile(diffs,75), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,75):.2f}")
-    ax.axvline(0, color="black", linestyle="solid")  # reference line
-
-    ax.set_xlabel(f"Δ {y_column} (AGN - Inactive)")
-    ax.set_ylabel("Number of pairs")
-    ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
-    ax.legend()
-
-    output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/pair_diffs/{y_column}_pair_differences.png'
-    plt.savefig(output_path)
-    print(f"Saved matched-pairs plot to: {output_path}")
 
 
 AGN_data = [
@@ -673,3 +888,9 @@ plot_llama_property('total_mass (M_sun)', 'Smoothness', AGN_data, inactive_data,
 plot_llama_property('total_mass (M_sun)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
 
 plot_llama_property('area_weighted_sd','mass_weighted_sd',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False,logx=True,logy=True,background_image='/data/c3040163/llama/alma/gas_analysis_results/Leroy2013_plots/Sigma.png',manual_limits=[0.5,5000,0.5,5000], truescale=True)
+
+plot_llama_property('Bar', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)
+plot_llama_property('Bar', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)
+plot_llama_property('Bar', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)
+plot_llama_property('Bar', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)
+plot_llama_property('Bar','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)

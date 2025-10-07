@@ -156,11 +156,36 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
         BMAJ = fits.open(f"{folder}/{name}")[0].header['BMAJ']
         BMIN = fits.open(f"{folder}/{name}")[0].header['BMIN']
 
-                # Save the subcube
-        subcube_hdu = fits.PrimaryHDU(subcube)
-        subcube_path = f'{folder}/subcubes/{name_short}.subcube.fits'
+        # --- Save subcube with original header ---
+        subcube_folder = os.path.join(folder, 'subcubes')
+        os.makedirs(subcube_folder, exist_ok=True)
+        subcube_path = os.path.join(subcube_folder, f"{name_short}.subcube.fits")
+
+        # Get original header for WCS info
+        with fits.open(f"{folder}/{name}") as hdul:
+            original_header = hdul[0].header
+
+        # Extract subcube data as a numpy array
+        subcube_data = subcube.unmasked_data[:].value  # Convert Quantity to array
+
+        # Create new HDU with original header and updated WCS keywords
+        subcube_hdu = fits.PrimaryHDU(data=subcube_data, header=original_header.copy())
+
+        # Update header dimensions
+        subcube_hdu.header['NAXIS1'] = subcube_data.shape[2]
+        subcube_hdu.header['NAXIS2'] = subcube_data.shape[1]
+        subcube_hdu.header['NAXIS3'] = subcube_data.shape[0]
+
+        # You can also update reference pixel if the subcube was spatially trimmed
+        # (optional but safer for downstream use)
+        try:
+            subcube_hdu.header.update(subcube.wcs.to_header())
+        except Exception as e:
+            print(f"Warning: could not fully update WCS header for {name_short}: {e}")
+
+        # Write to disk
         subcube_hdu.writeto(subcube_path, overwrite=True)
-        print(f"subcube image saved to {subcube_path}")
+        print(f"✅ Subcube saved with header to {subcube_path}")
 
 
 
@@ -323,14 +348,14 @@ print('Beginning AGN CO imaging...')
 AGN_21 = r"/Users/administrator/Astro/LLAMA/ALMA/AGN"
 AGN_32 = r"/Users/administrator/Astro/LLAMA/ALMA/CO32/AGN"
 
-#cube_imaging(AGN_21,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV, square=True)
-#cube_imaging(AGN_32,CO3_2,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV,square=True)
+cube_imaging(AGN_21,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV, square=True)
+cube_imaging(AGN_32,CO3_2,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV,square=True)
 
 
 print('Beginning inactive galaxy CO imaging...')
 inactive = r"/Users/administrator/Astro/LLAMA/ALMA/inactive"
 
-cube_imaging(inactive,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/inactive_images',FOV,square=True)
+# cube_imaging(inactive,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/inactive_images',FOV,square=True)
 
 et=time.time()
 runtime=et-st
