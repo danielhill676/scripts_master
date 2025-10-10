@@ -32,7 +32,7 @@ warnings.filterwarnings('ignore', message='WCS1 is missing card TIMESYS')
 st=time.time()
 
 llamatab = Table.read('/Users/administrator/Astro/LLAMA/llama_main_properties.fits',format='fits')
-#llamatab.show_in_browser()
+llamatab.show_in_browser()
 
 def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
     """folder = path to .fits location
@@ -104,6 +104,7 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
         del cube # free up memory
         print('cube shape:',cube2.shape)
         slab = cube2.spectral_slab(-dv * u.km / u.s, +dv * u.km / u.s)
+        slab_barolo = cube2.spectral_slab(-dv_barolo * u.km / u.s, +dv_barolo * u.km / u.s)
         print('applying mask')
         mask = (cube2.spectral_axis < -dv * u.km/ u.s ) | (cube2.spectral_axis > dv * u.km/ u.s)
         print('mask shape:',mask.shape)
@@ -116,15 +117,21 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
         # Perform spacial masking for moment maps and sigma image
         gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
         theta = math.degrees(math.atan(FOV/(D*1e6))) # in degrees
+        theta_barolo = math.degrees(math.atan(FOV_barolo/(D*1e6))) # in degrees
         region = CircleSkyRegion(center=gal_cen, radius=theta * u.deg)
+        region_barolo = CircleSkyRegion(center=gal_cen, radius=theta_barolo * u.deg)
         # add square region here
         square_region = RectangleSkyRegion(center=gal_cen, width= 2*theta * u.deg,height= 2*theta * u.deg)
+        square_region_barolo = RectangleSkyRegion(center=gal_cen, width= 2*theta_barolo * u.deg,height= 2*theta_barolo * u.deg)
         subcube = slab.subcube_from_regions([region])
+        subcube_barolo = slab_barolo.subcube_from_regions([region_barolo])
         if square:
             subcube = slab.subcube_from_regions([square_region])
+            subcube_barolo = slab_barolo.subcube_from_regions([square_region_barolo])
         mask_subcube = mask_slab.subcube_from_regions([region])
         if square:
             mask_subcube = mask_slab.subcube_from_regions([square_region])
+            mask_subcube_barolo = mask_slab.subcube_from_regions([square_region_barolo]) 
         
         # Calculate sigma image
         print('mask subcube:',mask_subcube.shape)
@@ -142,14 +149,14 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
         # Create 2-sigma threshold mask for emission
         threshold = 1.0 * sigma_image  # 2 × noise
         # Broadcast threshold to match cube shape
-        threshold_cube = np.broadcast_to(threshold, subcube.shape)
+        # threshold_cube = np.broadcast_to(threshold, subcube.shape)
 
 
         # Apply threshold mask: True = keep pixel
-        emission_mask = (np.abs(subcube) > threshold_cube) & np.isfinite(subcube)
+        # emission_mask = (np.abs(subcube) > threshold_cube) & np.isfinite(subcube)
 
         # Mask the cube so moments are only calculated where emission > 2σ
-        emission_only_cube = subcube.with_mask(emission_mask)
+        # emission_only_cube = subcube.with_mask(emission_mask)
 
         # NOTE: experiment with different velocity ranges
 
@@ -166,7 +173,7 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
             original_header = hdul[0].header
 
         # Extract subcube data as a numpy array
-        subcube_data = subcube.unmasked_data[:].value  # Convert Quantity to array
+        subcube_data = subcube_barolo.unmasked_data[:].value  # Convert Quantity to array
 
         # Create new HDU with original header and updated WCS keywords
         subcube_hdu = fits.PrimaryHDU(data=subcube_data, header=original_header.copy())
@@ -179,7 +186,7 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
         # You can also update reference pixel if the subcube was spatially trimmed
         # (optional but safer for downstream use)
         try:
-            subcube_hdu.header.update(subcube.wcs.to_header())
+            subcube_hdu.header.update(subcube_barolo.wcs.to_header())
         except Exception as e:
             print(f"Warning: could not fully update WCS header for {name_short}: {e}")
 
@@ -339,26 +346,28 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
 
 
 dv = 250
+dv_barolo = 500
 CO2_1 = 230.538
 CO3_2 = 345.796
 square = True
-FOV = 1000  # in pc
+FOV_barolo = 2000  # in pc
+FOV = 1000
 
-print('Beginning AGN CO imaging...')
-AGN_21 = r"/Users/administrator/Astro/LLAMA/ALMA/AGN"
-AGN_32 = r"/Users/administrator/Astro/LLAMA/ALMA/CO32/AGN"
+# print('Beginning AGN CO imaging...')
+# AGN_21 = r"/Users/administrator/Astro/LLAMA/ALMA/AGN"
+# AGN_32 = r"/Users/administrator/Astro/LLAMA/ALMA/CO32/AGN"
 
-cube_imaging(AGN_21,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV, square=True)
-cube_imaging(AGN_32,CO3_2,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV,square=True)
+# cube_imaging(AGN_21,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV, square=True)
+# cube_imaging(AGN_32,CO3_2,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV,square=True)
 
 
-print('Beginning inactive galaxy CO imaging...')
-inactive = r"/Users/administrator/Astro/LLAMA/ALMA/inactive"
+# print('Beginning inactive galaxy CO imaging...')
+# inactive = r"/Users/administrator/Astro/LLAMA/ALMA/inactive"
 
-cube_imaging(inactive,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/inactive_images',FOV,square=True)
+# cube_imaging(inactive,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/inactive_images',FOV,square=True)
 
-et=time.time()
-runtime=et-st
-print('runtime=',runtime)
+# et=time.time()
+# runtime=et-st
+# print('runtime=',runtime)
 
 
