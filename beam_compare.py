@@ -6,7 +6,7 @@ import analysisUtils as au
 from astropy.table import Table
 from casatools import quanta, msmetadata, measures
 import re
-from astroquery.simbad import Simbad
+from astroquery.ned import Ned
 import warnings
 
 def normalize_field_name(s):
@@ -39,7 +39,7 @@ base_dir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_new
 output_csv = os.path.join(os.getcwd(), "beam_summary.csv")
 
 # === TABLE HEADER ===
-results = [("Name", "MS_Directory", "SynthesizedBeam", "FITS_File", "BMAJ")]
+results = [("Name", "MS_Directory", "SynthesizedBeam", "FITS_File", "BMAJ", "BMIN", "Average_Beam", "Increase_in_Beam")]
 
 # === LOOP THROUGH SUBDIRECTORIES ===
 for name in sorted(os.listdir(base_dir)):
@@ -75,19 +75,18 @@ for name in sorted(os.listdir(base_dir)):
                     fname_match = f  # preserve original capitalization/format
                     break
 
-            # --- if not found, try SIMBAD alternative names ---
             if fname_match is None:
-                print(f"No direct field match for {field_entry} in {vis}. Trying SIMBAD aliases...")
+                print(f"No direct field match for {field_entry} in {vis}. Trying NED aliases...")
 
                 try:
-                    # Query Simbad for all identifiers
                     with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")  # suppress minor astroquery warnings
-                        simbad_result = Simbad.query_objectids(field_entry)
-                    
-                    if simbad_result is not None:
-                        aliases = [a.decode('utf-8') if isinstance(a, bytes) else a for a in simbad_result['ID']]
-                        print(f"Found {len(aliases)} aliases in SIMBAD for {field_entry}")
+                        warnings.simplefilter("ignore")  # suppress minor warnings
+                        ned_result = Ned.get_table(field_entry, table='names')
+
+                    if ned_result is not None and len(ned_result) > 0:
+                        # Extract all Name / ObjectName identifiers from NED table
+                        aliases = [str(ned_result['Object Name'][i]) for i in range(len(ned_result))]
+                        print(f"Found {len(aliases)} aliases in NED for {field_entry}")
 
                         # Try each alias as a possible match
                         print('printing aliases:')
@@ -98,15 +97,15 @@ for name in sorted(os.listdir(base_dir)):
                                 f_norm = normalize_field_name(f)
                                 if f_norm == alt_norm:
                                     fname_match = f
-                                    print(f"Matched via SIMBAD alias: {alt} → {fname_match}")
+                                    print(f"Matched via NED alias: {alt} → {fname_match}")
                                     break
                             if fname_match:
                                 break
                     else:
-                        print(f"No aliases found in SIMBAD for {field_entry}")
+                        print(f"No aliases found in NED for {field_entry}")
 
                 except Exception as e:
-                    print(f"SIMBAD lookup failed for {field_entry}: {e}")
+                    print(f"NED lookup failed for {field_entry}: {e}")
 
             # --- if still no match, skip this MS ---
             if fname_match is None:
@@ -139,13 +138,16 @@ for name in sorted(os.listdir(base_dir)):
             try:
                 with fits.open(fits_file) as hdul:
                     bmaj = float(hdul[0].header.get("BMAJ", None))*3600
+                    bmin = float(hdul[0].header.get("BMIN", None))*3600
+                    average_beam = (bmaj + bmin) / 2 if bmaj and bmin else None
             except Exception as e:
                 print(f"Error reading BMAJ from {fits_file}: {e}")
 
         # --- add to results ---
         vis_name = os.path.basename(vis)
         fits_name = os.path.basename(fits_file) if fits_file else None
-        results.append((name, vis_name, synth_beam, fits_name, bmaj))
+        increase = f'{((average_beam/float(synth_beam))-1):.2%}' if bmaj and synth_beam else None
+        results.append((name, vis_name, synth_beam, fits_name, bmaj, bmin, average_beam, increase))
 
 # === WRITE OUTPUT TABLE ===
 with open(output_csv, "w", newline="") as f:

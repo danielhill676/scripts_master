@@ -33,7 +33,12 @@ def write_barolo_params(infolder, outfolder):
     execfile = os.path.join(outfolder, 'barolo_execute.sh')
     if not os.path.exists(execfile):
         with open(execfile, 'w') as f:
-            f.write("#!/bin/bash\n")
+            f.write("""
+                    #!/bin/bash
+                    shopt -s expand_aliases
+                    source ~/.zshrc  # or ~/.bashrc if you use bash
+            """)
+        os.chmod(execfile, 0o755)  # make executable
 
     for file in os.listdir(infolder):
         if not file.endswith('.fits'):
