@@ -339,28 +339,43 @@ for name, ms_path in paths:
     spw_written = 0
     for spw_id in range(n_spw):
         try:
-            freqs = tb.getcell("CHAN_FREQ", spw_id)
-            widths = tb.getcell("CHAN_WIDTH", spw_id)
+            freqs = np.ravel(tb.getcell("CHAN_FREQ", spw_id))
+            widths = np.ravel(tb.getcell("CHAN_WIDTH", spw_id))
         except Exception as e:
             print(f"  Could not read SPW {spw_id}: {e}")
             continue
+
         minf, maxf = freqs.min(), freqs.max()
-        f_hz = restfreq*1e9/(1+z)
+
+        f_hz = restfreq*1e9 / (1+z)  # observed frequency
         if minf <= f_hz <= maxf:
             width_hz = maxf - minf
             ch_width_hz = abs(widths[0])
             width_kms = 3e5 * width_hz / f_hz
             ch_width_kms = 3e5 * ch_width_hz / f_hz
+            
+
             if ch_width_kms <= max_chan_kms:
                 total_chans = len(freqs)
-                line_chans = np.sum((freqs >= f_hz - vwidth*1e3*f_hz/3e5) &
-                                    (freqs <= f_hz + vwidth*1e3*f_hz/3e5))
+                print('spwmin',minf/1e9,'spwmax', maxf/1e9)
+
+                # velocity window in Hz
+                vhalf_hz = (vwidth/2) * 1e3 * f_hz / 3e5  # convert km/s to Hz
+                line_mask = (freqs >= f_hz - vhalf_hz) & (freqs <= f_hz + vhalf_hz)
+                print('line_freq',f_hz/1e9,'half vwidth',vhalf_hz/1e9)
+                line_chans = np.sum(line_mask)
                 non_line_chans = total_chans - line_chans
-                print(f"  SPW {spw_id} | Centre {ref_freqs[spw_id]/1e9:.5f} GHz | Width {width_kms:.2f} km/s | Chan {ch_width_kms:.2f} km/s")
+
+                print(f"  SPW {spw_id} | Centre {ref_freqs[spw_id]/1e9:.5f} GHz | "
+                    f"Width {width_kms:.2f} km/s | Chan {ch_width_kms:.2f} km/s | "
+                    f"Line chans: {line_chans}, Non-line chans: {non_line_chans}")
+
                 with open(spw_csv_file, 'a', newline='') as f:
                     writer = csv.writer(f)
                     writer.writerow([name, msname, spw_id, ref_freqs[spw_id]/1e9,
-                                     width_kms, ch_width_kms, total_chans, line_chans, non_line_chans])
+                                    width_kms, ch_width_kms, total_chans,
+                                    line_chans, non_line_chans])
+
                 spw_written += 1
             else:
                 print(f"  SPW {spw_id} skipped (chan width {ch_width_kms:.2f} km/s >= max {max_chan_kms} km/s)")
@@ -378,43 +393,65 @@ for name, ms_path in paths:
             msmd.close()
             continue
 
+        # -------------------- MATCH FIELD NAME --------------------
+        # Normalize target field name
+        field_entry = llamatab[llamatab['id'] == name]['name'][0]
+        field_norm = normalize_field_name(field_entry)
+        print(field_norm, "normalized target field name")
+
+        # Open MS metadata
+        msmd.open(ms_path)
+        nfields = msmd.nfields()
+        if nfields == 0:
+            print(f"⚠️ MS {msname} has no fields.")
+            msmd.close()
+            continue
+
         # Detect MS frame
         phase0 = msmd.phasecenter(0)
         ms_frame_name = ms_frame_from_phase(phase0)
-        if ms_frame_name.lower() == 'fk5': ms_frame = FK5(equinox='J2000')
-        elif ms_frame_name.lower() == 'icrs': ms_frame = ICRS()
-        else: ms_frame = FK5(equinox='J2000')
+        print(f"Detected MS frame: {ms_frame_name}")
+        ms_frame = FK5(equinox='J2000') if ms_frame_name.lower() == 'fk5' else ICRS()
 
-        field_entry = row['name'][0]
-        field_norm = normalize_field_name(field_entry)
+        # Build target SkyCoord in MS frame
+        catalog_frame = FK5(equinox='J2000')
+        target_coord_catalog = SkyCoord(ra=target_ra_deg*u.deg,
+                                        dec=target_dec_deg*u.deg,
+                                        frame=catalog_frame)
+        try:
+            target_coord = target_coord_catalog.transform_to(ms_frame)
+        except Exception:
+            target_coord = target_coord_catalog
+
+        # Get MS field names
         ms_field_names = msmd.fieldnames()
+
+        # --- Try direct match first ---
         fname_match = None
         for f in ms_field_names:
             if normalize_field_name(f) == field_norm:
                 fname_match = f
                 break
 
+        # --- If no direct match, try NED aliases ---
         if fname_match is None:
-            print(f"No direct field match for {field_entry}, trying NED aliases...")
-            
+            print(f"No direct field match for {field_entry} in {msname}. Trying NED aliases...")
             try:
                 with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")  # suppress minor warnings
-                    ned_result = Ned.get_table(field_entry, table='names')
+                    warnings.simplefilter("ignore")
+                    Ned_table = Ned.query_object(field_entry)  # query NED directly
+                if Ned_table is not None and len(Ned_table) > 0:
+                    # Extract possible aliases
+                    aliases = []
+                    if 'Object Name' in Ned_table.colnames:
+                        aliases += [str(n) for n in Ned_table['Object Name']]
+                    if 'Object Designation' in Ned_table.colnames:
+                        aliases += [str(n) for n in Ned_table['Object Designation']]
 
-                if ned_result is not None and len(ned_result) > 0:
-                    # Extract all Name / ObjectName identifiers from NED table
-                    aliases = [str(ned_result['Object Name'][i]) for i in range(len(ned_result))]
-                    print(f"Found {len(aliases)} aliases in NED for {field_entry}")
-
-                    # Try each alias as a possible match
-                    print('printing aliases:')
                     for alt in aliases:
                         alt_norm = normalize_field_name(alt)
-                        print(alt_norm)
                         for f in ms_field_names:
-                            f_norm = normalize_field_name(f)
-                            if f_norm == alt_norm:
+                            if normalize_field_name(f) == alt_norm:
                                 fname_match = f
                                 print(f"Matched via NED alias: {alt} → {fname_match}")
                                 break
@@ -431,7 +468,9 @@ for name, ms_path in paths:
             msmd.close()
             continue
 
-        # Loop through all fields and record separation in kpc
+        print(f"Matched field: {fname_match}")
+
+        # ---------- Compute separations ----------
         for field_id in range(nfields):
             fname = msmd.namesforfields([field_id])[0]
             if normalize_field_name(fname) != normalize_field_name(fname_match):
@@ -447,10 +486,12 @@ for name, ms_path in paths:
 
         msmd.close()
 
+
     except Exception as e:
         print(f"Error processing fields in {msname}: {e}")
         msmd.close()
         continue
+
 
 
 
