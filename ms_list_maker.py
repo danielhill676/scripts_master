@@ -110,16 +110,16 @@ NGC4593         2017.1.00236.S  all 12m 2   12m/2017.1.00236.S/science_goal.uid_
 
 NGC5128         2019.1.01742.S  all 12m 1   2019.1.01742.S/science_goal.uid___A001_X1465_X276/group.uid___A001_X1465_X277/member.uid___A001_X1465_X278/calibrated/uid___A002_Xe1f219_X6a4d.ms
 
-NGC5728         2015.1.00086.S  all 12m 1   2015.1.00086.S/science_goal.uid___A001_X2fe_X66f/group.uid___A001_X2fe_X670/member.uid___A001_X2fe_X671/calibrated/uid___A002_Xb2f730_X6358.ms.split.cal
-NGC5728         2022.1.01002.S  all 7m 1   7m/2022.1.01002.S/science_goal.uid___A001_X2d1f_X372/group.uid___A001_X2d1f_X373/member.uid___A001_X2d1f_X374/calibrated/uid___A002_X106792c_X30d2.ms
-NGC5728         2021.1.01295.S  all 7m 2   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf89be2_X2bda.ms
-NGC5728         2021.1.01295.S  all 7m 3   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf8d29c_Xd43.ms
-NGC5728         2021.1.01295.S  all 7m 4   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf8f6a9_X154e.ms
-NGC5728         2021.1.01295.S  all 7m 5   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf8f6a9_X7bbc.ms
-NGC5728         2021.1.01295.S  all 7m 6   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf8f6a9_X82e5.ms
-NGC5728         2021.1.01295.S  all 7m 7   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf8f6a9_X8ad2.ms
-NGC5728         2021.1.01295.S  all 7m 8   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf9226e_X43ce.ms
-NGC5728         2021.1.01295.S  all 7m 9   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf934b1_X111f9.ms
+#NGC5728         2015.1.00086.S  all 12m 1   2015.1.00086.S/science_goal.uid___A001_X2fe_X66f/group.uid___A001_X2fe_X670/member.uid___A001_X2fe_X671/calibrated/uid___A002_Xb2f730_X6358.ms.split.cal
+#NGC5728         2022.1.01002.S  all 7m 1   7m/2022.1.01002.S/science_goal.uid___A001_X2d1f_X372/group.uid___A001_X2d1f_X373/member.uid___A001_X2d1f_X374/calibrated/uid___A002_X106792c_X30d2.ms
+#NGC5728         2021.1.01295.S  all 7m 2   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf89be2_X2bda.ms
+#NGC5728         2021.1.01295.S  all 7m 3   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf8d29c_Xd43.ms
+#NGC5728         2021.1.01295.S  all 7m 4   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf8f6a9_X154e.ms
+#NGC5728         2021.1.01295.S  all 7m 5   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf8f6a9_X7bbc.ms
+#NGC5728         2021.1.01295.S  all 7m 6   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf8f6a9_X82e5.ms
+#NGC5728         2021.1.01295.S  all 7m 7   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf8f6a9_X8ad2.ms
+#NGC5728         2021.1.01295.S  all 7m 8   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf9226e_X43ce.ms
+#NGC5728         2021.1.01295.S  all 7m 9   7m_1/2021.1.01295.S/science_goal.uid___A001_X1590_Xa5c/group.uid___A001_X1590_Xa5d/member.uid___A001_X1590_Xa5e/calibrated/uid___A002_Xf934b1_X111f9.ms
 
 NGC5921         2019.1.01742.S  all 12m 1   2019.1.01742.S/science_goal.uid___A001_X1465_X276/group.uid___A001_X1465_X277/member.uid___A001_X1465_X278/calibrated/uid___A002_Xe1f219_X6a4d.ms
 
@@ -185,7 +185,7 @@ NGC5845          2019.1.01742.S  all 12m 1   2019.1.01742.S/science_goal.uid___A
 NGC5845          2019.1.01742.S  all 12m 2   2019.1.01742.S/science_goal.uid___A001_X1465_X272/group.uid___A001_X1465_X273/member.uid___A001_X1465_X274/calibrated/uid___A002_Xe20b32_X4892.ms
 NGC5845          2019.1.00363.S  all 7m 1   7m_1/2019.1.00363.S/science_goal.uid___A001_X1465_X31f5/group.uid___A001_X1465_X31f6/member.uid___A001_X1465_X31f7/calibrated/uid___A002_Xe3a5fd_X18d71.ms
 
-NGC6814          2017.1.01439.S  all 12m 1   2017.1.01439.S/science_goal.uid___A001_X1296_X646/group.uid___A001_X1296_X647/member.uid___A001_X1296_X648/calibrated/uid___A002_Xcd8029_Xd9fe.ms
+#NGC6814          2017.1.01439.S  all 12m 1   2017.1.01439.S/science_goal.uid___A001_X1296_X646/group.uid___A001_X1296_X647/member.uid___A001_X1296_X648/calibrated/uid___A002_Xcd8029_Xd9fe.ms
 
 NGC718          2019.1.01742.S  all 12m 1   2019.1.01742.S/science_goal.uid___A001_X1465_X27a/group.uid___A001_X1465_X27b/member.uid___A001_X1465_X27c/calibrated/uid___A002_Xe1baa0_X26a4.ms
 
@@ -200,94 +200,150 @@ NGC7582          2021.1.01295.S  all 7m 7   7m/2021.1.01295.S/science_goal.uid__
 NGC7582          2021.1.01295.S  all 7m 8   7m/2021.1.01295.S/science_goal.uid___A001_X1590_Xa60/group.uid___A001_X1590_Xa61/member.uid___A001_X1590_Xa62/calibrated/uid___A002_Xf1bb4a_Xb85.ms.split.cal
 NGC7582          2021.1.01295.S  all 7m 9   7m/2021.1.01295.S/science_goal.uid___A001_X1590_Xa60/group.uid___A001_X1590_Xa61/member.uid___A001_X1590_Xa62/calibrated/uid___A002_Xf1bb4a_Xd414.ms.split.cal
 """
+textCO32 = """
+NGC4388          2017.1.00082.S  all 12m 1   2017.1.00082.S/science_goal.uid___A001_X1284_X1c48/group.uid___A001_X1284_X1c49/member.uid___A001_X1284_X1c4a/calibrated/uid___A002_Xc89480_X2ad3.ms
+NGC4388          2017.1.00082.S  all 12m 2   12m/2017.1.00082.S/science_goal.uid___A001_X1284_X1c48/group.uid___A001_X1284_X1c49/member.uid___A001_X1284_X1c4c/calibrated/uid___A002_Xcc3ae3_X5293.ms
+NGC4388          2012.1.00139.S  all 12m 3   12m_1/2012.1.00139.S/science_goal.uid___A002_X5a9a13_Xf3/group.uid___A002_X5a9a13_Xf4/member.uid___A002_X5a9a13_Xf5/calibrated/uid___A002_X828760_X454.ms.split.cal
+NGC4388          2017.1.00082.S  all 7m 1   7m/2022.1.01002.S/science_goal.uid___A001_X2d1f_X38e/group.uid___A001_X2d1f_X38f/member.uid___A001_X2d1f_X390/calibrated/uid___A002_X1064920_X20e1.ms
+
+NGC6814         2017.1.00082.S  all 12m 1   12m_32_1/2017.1.00082.S/science_goal.uid___A001_X1284_X1c42/group.uid___A001_X1284_X1c43/member.uid___A001_X1284_X1c44/calibrated/uid___A002_Xd341ff_X9445.ms.split.cal
+NGC6814         2017.1.00082.S  all 12m 2   12m_32_1/2017.1.00082.S/science_goal.uid___A001_X1284_X1c42/group.uid___A001_X1284_X1c43/member.uid___A001_X1284_X1c44/calibrated/uid___A002_Xe014a2_X92b1.ms.split.cal
+NGC6814         2017.1.00082.S  all 12m 3   12m_32_2/2017.1.00082.S/science_goal.uid___A001_X1284_X1c42/group.uid___A001_X1284_X1c43/member.uid___A001_X1284_X1c46/calibrated/uid___A002_Xcc3ae3_X12410.ms.split.cal
+
+NGC5728         2019.1.00618.S  all 12m 1   12m_32_1/2019.1.00618.S/science_goal.uid___A001_X1465_X29c6/group.uid___A001_X1465_X29c7/member.uid___A001_X1465_X29ca/calibrated/uid___A002_Xe770d7_X3755.ms.split.cal
+NGC5728         2019.1.00618.S  all 12m 2   12m_32_1/2019.1.00618.S/science_goal.uid___A001_X1465_X29c6/group.uid___A001_X1465_X29c7/member.uid___A001_X1465_X29ca/calibrated/uid___A002_Xe78c20_X46c8.ms.split.cal
+"""
 
 import os
+import re
+import warnings
 import numpy as np
 import csv
-from casatools import table
+from casatools import table, quanta, msmetadata, measures
 from astropy.table import Table
+from astropy.coordinates import SkyCoord
+import astropy.units as u
 
-# ----- CONFIG -----
-local = True
-restfreq = 230.538  # CO(2–1) GHz
+# ---------------- user params ----------------
+local = False
+CO32 = False
+restfreq = 230.538  # GHz
+if CO32:
+    text = textCO32
+    restfreq = 345.796  # GHz
 vwidth = 2000       # km/s
-c_kms = 299792.458  # speed of light (km/s)
-max_chan_kms = 15.0  # maximum channel width to print
+max_chan_kms = 15.0 # km/s
 
-output_csv = "spw_summary.csv"
-
+# CASA tools
 tb = table()
+qa = quanta()
+msmd = msmetadata()
+me = measures()
 
-# --- Load paths ---
-paths = []
-for line in text.splitlines():
-    line = line.strip()
-    if not line or line.startswith("#"):
-        continue
-    parts = line.split()
-    if len(parts) >= 6:
-        first_col = parts[0]
-        sixth_col = parts[5]
-        paths.append(f"{first_col}/{sixth_col}")
-
+# Input paths / llama table
 if local:
-    paths = [
-        "/Users/administrator/Astro/casa/ALMA_ARC/2022.1.00401.S/science_goal.uid___A001_X2d20_X2bb4/group.uid___A001_X2d20_X2bb5/member.uid___A001_X2d20_X2bb8/calibrated/uid___A002_X1003af4_Xa540.ms"
-    ]
-
-basedir = "/data/c3040163/llama/alma/raw"
-if not local:
-    llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
-else:
+    paths = ["/Users/administrator/Astro/casa/ALMA_ARC/2022.1.00401.S/science_goal.uid___A001_X2d20_X2bb4/group.uid___A001_X2d20_X2bb5/member.uid___A001_X2d20_X2bb8/calibrated/uid___A002_X1003af4_Xa540.ms"]
     llamatab = Table.read('/Users/administrator/Astro/llama/llama_main_properties.fits', format='fits')
+else:
+    basedir = "/data/c3040163/llama/alma/raw"
+    llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
+    paths = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) >= 6:
+            galaxy_name = parts[0]
+            rel_path = parts[0]+'/'+parts[5]
+            full_path = os.path.join(basedir, rel_path)
+            paths.append((galaxy_name, full_path))
+    paths = list(dict.fromkeys(paths))  # preserve order, remove duplicates
+        
 
-# --- Prepare CSV ---
-header = ['name', 'msname', 'spw', 'Centre', 'Width km/s', 'channel km/s', 'total chans', 'in line', 'non-line']
-write_header = not os.path.exists(output_csv)
+# Output CSVs (fresh start)
+spw_csv_file = "spw_summary.csv"
+field_csv_file = "field_summary.csv"
 
-csv_file = open(output_csv, 'a', newline='')
-csv_writer = csv.writer(csv_file)
-if write_header:
-    csv_writer.writerow(header)
+with open(spw_csv_file, 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(['name','msname','spw','Centre (GHz)','Width (km/s)','ChanWidth (km/s)','TotalChans','InLineChans','NonLineChans'])
 
-# --- Loop over MS ---
-for path in paths:
-    msname = path.split("/")[-1]
-    spw_written = 0  # Track if any SPW was written for this MS
+with open(field_csv_file, 'w', newline='') as f:
+    field_writer = csv.writer(f)
+    field_writer.writerow(['name','msname','field','distance_kpc'])
 
+# ---------------- helper functions ----------------
+def normalize_field_name(s):
+    """Normalize field names for robust matching."""
+    s = s.upper()
+    parts = re.findall(r'\d+|[^\d\s_\-\.]+', s)
+    for i, p in enumerate(parts):
+        if p.isdigit():
+            parts[i] = str(int(p))
+    return ''.join(parts)
+
+
+def ms_frame_from_phase(phase0):
+    """
+    Try to infer MS frame from a phasecenter measure using me.show().
+    Returns an astropy frame string: 'icrs' or 'fk5' (J2000) as best guess.
+    """
+    try:
+        s = me.show(phase0)  # returns a TEXT description
+        sl = s.lower()
+        if 'icrs' in sl:
+            return 'icrs'
+        if 'j2000' in sl or 'fk5' in sl:
+            return 'fk5'
+        if 'fk4' in sl or 'b1950' in sl:
+            return 'fk4'
+        # fallback: try to detect 'ra/dec' string presence
+        return 'icrs'
+    except Exception:
+        # If anything goes wrong, default to ICRS (safe fallback)
+        return 'icrs'
+
+# ---------------- main loop ----------------
+for name, ms_path in paths: 
     if not local:
-        name = path.split("/")[0]
+        print(''+'-'*30,name,'-'*30)
+        msname = os.path.basename(ms_path)
         row = llamatab[llamatab['id'] == name]
         if len(row) == 0:
-            raise RuntimeError(f"No entry '{name}' found in llama table")
-        z = row['redshift'][0]
-        ms_path = os.path.join(basedir, path)
-    else:
-        ms_path = path
-        name = "local"
-        z = 0.0
+            print(f"⚠️ No entry '{name}' in llama table. Skipping {msname}")
+            continue
 
-    f_obs = restfreq / (1 + z)      # GHz
-    f_obs_hz = f_obs * 1e9
-    delta_f_hz = f_obs_hz * (vwidth / c_kms)
-    half_df = delta_f_hz / 2.0
+        z = float(row['redshift'][0]) if 'redshift' in row.colnames else 0
+        D_Mpc = float(row['D [Mpc]'][0])
+        target_ra_deg = float(row['RA (deg)'][0])
+        target_dec_deg = float(row['DEC (deg)'][0])
 
-    print(f"\nMS: {ms_path}")
-    print(f"  Line center: {f_obs:9.5f} GHz (z={z:.5f}), velocity width = {vwidth:.0f} km/s")
-    print(f"  Line covers {f_obs_hz - half_df:.3e} – {f_obs_hz + half_df:.3e} Hz\n")
+    # Determine target coordinates
+    if local:
+        msname = os.path.basename(ms_path)
+        name = 'NGC6445'
+        target_ra_deg = 15*(17 + 49/60 + 15/3600)  # convert h/m/s to deg
+        target_dec_deg = -(20 + 0/60 + 35/3600)
+        z = 0
+        D_Mpc = 1.38 / 1000
 
+    target_coord = SkyCoord(ra=target_ra_deg*u.deg, dec=target_dec_deg*u.deg, frame='fk5')
+    f = restfreq / (1+z)
+    f_hz = f*1e9
+
+    # ---------- SPW analysis ----------
     spw_table = os.path.join(ms_path, "SPECTRAL_WINDOW")
-
     try:
         tb.open(spw_table)
         n_spw = tb.nrows()
-        ref_freq = tb.getcol("REF_FREQUENCY")
+        ref_freqs = tb.getcol("REF_FREQUENCY")
     except Exception as e:
         print(f"Error opening {spw_table}: {e}")
         tb.close()
         continue
 
-    found = False
+    spw_written = 0
     for spw_id in range(n_spw):
         try:
             freqs = tb.getcell("CHAN_FREQ", spw_id)
@@ -297,44 +353,77 @@ for path in paths:
             continue
 
         minf, maxf = freqs.min(), freqs.max()
-        if minf <= f_obs_hz <= maxf:  # only SPWs containing line center
+        if minf <= f_hz <= maxf:
             width_hz = maxf - minf
             ch_width_hz = abs(widths[0])
-            spw_width_kms = (width_hz / f_obs_hz) * c_kms
-            chan_width_kms = (ch_width_hz / f_obs_hz) * c_kms
-
-            if chan_width_kms > max_chan_kms:
-                print(f"  SPW {spw_id:2d} skipped: channel width {chan_width_kms:.2f} km/s > {max_chan_kms} km/s")
-                continue
-
-            found = True
-            nchan = len(freqs)
-            in_line = np.logical_and(freqs >= f_obs_hz - half_df, freqs <= f_obs_hz + half_df)
-            n_line = np.count_nonzero(in_line)
-            n_non_line = nchan - n_line
-
-            print(f"  SPW {spw_id:2d} | Center: {ref_freq[spw_id]/1e9:9.5f} GHz"
-                  f" | Width: {spw_width_kms:8.2f} km/s | ChanWidth: {chan_width_kms:8.3f} km/s")
-            print(f"             | Total chans: {nchan:5d} | In line: {n_line:5d} | Non-line: {n_non_line:5d}")
-
-            # --- Append to CSV ---
-            csv_writer.writerow([
-                name,
-                msname,
-                spw_id,
-                f"{ref_freq[spw_id]/1e9:.5f}",
-                f"{spw_width_kms:.2f}",
-                f"{chan_width_kms:.3f}",
-                nchan,
-                n_line,
-                n_non_line
-            ])
-            spw_written += 1
+            # convert to km/s
+            width_kms = 3e5 * width_hz / f_hz
+            ch_width_kms = 3e5 * ch_width_hz / f_hz
+            if not ch_width_kms >= max_chan_kms:
+                total_chans = len(freqs)
+                line_chans = np.sum((freqs >= f_hz - vwidth*1e3*f_hz/3e5) & (freqs <= f_hz + vwidth*1e3*f_hz/3e5))
+                non_line_chans = total_chans - line_chans
+                print(f"MS: {ms_path}")
+                print(f"  SPW {spw_id:2d} | Centre {ref_freqs[spw_id]/1e9:.5f} GHz | Width {width_kms:.2f} km/s | Chan {ch_width_kms:.2f} km/s")
+                with open(spw_csv_file, 'a', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerow([name, msname, spw_id, ref_freqs[spw_id]/1e9, width_kms, ch_width_kms, total_chans, line_chans, non_line_chans])
+                spw_written += 1
+            else:
+                print(f"  SPW {spw_id} skipped (chan width {ch_width_kms:.2f} km/s >= max {max_chan_kms} km/s)")
 
     tb.close()
+    if spw_written == 0:
+        print(f"⚠️ No SPWs added for MS {msname}")
 
-    if not found or spw_written == 0:
-        print(f"  WARNING: No SPWs for MS '{msname}' were added to the CSV (line not covered or all channels skipped)")
-        
-csv_file.close()
+    # ---------- FIELD summary ----------
+    print(f"Processing fields for {msname} ...")
+    try:
+        msmd.open(ms_path)
+        nfields = msmd.nfields()
+        if nfields == 0:
+            print(f"⚠️ MS {msname} has no fields.")
+            msmd.close()
+            continue
 
+        # Detect and apply MS coordinate frame
+        phase0 = msmd.phasecenter(0)
+        ms_frame_astropy = ms_frame_from_phase(phase0)
+        print(f"Detected MS frame: {ms_frame_astropy}")
+
+        field_entry = row['name'][0] if not local else 'NGC6445'
+        field_norm = normalize_field_name(field_entry)
+        ms_field_names = msmd.fieldnames()
+        fname_match = None
+        for f in ms_field_names:
+            if normalize_field_name(f) == field_norm:
+                fname_match = f
+                break
+        if fname_match is None:
+            print(f"⚠️ No matching field for {field_entry} in {msname}. Skipping fields.")
+            msmd.close()
+            continue
+
+        # Compute separations
+        for field_id in range(nfields):
+            f_name = msmd.namesforfields([field_id])[0]
+            if normalize_field_name(f_name) != field_norm:
+                continue
+            phase = msmd.phasecenter(field_id)
+            f_ra_deg = np.degrees(float(phase['m0']['value']))
+            f_dec_deg = np.degrees(float(phase['m1']['value']))
+            field_coord = SkyCoord(ra=f_ra_deg*u.deg, dec=f_dec_deg*u.deg, frame=ms_frame_astropy)
+            sep_arcsec = target_coord.separation(field_coord).arcsec
+            sep_kpc = sep_arcsec * (D_Mpc*1000.0)/206.265
+            print(f"  Field {field_id}: distance from target = {sep_kpc:.2f} kpc")
+            with open(field_csv_file, 'a', newline='') as f:
+                field_writer = csv.writer(f)
+                field_writer.writerow([name, msname, field_id, f"{sep_kpc:.2f}"])
+        msmd.close()
+
+    except Exception as e:
+        print(f"Error processing fields in {msname}: {e}")
+        msmd.close()
+        continue
+
+print("Done.")
