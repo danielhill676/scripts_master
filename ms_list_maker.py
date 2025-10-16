@@ -221,8 +221,12 @@ import numpy as np
 import csv
 from casatools import table, quanta, msmetadata, measures
 from astropy.table import Table
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, FK5, ICRS
 import astropy.units as u
+from astroquery.ned import Ned
+import glob
+from astropy.io import fits
+import analysisUtils as au
 
 # ---------------- user params ----------------
 local = False
@@ -259,15 +263,15 @@ else:
             full_path = os.path.join(basedir, rel_path)
             paths.append((galaxy_name, full_path))
     paths = list(dict.fromkeys(paths))  # preserve order, remove duplicates
-        
 
-# Output CSVs (fresh start)
+# Output CSVs
 spw_csv_file = "spw_summary.csv"
 field_csv_file = "field_summary.csv"
 
 with open(spw_csv_file, 'w', newline='') as f:
     writer = csv.writer(f)
-    writer.writerow(['name','msname','spw','Centre (GHz)','Width (km/s)','ChanWidth (km/s)','TotalChans','InLineChans','NonLineChans'])
+    writer.writerow(['name','msname','spw','Centre (GHz)','Width (km/s)','ChanWidth (km/s)',
+                     'TotalChans','InLineChans','NonLineChans'])
 
 with open(field_csv_file, 'w', newline='') as f:
     field_writer = csv.writer(f)
@@ -275,7 +279,7 @@ with open(field_csv_file, 'w', newline='') as f:
 
 # ---------------- helper functions ----------------
 def normalize_field_name(s):
-    """Normalize field names for robust matching."""
+    """Robust field name normalization."""
     s = s.upper()
     parts = re.findall(r'\d+|[^\d\s_\-\.]+', s)
     for i, p in enumerate(parts):
@@ -283,57 +287,46 @@ def normalize_field_name(s):
             parts[i] = str(int(p))
     return ''.join(parts)
 
-
 def ms_frame_from_phase(phase0):
-    """
-    Try to infer MS frame from a phasecenter measure using me.show().
-    Returns an astropy frame string: 'icrs' or 'fk5' (J2000) as best guess.
-    """
+    """Detect MS frame for SkyCoord."""
     try:
-        s = me.show(phase0)  # returns a TEXT description
+        s = me.show(phase0)
         sl = s.lower()
-        if 'icrs' in sl:
-            return 'icrs'
-        if 'j2000' in sl or 'fk5' in sl:
-            return 'fk5'
-        if 'fk4' in sl or 'b1950' in sl:
-            return 'fk4'
-        # fallback: try to detect 'ra/dec' string presence
+        if 'icrs' in sl: return 'icrs'
+        if 'j2000' in sl or 'fk5' in sl: return 'fk5'
+        if 'fk4' in sl or 'b1950' in sl: return 'fk4'
         return 'icrs'
     except Exception:
-        # If anything goes wrong, default to ICRS (safe fallback)
         return 'icrs'
 
+def skycoord_from_phase(phase, frame='fk5'):
+    ra_deg = np.degrees(float(phase['m0']['value']))
+    dec_deg = np.degrees(float(phase['m1']['value']))
+    if frame.lower() == 'fk5':
+        return SkyCoord(ra=ra_deg*u.deg, dec=dec_deg*u.deg, frame=FK5(equinox='J2000'))
+    elif frame.lower() == 'icrs':
+        return SkyCoord(ra=ra_deg*u.deg, dec=dec_deg*u.deg, frame=ICRS())
+    else:
+        return SkyCoord(ra=ra_deg*u.deg, dec=dec_deg*u.deg, frame=FK5(equinox='J2000'))
+
 # ---------------- main loop ----------------
-for name, ms_path in paths: 
-    if not local:
-        print(''+'-'*30,name,'-'*30)
-        msname = os.path.basename(ms_path)
-        row = llamatab[llamatab['id'] == name]
-        if len(row) == 0:
-            print(f"⚠️ No entry '{name}' in llama table. Skipping {msname}")
-            continue
+for name, ms_path in paths:
+    print('-'*30, name, '-'*30)
+    msname = os.path.basename(ms_path)
+    row = llamatab[llamatab['id'] == name]
+    if len(row) == 0:
+        print(f"⚠️ No entry '{name}' in llama table. Skipping {msname}")
+        continue
 
-        z = float(row['redshift'][0]) if 'redshift' in row.colnames else 0
-        D_Mpc = float(row['D [Mpc]'][0])
-        target_ra_deg = float(row['RA (deg)'][0])
-        target_dec_deg = float(row['DEC (deg)'][0])
-
-    # Determine target coordinates
-    if local:
-        msname = os.path.basename(ms_path)
-        name = 'NGC6445'
-        target_ra_deg = 15*(17 + 49/60 + 15/3600)  # convert h/m/s to deg
-        target_dec_deg = -(20 + 0/60 + 35/3600)
-        z = 0
-        D_Mpc = 1.38 / 1000
-
-    target_coord = SkyCoord(ra=target_ra_deg*u.deg, dec=target_dec_deg*u.deg, frame='fk5')
-    f = restfreq / (1+z)
-    f_hz = f*1e9
+    z = float(row['redshift'][0]) if 'redshift' in row.colnames else 0
+    D_Mpc = float(row['D [Mpc]'][0])
+    target_ra_deg = float(row['RA (deg)'][0])
+    target_dec_deg = float(row['DEC (deg)'][0])
+    target_coord_catalog = SkyCoord(ra=target_ra_deg*u.deg, dec=target_dec_deg*u.deg, frame=FK5(equinox='J2000'))
 
     # ---------- SPW analysis ----------
     spw_table = os.path.join(ms_path, "SPECTRAL_WINDOW")
+    print(f"MS: {ms_path}")
     try:
         tb.open(spw_table)
         n_spw = tb.nrows()
@@ -351,27 +344,26 @@ for name, ms_path in paths:
         except Exception as e:
             print(f"  Could not read SPW {spw_id}: {e}")
             continue
-
         minf, maxf = freqs.min(), freqs.max()
+        f_hz = restfreq*1e9/(1+z)
         if minf <= f_hz <= maxf:
             width_hz = maxf - minf
             ch_width_hz = abs(widths[0])
-            # convert to km/s
             width_kms = 3e5 * width_hz / f_hz
             ch_width_kms = 3e5 * ch_width_hz / f_hz
-            if not ch_width_kms >= max_chan_kms:
+            if ch_width_kms <= max_chan_kms:
                 total_chans = len(freqs)
-                line_chans = np.sum((freqs >= f_hz - vwidth*1e3*f_hz/3e5) & (freqs <= f_hz + vwidth*1e3*f_hz/3e5))
+                line_chans = np.sum((freqs >= f_hz - vwidth*1e3*f_hz/3e5) &
+                                    (freqs <= f_hz + vwidth*1e3*f_hz/3e5))
                 non_line_chans = total_chans - line_chans
-                print(f"MS: {ms_path}")
-                print(f"  SPW {spw_id:2d} | Centre {ref_freqs[spw_id]/1e9:.5f} GHz | Width {width_kms:.2f} km/s | Chan {ch_width_kms:.2f} km/s")
+                print(f"  SPW {spw_id} | Centre {ref_freqs[spw_id]/1e9:.5f} GHz | Width {width_kms:.2f} km/s | Chan {ch_width_kms:.2f} km/s")
                 with open(spw_csv_file, 'a', newline='') as f:
                     writer = csv.writer(f)
-                    writer.writerow([name, msname, spw_id, ref_freqs[spw_id]/1e9, width_kms, ch_width_kms, total_chans, line_chans, non_line_chans])
+                    writer.writerow([name, msname, spw_id, ref_freqs[spw_id]/1e9,
+                                     width_kms, ch_width_kms, total_chans, line_chans, non_line_chans])
                 spw_written += 1
             else:
                 print(f"  SPW {spw_id} skipped (chan width {ch_width_kms:.2f} km/s >= max {max_chan_kms} km/s)")
-
     tb.close()
     if spw_written == 0:
         print(f"⚠️ No SPWs added for MS {msname}")
@@ -386,12 +378,14 @@ for name, ms_path in paths:
             msmd.close()
             continue
 
-        # Detect and apply MS coordinate frame
+        # Detect MS frame
         phase0 = msmd.phasecenter(0)
-        ms_frame_astropy = ms_frame_from_phase(phase0)
-        print(f"Detected MS frame: {ms_frame_astropy}")
+        ms_frame_name = ms_frame_from_phase(phase0)
+        if ms_frame_name.lower() == 'fk5': ms_frame = FK5(equinox='J2000')
+        elif ms_frame_name.lower() == 'icrs': ms_frame = ICRS()
+        else: ms_frame = FK5(equinox='J2000')
 
-        field_entry = row['name'][0] if not local else 'NGC6445'
+        field_entry = row['name'][0]
         field_norm = normalize_field_name(field_entry)
         ms_field_names = msmd.fieldnames()
         fname_match = None
@@ -399,31 +393,67 @@ for name, ms_path in paths:
             if normalize_field_name(f) == field_norm:
                 fname_match = f
                 break
+
         if fname_match is None:
-            print(f"⚠️ No matching field for {field_entry} in {msname}. Skipping fields.")
+            print(f"No direct field match for {field_entry}, trying NED aliases...")
+            
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")  # suppress minor warnings
+                    ned_result = Ned.get_table(field_entry, table='names')
+
+                if ned_result is not None and len(ned_result) > 0:
+                    # Extract all Name / ObjectName identifiers from NED table
+                    aliases = [str(ned_result['Object Name'][i]) for i in range(len(ned_result))]
+                    print(f"Found {len(aliases)} aliases in NED for {field_entry}")
+
+                    # Try each alias as a possible match
+                    print('printing aliases:')
+                    for alt in aliases:
+                        alt_norm = normalize_field_name(alt)
+                        print(alt_norm)
+                        for f in ms_field_names:
+                            f_norm = normalize_field_name(f)
+                            if f_norm == alt_norm:
+                                fname_match = f
+                                print(f"Matched via NED alias: {alt} → {fname_match}")
+                                break
+                        if fname_match:
+                            break
+                else:
+                    print(f"No aliases found in NED for {field_entry}")
+
+            except Exception as e:
+                print(f"NED lookup failed for {field_entry}: {e}")
+
+        if fname_match is None:
+            print(f"⚠️ No matching field found for {field_entry} or its aliases in {msname}. Skipping fields.")
             msmd.close()
             continue
 
-        # Compute separations
+        # Loop through all fields and record separation in kpc
         for field_id in range(nfields):
-            f_name = msmd.namesforfields([field_id])[0]
-            if normalize_field_name(f_name) != field_norm:
+            fname = msmd.namesforfields([field_id])[0]
+            if normalize_field_name(fname) != normalize_field_name(fname_match):
                 continue
+
             phase = msmd.phasecenter(field_id)
-            f_ra_deg = np.degrees(float(phase['m0']['value']))
-            f_dec_deg = np.degrees(float(phase['m1']['value']))
-            field_coord = SkyCoord(ra=f_ra_deg*u.deg, dec=f_dec_deg*u.deg, frame=ms_frame_astropy)
-            sep_arcsec = target_coord.separation(field_coord).arcsec
-            sep_kpc = sep_arcsec * (D_Mpc*1000.0)/206.265
-            print(f"  Field {field_id}: distance from target = {sep_kpc:.2f} kpc")
+            field_coord = skycoord_from_phase(phase, frame=ms_frame_name)
+            sep_kpc = field_coord.separation(target_coord_catalog).deg * (D_Mpc*1000)/180*np.pi
             with open(field_csv_file, 'a', newline='') as f:
                 field_writer = csv.writer(f)
-                field_writer.writerow([name, msname, field_id, f"{sep_kpc:.2f}"])
+                field_writer.writerow([name, msname, field_id, f"{sep_kpc:.3f}"])
+            print(f"  Field {field_id} ({fname}): distance from target = {sep_kpc:.3f} kpc")
+
         msmd.close()
 
     except Exception as e:
         print(f"Error processing fields in {msname}: {e}")
         msmd.close()
         continue
+
+
+
+
 
 print("Done.")
