@@ -323,6 +323,8 @@ for name, ms_path in paths:
     target_ra_deg = float(row['RA (deg)'][0])
     target_dec_deg = float(row['DEC (deg)'][0])
     target_coord_catalog = SkyCoord(ra=target_ra_deg*u.deg, dec=target_dec_deg*u.deg, frame=FK5(equinox='J2000'))
+    f_hz = restfreq*1e9 / (1+z)  # observed frequency
+    vhalf_hz = (vwidth/2) * f_hz / 3e5  # convert km/s to Hz
 
     # ---------- SPW analysis ----------
     spw_table = os.path.join(ms_path, "SPECTRAL_WINDOW")
@@ -347,7 +349,7 @@ for name, ms_path in paths:
 
         minf, maxf = freqs.min(), freqs.max()
 
-        f_hz = restfreq*1e9 / (1+z)  # observed frequency
+
         if minf <= f_hz <= maxf:
             width_hz = maxf - minf
             ch_width_hz = abs(widths[0])
@@ -359,8 +361,7 @@ for name, ms_path in paths:
                 total_chans = len(freqs)
                 print('spwmin',minf/1e9,'spwmax', maxf/1e9)
 
-                # velocity window in Hz
-                vhalf_hz = (vwidth/2) * 1e3 * f_hz / 3e5  # convert km/s to Hz
+                
                 line_mask = (freqs >= f_hz - vhalf_hz) & (freqs <= f_hz + vhalf_hz)
                 print('line_freq',f_hz/1e9,'half vwidth',vhalf_hz/1e9)
                 line_chans = np.sum(line_mask)
