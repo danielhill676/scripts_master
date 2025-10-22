@@ -44,7 +44,7 @@ def ms_frame_from_phase(phase0):
         return 'icrs'
 
 # ---------------- user params ----------------
-name = 'NGC3351'
+name = 'NGC4254'
 row = llamatab[llamatab['id'] == name]
 if len(row) == 0:
     raise RuntimeError(f"No entry '{name}' found in llama table")

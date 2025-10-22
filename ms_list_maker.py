@@ -230,7 +230,7 @@ import analysisUtils as au
 
 # ---------------- user params ----------------
 local = False
-CO32 = False
+CO32 = True
 restfreq = 230.538  # GHz
 if CO32:
     text = textCO32
@@ -267,6 +267,9 @@ else:
 # Output CSVs
 spw_csv_file = "spw_summary.csv"
 field_csv_file = "field_summary.csv"
+if CO32:
+    spw_csv_file = "spw_summary_CO32.csv"
+    field_csv_file = "field_summary_CO32.csv"
 
 with open(spw_csv_file, 'w', newline='') as f:
     writer = csv.writer(f)
