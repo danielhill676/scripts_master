@@ -3,6 +3,9 @@ from astropy.io import fits
 import math
 import os
 from astroquery.ipac.ned import Ned
+import time
+import requests
+from astroquery.exceptions import RemoteServiceError
 
 # Load LLAMA main properties table
 llamatab = Table.read(
@@ -18,6 +21,7 @@ imaging_list = [
     "NGC4260", "NGC4593", "NGC5037", "NGC5182", "NGC5506", "NGC5728", "NGC5845", "NGC5921",
     "NGC6814", "NGC7172", "NGC718", "NGC7213", "NGC7582", "NGC7727"
 ]
+
 
 def format_coord(value):
     """Ensure RA/DEC values have explicit + or - and add 'd' for degrees."""
@@ -35,9 +39,9 @@ def write_barolo_params(infolder, outfolder):
     if not os.path.exists(execfile):
         with open(execfile, 'w') as f:
             f.write("""
-                    #!/bin/bash
-                    shopt -s expand_aliases
-                    source ~/.zshrc  # or ~/.bashrc if you use bash
+#!/bin/bash
+shopt -s expand_aliases
+source ~/.zshrc  # or ~/.bashrc if you use bash
             """)
         os.chmod(execfile, 0o755)  # make executable
 
@@ -59,16 +63,49 @@ def write_barolo_params(infolder, outfolder):
         BMAJ = header.get("BMAJ", 0) * 3600  # degrees → arcsec
 
         name_full = row['name'][0]
-        Ned_table = Ned.query_object(name_full)
 
         PA = row['PA'][0]
         D_Mpc = row['D [Mpc]'][0]
         inc = row['Inclination (deg)'][0]
 
-        RA = format_coord(Ned_table['RA'][0])
-        DEC = format_coord(Ned_table['DEC'][0])
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                Ned_table = Ned.query_object(name_full)
+                RA = float(Ned_table['RA'][0])
+                DEC = float(Ned_table['DEC'][0])
+                if "Velocity" in Ned_table.colnames:
+                    vsys = float(Ned_table["Velocity"][0])
+                elif "Redshift" in Ned_table.colnames:
+                    vsys = float(Ned_table["Redshift"][0]) * 299792.458
+                else:
+                    vsys = 0.0
+                break  # ✅ success, exit retry loop
 
-        vsys = float(Ned_table["Velocity"][0])   # km/s
+            except (requests.exceptions.ConnectionError,
+                    requests.exceptions.ReadTimeout,
+                    RemoteServiceError) as e:
+                print(f"⚠️  NED query failed for {name_full} "
+                    f"(attempt {attempt+1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    print("Retrying in 5 seconds...")
+                    time.sleep(5)
+                else:
+                    print("❌ All NED attempts failed for "
+                        f"{name_full}.")
+
+                    # Fallback: use coordinates already in llamatab if available
+                    if 'RA (deg)' in llamatab.colnames and 'DEC (deg)' in llamatab.colnames:
+                        RA = float(row['RA (deg)'][0])
+                        DEC = float(row['DEC (deg)'][0])
+                        print(f"Using fallback RA/DEC from llamatab "
+                            f"for {name_full}.")
+                    else:
+                        print(f"Skipping {name_full} — no coordinates available.")
+                        continue  # skip this galaxy if no coordinates at all
+
+
+
 
         # Calculate NRADII
         R = 206.265 / D_Mpc  # 1 kpc in arcsec
@@ -99,7 +136,7 @@ PA          {PA}
 VROT        200
 VDISP       10
 VRAD        0
-VSYS        {vsys}
+VSYS        {vsys:.2f}
 
 # Which parameters to fit (minimal)
 FREE        VROT VDISP PA INC
@@ -126,7 +163,7 @@ DISTANCE    {D_Mpc}
 
         # Append command to execution script
         with open(execfile, 'a') as f:
-            f.write(f"bbarolo -p {name}.par\n")
+            f.write(f"\nbbarolo -p {name}.par")
         print(f"✅ Wrote {filepath}, {parfile}, and appended command to barolo_execute.sh")
 
 os.system('rm -f /Users/administrator/Astro/LLAMA/ALMA/barolo/barolo_execute.sh')

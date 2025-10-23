@@ -230,7 +230,7 @@ import analysisUtils as au
 
 # ---------------- user params ----------------
 local = False
-CO32 = True
+CO32 = False
 restfreq = 230.538  # GHz
 if CO32:
     text = textCO32
