@@ -2,6 +2,7 @@ from astropy.table import Table
 from astropy.io import fits
 import math
 import os
+from astroquery.ipac.ned import Ned
 
 # Load LLAMA main properties table
 llamatab = Table.read(
@@ -57,12 +58,17 @@ def write_barolo_params(infolder, outfolder):
         header = fits.getheader(filepath)
         BMAJ = header.get("BMAJ", 0) * 3600  # degrees → arcsec
 
+        name_full = row['name'][0]
+        Ned_table = Ned.query_object(name_full)
+
         PA = row['PA'][0]
         D_Mpc = row['D [Mpc]'][0]
         inc = row['Inclination (deg)'][0]
 
-        RA = format_coord(row['RA (deg)'][0])
-        DEC = format_coord(row['DEC (deg)'][0])
+        RA = format_coord(Ned_table['RA'][0])
+        DEC = format_coord(Ned_table['DEC'][0])
+
+        vsys = float(Ned_table["Velocity"][0])   # km/s
 
         # Calculate NRADII
         R = 206.265 / D_Mpc  # 1 kpc in arcsec
@@ -93,9 +99,10 @@ PA          {PA}
 VROT        200
 VDISP       10
 VRAD        0
+VSYS        {vsys}
 
 # Which parameters to fit (minimal)
-FREE        VROT VDISP
+FREE        VROT VDISP PA INC
 
 # Normalization & mask (emphasis on kinematics)
 NORM        AZIM

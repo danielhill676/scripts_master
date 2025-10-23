@@ -80,25 +80,26 @@ def export_imaging_to_fits(
 
 
 # --- Main scanning script ---
-def export_all_images(base_dir):
+def export_all_images(base_dir, skiplist=None):
     endings = ['co21.image', 'co32.image', 'cont.image']
 
     for root, dirs, files in os.walk(base_dir):
         for d in dirs:
-            for end in endings:
-                image_path = os.path.join(root, d, end)
-                if os.path.isdir(image_path):
-                    fits_path = image_path.replace('.image', '.fits')
-                    if not os.path.exists(fits_path):
-                        print(f"Exporting {image_path} → {fits_path}")
-                        export_imaging_to_fits(
-                            image_root=image_path[:-6],  # strip ".image"
-                            just_image=True
-                        )
-                    else:
-                        print(f"Skipping existing FITS: {fits_path}")
+            if d not in skiplist:
+                for end in endings:
+                    image_path = os.path.join(root, d, end)
+                    if os.path.isdir(image_path):
+                        fits_path = image_path.replace('.image', '.fits')
+                        if not os.path.exists(fits_path):
+                            print(f"Exporting {image_path} → {fits_path}")
+                            export_imaging_to_fits(
+                                image_root=image_path[:-6],  # strip ".image"
+                                just_image=True
+                            )
+                        else:
+                            print(f"Skipping existing FITS: {fits_path}")
 
 # --- Run ---
-
+skiplist = ['NGC4593','NGC2775']
 base_dir = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/imaging'
-export_all_images(base_dir)
+export_all_images(base_dir, skiplist=skiplist)
