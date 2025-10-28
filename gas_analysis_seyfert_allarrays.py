@@ -159,13 +159,27 @@ def exp_profile(r, Sigma0, rs):
 # ---------- Process file ---------- #
 
 def process_file(args):
-    file, input_dir, output_dir, llamatab = args
+    file, input_dir, output_dir, llamatab, array_type = args
     try:
-        name = os.path.basename(file).split("_12m_co21_broad_mom0.fits")[0]
-        print(f"Processing {name}...")
+        basename = os.path.basename(file)
+        endings = [
+            "_12m_co21_broad_mom0.fits",
+            "_7m_co21_broad_mom0.fits",
+            "_12m+7m_co21_broad_mom0.fits"
+        ]
+        for end in endings:
+            if basename.endswith(end):
+                name = basename.split(end)[0]
+                break
+        else:
+            name = basename.split("_co21_broad_mom0.fits")[0]
+
+        print(f"Processing {name} ({array_type})...")
+
         image = fits.getdata(file, memmap=True)
         header = fits.getheader(file)
-        error_map = fits.getdata(os.path.join(input_dir, f"{name}   "), memmap=True)
+        error_file = file.replace("_mom0.fits", "_emom0.fits")
+        error_map = fits.getdata(error_file, memmap=True)
 
         mask = np.isnan(image) | np.isnan(error_map)
         mask = np.array(mask, dtype=bool)
@@ -185,11 +199,8 @@ def process_file(args):
 
         pixel_area_pc2 = (pixel_scale_arcsec * pc_per_arcsec)**2
 
-        R_21 = 0.7
-        R_31 = 0.31
-        alpha_CO = 4.35
+        R_21, R_31, alpha_CO = 0.7, 0.31, 4.35
 
-        # Monte Carlo images
         n_iter = 1000
         images_mc = generate_random_images(image, error_map, n_iter=n_iter)
 
@@ -217,25 +228,37 @@ def process_file(args):
         radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
         valid = np.isfinite(profile) & np.isfinite(profile_err)
         radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
+
+        plot_path = os.path.join(output_dir, f"{name}_{array_type}_expfit.png")
+
         try:
             popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
                                    absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
             perr = np.sqrt(np.diag(pcov))
             sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
-            rs_arcsec = popt[1] * pixel_scale_arcsec
-            rs_arcsec_err = perr[1] * pixel_scale_arcsec
-            rs_pc = rs_arcsec * pc_per_arcsec
-            rs_pc_err = rs_arcsec_err * pc_per_arcsec
+            rs_pc = popt[1] * pixel_scale_arcsec * pc_per_arcsec
+            rs_pc_err = perr[1] * pixel_scale_arcsec * pc_per_arcsec
             rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
+
+            plt.figure()
+            plt.errorbar(radii, profile, yerr=profile_err, fmt='o')
+            plt.plot(radii, exp_profile(radii, *popt), 'r-', label=f'rs={rs}')
+            plt.xlabel("Radius (pix)")
+            plt.ylabel("Σ (Jy/beam km/s)")
+            plt.title(f"{name} {array_type}")
+            plt.legend()
+            plt.savefig(plot_path)
+            plt.close()
+
         except Exception:
-            sigma0 = "fit failed"
-            rs = "fit failed"
+            sigma0, rs = "fit failed", "fit failed"
 
         del image, images_mc, error_map
         gc.collect()
 
         return {
             "Galaxy": name,
+            "Array": array_type,
             "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
             "Asymmetry": round(asym, 3), "Asymmetry_err": round(asym_err, 3),
             "Smoothness": round(smooth, 3), "Smoothness_err": round(smooth_err, 3),
@@ -255,56 +278,60 @@ def process_file(args):
         return None
 
 
-# ---------- Parallel directory processing ----------
+# ---------- Parallel directory processing ---------- #
 
 def process_directory_parallel(outer_dir, llamatab, base_output_dir):
     valid_names = set(llamatab['id'])
     subdirs = [d for d in os.listdir(outer_dir)
                if os.path.isdir(os.path.join(outer_dir, d)) and d in valid_names]
 
-    args_list, meta_info = [], []
+    endings = {
+        "12m": "_12m_co21_broad_mom0.fits",
+        "12m+7m": "_12m+7m_co21_broad_mom0.fits",
+        "7m": "_7m_co21_broad_mom0.fits",
+    }
 
-    for name in subdirs:
-        subdir = os.path.join(outer_dir, name)
-        mom0_file = os.path.join(subdir, f"{name}_12m_co21_broad_mom0.fits")
-        emom0_file = os.path.join(subdir, f"{name}_12m_co21_broad_emom0.fits")
-        type_val = llamatab[llamatab['id'] == name]['type'][0]
-        if type_val == "i":
-            output_dir = os.path.join(base_output_dir, "inactive")
-            group = "inactive"
-        else:
-            output_dir = os.path.join(base_output_dir, "AGN")
-            group = "AGN"
-        os.makedirs(output_dir, exist_ok=True)
-        if os.path.exists(mom0_file) and os.path.exists(emom0_file):
-            args_list.append((mom0_file, subdir, output_dir, llamatab))
-            meta_info.append((name, group, output_dir))
-        else:
-            print(f"Skipping {name}: required files not found")
+    all_results = []
 
-    if not args_list:
-        print("No valid subdirectories with required files found.")
-        return
+    for array_type, ending in endings.items():
+        args_list, meta_info = [], []
+        for name in subdirs:
+            subdir = os.path.join(outer_dir, name)
+            mom0_file = os.path.join(subdir, f"{name}{ending}")
+            emom0_file = mom0_file.replace("_mom0.fits", "_emom0.fits")
+            type_val = llamatab[llamatab['id'] == name]['type'][0]
+            group = "inactive" if type_val == "i" else "AGN"
+            output_dir = os.path.join(base_output_dir, group)
+            os.makedirs(output_dir, exist_ok=True)
+            if os.path.exists(mom0_file) and os.path.exists(emom0_file):
+                args_list.append((mom0_file, subdir, output_dir, llamatab, array_type))
+                meta_info.append((name, group, output_dir))
+            else:
+                print(f"Skipping {name} ({array_type}): required files not found")
 
-    with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-        results = list(executor.map(process_file, args_list))
+        if not args_list:
+            print(f"No valid files for {array_type}.")
+            continue
 
-    results = [res for res in results if res is not None]
-    if not results:
-        print("No results produced.")
-        return
+        with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+            results = list(executor.map(process_file, args_list))
 
-    df = pd.DataFrame(results)
-    df["id"] = [mi[0] for mi in meta_info]
-    df["group"] = [mi[1] for mi in meta_info]
+        results = [r for r in results if r is not None]
+        if not results:
+            continue
 
-    for group in ["AGN", "inactive"]:
-        group_df = df[df["group"] == group]
-        if not group_df.empty:
-            outdir = os.path.join(base_output_dir, group)
-            outfile = os.path.join(outdir, "gas_analysis_summary.csv")
-            group_df.to_csv(outfile, index=False)
-            print(f"Results for {group} saved to {outfile}")
+        df = pd.DataFrame(results)
+        for group in ["AGN", "inactive"]:
+            group_df = df[df["Galaxy"].isin([m[0] for m in meta_info if m[1] == group])]
+            if not group_df.empty:
+                outdir = os.path.join(base_output_dir, group)
+                outfile = os.path.join(outdir, f"gas_analysis_summary_{array_type}.csv")
+                group_df.to_csv(outfile, index=False)
+                print(f"Results for {group} ({array_type}) saved to {outfile}")
+
+        all_results.extend(results)
+
+    return all_results
 
 
 if __name__ == '__main__':
