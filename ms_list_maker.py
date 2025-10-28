@@ -36,10 +36,10 @@ NGC1365         2013.1.01161.S  all 7m 10   7m_1/2013.1.01161.S/science_goal.uid
 NGC1947         2019.1.01742.S  all 12m 1   2019.1.01742.S/science_goal.uid___A001_X1465_X29a/group.uid___A001_X1465_X29b/member.uid___A001_X1465_X29c/calibrated/uid___A002_Xe1baa0_X3bc9.ms
 
 NGC2775        2017.1.00886.L  all 12m 1   12m/2017.1.00886.L/science_goal.uid___A001_X1284_X2813/group.uid___A001_X1284_X2814/member.uid___A001_X1284_X2815/calibrated/trimmed_uid___A002_Xcccc19_X384.ms.split.cal
-#NGC2775        2017.1.00886.L  all 7m 1   7m/2017.1.00886.L/science_goal.uid___A001_X1284_X2813/group.uid___A001_X1284_X2814/member.uid___A001_X1284_X2817/calibrated/uid___A002_Xc53e4e_X3cbc.ms
-#NGC2775        2017.1.00886.L  all 7m 2   7m/2017.1.00886.L/science_goal.uid___A001_X1284_X2813/group.uid___A001_X1284_X2814/member.uid___A001_X1284_X2817/calibrated/uid___A002_Xc5537d_X2694.ms
-#NGC2775        2017.1.00886.L  all 7m 3   7m/2017.1.00886.L/science_goal.uid___A001_X1284_X2813/group.uid___A001_X1284_X2814/member.uid___A001_X1284_X2817/calibrated/uid___A002_Xc55c89_X3d41.ms
-#NGC2775        2017.1.00886.L  all 7m 4   7m/2017.1.00886.L/science_goal.uid___A001_X1284_X2813/group.uid___A001_X1284_X2814/member.uid___A001_X1284_X2817/calibrated/uid___A002_Xc571aa_X312f.ms
+NGC2775        2017.1.00886.L  all 7m 1   7m/2017.1.00886.L/science_goal.uid___A001_X1284_X2813/group.uid___A001_X1284_X2814/member.uid___A001_X1284_X2817/calibrated/uid___A002_Xc53e4e_X3cbc.ms
+NGC2775        2017.1.00886.L  all 7m 2   7m/2017.1.00886.L/science_goal.uid___A001_X1284_X2813/group.uid___A001_X1284_X2814/member.uid___A001_X1284_X2817/calibrated/uid___A002_Xc5537d_X2694.ms
+NGC2775        2017.1.00886.L  all 7m 3   7m/2017.1.00886.L/science_goal.uid___A001_X1284_X2813/group.uid___A001_X1284_X2814/member.uid___A001_X1284_X2817/calibrated/uid___A002_Xc55c89_X3d41.ms
+NGC2775        2017.1.00886.L  all 7m 4   7m/2017.1.00886.L/science_goal.uid___A001_X1284_X2813/group.uid___A001_X1284_X2814/member.uid___A001_X1284_X2817/calibrated/uid___A002_Xc571aa_X312f.ms
 
 
 
@@ -230,12 +230,12 @@ import analysisUtils as au
 
 # ---------------- user params ----------------
 local = False
-CO32 = False
+CO32 = True
 restfreq = 230.538  # GHz
 if CO32:
     text = textCO32
     restfreq = 345.796  # GHz
-vwidth = 2000       # km/s
+vwidth = 1000       # km/s
 max_chan_kms = 15.0 # km/s
 
 # CASA tools
