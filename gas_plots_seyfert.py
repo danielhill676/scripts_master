@@ -55,7 +55,7 @@ def is_categorical(series):
         return True
     return False
 
-def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, GB21, use_gb21=False, soloplot=None,exclude_names=None,logx=False,logy=False,background_image=None,manual_limits=None, legend_loc ='best' , truescale=False):
+def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, GB21, use_gb21=False, soloplot=None,exclude_names=None,logx=False,logy=False,background_image=None,manual_limits=None, legend_loc ='best' , truescale=False, allarrays=False):
     """possible x_column: 'Distance (Mpc)', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -78,8 +78,15 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     # Load LLAMA table
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
     llama_df = llamatab.to_pandas()
-    fit_data_AGN = pd.read_csv('/data/c3040163/llama/alma/gas_analysis_results/AGN/gas_analysis_summary.csv')
-    fit_data_inactive = pd.read_csv('/data/c3040163/llama/alma/gas_analysis_results/inactive/gas_analysis_summary.csv')
+    fit_data_AGN_12m = pd.read_csv('/data/c3040163/llama/alma/gas_analysis_results/AGN/gas_analysis_summary_12m.csv')
+    fit_data_inactive_12m = pd.read_csv('/data/c3040163/llama/alma/gas_analysis_results/inactive/gas_analysis_summary_12m.csv')
+
+    if allarrays:
+        fit_data_AGN_7m = pd.read_csv('/data/c3040163/llama/alma/gas_analysis_results/AGN/gas_analysis_summary_7m.csv')
+        fit_data_AGN_comb = pd.read_csv('/data/c3040163/llama/alma/gas_analysis_results/AGN/gas_analysis_summary_12m+7m.csv')
+        
+        fit_data_inactive_7m = pd.read_csv('/data/c3040163/llama/alma/gas_analysis_results/inactive/gas_analysis_summary_7m.csv')
+        fit_data_inactive_comb = pd.read_csv('/data/c3040163/llama/alma/gas_analysis_results/inactive/gas_analysis_summary_12m+7m.csv')
 
     def normalize_name(col):
         # col can be a Pandas Series or Astropy Table Column
@@ -94,8 +101,16 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     llamatab['name_clean'] = normalize_name(llamatab['name'])
     agn_bol['Name_clean'] = normalize_name(agn_bol['Name'])
     inactive_bol['Name_clean'] = normalize_name(inactive_bol['Name'])
-    fit_data_AGN['Galaxy_clean'] = normalize_name(fit_data_AGN['Galaxy'])
-    fit_data_inactive['Galaxy_clean'] = normalize_name(fit_data_inactive['Galaxy'])
+    fit_data_AGN_12m['Galaxy_clean'] = normalize_name(fit_data_AGN_12m['Galaxy'])
+    fit_data_inactive_12m['Galaxy_clean'] = normalize_name(fit_data_inactive_12m['Galaxy'])
+
+    if allarrays:
+
+        fit_data_AGN_7m['Galaxy_clean'] = normalize_name(fit_data_AGN_7m['Galaxy'])
+        fit_data_AGN_comb['Galaxy_clean'] = normalize_name(fit_data_AGN_comb['Galaxy'])
+
+        fit_data_inactive_7m['Galaxy_clean'] = normalize_name(fit_data_inactive_7m['Galaxy'])
+        fit_data_inactive_comb['Galaxy_clean'] = normalize_name(fit_data_inactive_comb['Galaxy'])
 
     # --- Map name → id ---
     name_to_id = dict(zip(llamatab['name_clean'], llamatab['id']))
@@ -116,19 +131,38 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     )
 
     # Merge with fit data
-    merged_AGN = pd.merge(df_combined, fit_data_AGN, left_on='id', right_on='Galaxy_clean',how='right')
-    merged_AGN = pd.merge(merged_AGN, agn_bol, left_on='Name_clean', right_on='Name_clean',how='left')
-    merged_inactive = pd.merge(df_combined, fit_data_inactive, left_on='id', right_on='Galaxy_clean',how='right')
-    merged_inactive = pd.merge(merged_inactive, inactive_bol, left_on='Name_clean', right_on='Name_clean',how='left')
+    merged_AGN_12m = pd.merge(df_combined, fit_data_AGN_12m, left_on='id', right_on='Galaxy_clean',how='right')
+    merged_AGN_12m = pd.merge(merged_AGN_12m, agn_bol, left_on='Name_clean', right_on='Name_clean',how='left')
+    merged_inactive_12m = pd.merge(df_combined, fit_data_inactive_12m, left_on='id', right_on='Galaxy_clean',how='right')
+    merged_inactive_12m = pd.merge(merged_inactive_12m, inactive_bol, left_on='Name_clean', right_on='Name_clean',how='left')
 
-    for df in [merged_AGN, merged_inactive]:
+    if allarrays:
+        merged_AGN_7m = pd.merge(df_combined, fit_data_AGN_7m, left_on='id', right_on='Galaxy_clean',how='right')
+        merged_AGN_7m = pd.merge(merged_AGN_7m, agn_bol, left_on='Name_clean', right_on='Name_clean',how='left')
+        merged_AGN_comb = pd.merge(df_combined, fit_data_AGN_comb, left_on='id', right_on='Galaxy_clean',how='right')
+        merged_AGN_comb = pd.merge(merged_AGN_comb, agn_bol, left_on='Name_clean', right_on='Name_clean',how='left')
+
+
+        merged_inactive_7m = pd.merge(df_combined, fit_data_inactive_7m, left_on='id', right_on='Galaxy_clean',how='right')
+        merged_inactive_7m = pd.merge(merged_inactive_7m, inactive_bol, left_on='Name_clean', right_on='Name_clean',how='left')
+        merged_inactive_comb = pd.merge(df_combined, fit_data_inactive_comb, left_on='id', right_on='Galaxy_clean',how='right')
+        merged_inactive_comb = pd.merge(merged_inactive_comb, inactive_bol, left_on='Name_clean', right_on='Name_clean',how='left')
+
+    for df in [merged_AGN_12m,merged_inactive_12m]:
         if "Bar" in df.columns:
             df["Bar"] = df["Bar"].astype(str).str.strip().replace("", np.nan)
             df["Bar"] = df["Bar"].astype("category")
+    if allarrays:
+
+        for df in [ merged_AGN_7m, merged_AGN_comb, merged_inactive_7m, merged_inactive_comb]:
+            if "Bar" in df.columns:
+                df["Bar"] = df["Bar"].astype(str).str.strip().replace("", np.nan)
+                df["Bar"] = df["Bar"].astype("category")
 
             # Determine if axes are categorical
-    is_x_categorical = is_categorical(merged_AGN[x_column].dropna())
-    is_y_categorical = is_categorical(merged_AGN[y_column].dropna())
+    is_x_categorical = is_categorical(merged_AGN_12m[x_column].dropna())
+    is_y_categorical = is_categorical(merged_AGN_12m[y_column].dropna())
+
     if is_x_categorical:
         print(f"Detected categorical x-axis: {x_column}")
     if is_y_categorical:
@@ -137,36 +171,83 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     if not is_x_categorical and not is_y_categorical:
 
         # Clean AGN data
-        merged_AGN[x_column] = pd.to_numeric(merged_AGN[x_column], errors='coerce')
-        merged_AGN[y_column] = pd.to_numeric(merged_AGN[y_column], errors='coerce')
-        merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
+        merged_AGN_12m[x_column] = pd.to_numeric(merged_AGN_12m[x_column], errors='coerce')
+        merged_AGN_12m[y_column] = pd.to_numeric(merged_AGN_12m[y_column], errors='coerce')
+        merged_AGN_clean_12m = merged_AGN_12m.dropna(subset=[x_column, y_column])
+
+        if allarrays:
+
+            merged_AGN_7m[x_column] = pd.to_numeric(merged_AGN_7m[x_column], errors='coerce')
+            merged_AGN_7m[y_column] = pd.to_numeric(merged_AGN_7m[y_column], errors='coerce')
+            merged_AGN_clean_7m = merged_AGN_7m.dropna(subset=[x_column, y_column])
+
+            merged_AGN_comb[x_column] = pd.to_numeric(merged_AGN_comb[x_column], errors='coerce')
+            merged_AGN_comb[y_column] = pd.to_numeric(merged_AGN_comb[y_column], errors='coerce')
+            merged_AGN_clean_comb = merged_AGN_comb.dropna(subset=[x_column, y_column])
 
         # Clean inactive data
-        merged_inactive[x_column] = pd.to_numeric(merged_inactive[x_column], errors='coerce')
-        merged_inactive[y_column] = pd.to_numeric(merged_inactive[y_column], errors='coerce')
-        merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
+        merged_inactive_12m[x_column] = pd.to_numeric(merged_inactive_12m[x_column], errors='coerce')
+        merged_inactive_12m[y_column] = pd.to_numeric(merged_inactive_12m[y_column], errors='coerce')
+        merged_inactive_clean_12m = merged_inactive_12m.dropna(subset=[x_column, y_column])
+
+        if allarrays:
+
+            merged_inactive_7m[x_column] = pd.to_numeric(merged_inactive_7m[x_column], errors='coerce')
+            merged_inactive_7m[y_column] = pd.to_numeric(merged_inactive_7m[y_column], errors='coerce')
+            merged_inactive_clean_7m = merged_inactive_7m.dropna(subset=[x_column, y_column])
+
+            merged_inactive_comb[x_column] = pd.to_numeric(merged_inactive_comb[x_column], errors='coerce')
+            merged_inactive_comb[y_column] = pd.to_numeric(merged_inactive_comb[y_column], errors='coerce')
+            merged_inactive_clean_comb = merged_inactive_comb.dropna(subset=[x_column, y_column])
 
     else:
-        merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
-        merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
+        merged_AGN_clean_12m = merged_AGN_12m.dropna(subset=[x_column, y_column])
+        merged_inactive_clean_12m = merged_inactive_12m.dropna(subset=[x_column, y_column])
+        if allarrays:
+            merged_AGN_clean_7m = merged_AGN_7m.dropna(subset=[x_column, y_column])
+            merged_AGN_clean_comb = merged_AGN_comb.dropna(subset=[x_column, y_column])
+            merged_inactive_clean_7m = merged_inactive_7m.dropna(subset=[x_column, y_column])
+            merged_inactive_clean_comb = merged_inactive_comb.dropna(subset=[x_column, y_column])
+
 
      # --- Exclude names here ---
     if exclude_names is not None:
         exclude_norm = [n.strip().upper() for n in exclude_names]
 
-        merged_AGN_clean = merged_AGN_clean[
-            ~merged_AGN_clean["Name"].str.strip().str.upper().isin(exclude_norm)
+        merged_AGN_clean_12m = merged_AGN_clean_12m[
+            ~merged_AGN_clean_12m["Name"].str.strip().str.upper().isin(exclude_norm)
         ]
-        merged_inactive_clean = merged_inactive_clean[
-            ~merged_inactive_clean["Name"].str.strip().str.upper().isin(exclude_norm)
+        merged_inactive_clean_12m = merged_inactive_clean_12m[
+            ~merged_inactive_clean_12m["Name"].str.strip().str.upper().isin(exclude_norm)
         ]
+        if allarrays:
+            merged_AGN_clean_7m = merged_AGN_clean_7m[
+                ~merged_AGN_clean_7m["Name"].str.strip().str.upper().isin(exclude_norm)
+            ]
+            merged_AGN_clean_comb = merged_AGN_clean_comb[
+                ~merged_AGN_clean_comb["Name"].str.strip().str.upper().isin(exclude_norm)
+            ]
+            merged_inactive_clean_7m = merged_inactive_clean_7m[
+                ~merged_inactive_clean_7m["Name"].str.strip().str.upper().isin(exclude_norm)
+            ]
+            merged_inactive_clean_comb = merged_inactive_clean_comb[
+                ~merged_inactive_clean_comb["Name"].str.strip().str.upper().isin(exclude_norm)
+            ]
+
         agn_bol = agn_bol[~agn_bol["Name"].str.strip().str.upper().isin(exclude_norm)]
         inactive_bol = inactive_bol[~inactive_bol["Name"].str.strip().str.upper().isin(exclude_norm)]
         if use_gb21:
             GB21 = [row for row in GB21 if str(row["Name"]).strip().upper() not in exclude_norm]
-    
-    merged_AGN_clean = merged_AGN_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
-    merged_inactive_clean = merged_inactive_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
+
+
+
+    merged_AGN_clean_12m = merged_AGN_clean_12m.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
+    merged_inactive_clean_12m = merged_inactive_clean_12m.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
+    if allarrays:
+        merged_AGN_clean_7m = merged_AGN_clean_7m.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
+        merged_AGN_clean_comb = merged_AGN_clean_comb.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
+        merged_inactive_clean_7m = merged_inactive_clean_7m.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
+        merged_inactive_clean_comb = merged_inactive_clean_comb.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
 
     # Optional: Clean GB21 data
     if use_gb21:
@@ -179,34 +260,73 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         names_gb21 = GB21_clean["Name"].values
 
     # Extract values
-    x_agn = merged_AGN_clean[x_column]
-    y_agn = merged_AGN_clean[y_column]
-    names_agn = merged_AGN_clean["Name_clean"].values
-    xerr_agn = get_errorbars(merged_AGN_clean, x_column)
-    yerr_agn = get_errorbars(merged_AGN_clean, y_column)
+    x_agn_12m = merged_AGN_clean_12m[x_column]
+    y_agn_12m = merged_AGN_clean_12m[y_column]
+    names_agn_12m = merged_AGN_clean_12m["Name_clean"].values
+    xerr_agn_12m = get_errorbars(merged_AGN_clean_12m, x_column)
+    yerr_agn_12m = get_errorbars(merged_AGN_clean_12m, y_column)
 
-    x_inactive = merged_inactive_clean[x_column]
-    y_inactive = merged_inactive_clean[y_column]
-    names_inactive = merged_inactive_clean["Name_clean"].values
-    xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
-    yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
+    x_inactive_12m = merged_inactive_clean_12m[x_column]
+    y_inactive_12m = merged_inactive_clean_12m[y_column]
+    names_inactive_12m = merged_inactive_clean_12m["Name_clean"].values
+    xerr_inactive_12m = get_errorbars(merged_inactive_clean_12m, x_column)
+    yerr_inactive_12m = get_errorbars(merged_inactive_clean_12m, y_column)
+
+    if allarrays:
+        x_agn_7m = merged_AGN_clean_7m[x_column]
+        y_agn_7m = merged_AGN_clean_7m[y_column]
+        names_agn_7m = merged_AGN_clean_7m["Name_clean"].values
+        xerr_agn_7m = get_errorbars(merged_AGN_clean_7m, x_column)
+        yerr_agn_7m = get_errorbars(merged_AGN_clean_7m, y_column)
+
+        x_agn_comb = merged_AGN_clean_comb[x_column]
+        y_agn_comb = merged_AGN_clean_comb[y_column]
+        names_agn_comb = merged_AGN_clean_comb["Name_clean"].values
+        xerr_agn_comb = get_errorbars(merged_AGN_clean_comb, x_column)
+        yerr_agn_comb = get_errorbars(merged_AGN_clean_comb, y_column)
+
+        x_inactive_7m = merged_inactive_clean_7m[x_column]
+        y_inactive_7m = merged_inactive_clean_7m[y_column]
+        names_inactive_7m = merged_inactive_clean_7m["Name_clean"].values
+        xerr_inactive_7m = get_errorbars(merged_inactive_clean_7m, x_column)
+        yerr_inactive_7m = get_errorbars(merged_inactive_clean_7m, y_column)
+
+        x_inactive_comb = merged_inactive_clean_comb[x_column]
+        y_inactive_comb = merged_inactive_clean_comb[y_column]
+        names_inactive_comb = merged_inactive_clean_comb["Name_clean"].values
+        xerr_inactive_comb = get_errorbars(merged_inactive_clean_comb, x_column)
+        yerr_inactive_comb = get_errorbars(merged_inactive_clean_comb, y_column)
 
 
     if soloplot == 'AGN':
-        if x_agn.empty or y_agn.empty:
+        if x_agn_12m.empty or y_agn_12m.empty:
             print("No valid AGN data to plot.")
             return
     elif soloplot == 'inactive':
-        if x_inactive.empty or y_inactive.empty:
+        if x_inactive_12m.empty or y_inactive_12m.empty:
             print("No valid inactive data to plot.")
             return
     else:
-        if x_agn.empty and x_inactive.empty and (not use_gb21 or x_gb21.empty):
+        if x_agn_12m.empty and x_inactive_12m.empty and (not use_gb21 or x_gb21.empty):
             print("No valid X data to plot.")
             return
-        if y_agn.empty and y_inactive.empty and (not use_gb21 or y_gb21.empty):
+        if y_agn_12m.empty and y_inactive_12m.empty and (not use_gb21 or y_gb21.empty):
             print("No valid Y data to plot.")
             return
+
+        if allarrays:
+            if x_agn_7m.empty and x_inactive_7m.empty and (not use_gb21 or x_gb21.empty):
+                print("No valid X data to plot.")
+                return
+            if y_agn_7m.empty and y_inactive_7m.empty and (not use_gb21 or y_gb21.empty):
+                print("No valid Y data to plot.")
+                return
+            if x_agn_comb.empty and x_inactive_comb.empty and (not use_gb21 or x_gb21.empty):
+                print("No valid X data to plot.")
+                return
+            if y_agn_comb.empty and y_inactive_comb.empty and (not use_gb21 or y_gb21.empty):
+                print("No valid Y data to plot.")
+                return
 
     # Set up figure
 
@@ -226,24 +346,45 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             # KS test only if both are present
         if soloplot is None:
-            statistic, p_value = ks_2samp(y_inactive, y_agn)
-            print(f'{y_column} stats')
-            print(f"KS statistic: {statistic}")
-            print(f"P-value: {p_value}")
-            if p_value < 0.05:
+            statistic_12m, p_value_12m = ks_2samp(y_inactive_12m, y_agn_12m)
+            print(f'12m {y_column} stats')
+            print(f"KS statistic: {statistic_12m}")
+            print(f"P-value: {p_value_12m}")
+            if p_value_12m < 0.05:
                 print("Distributions differ.")
             else:
                 print("Distributions may be the same.")
+            
+            if allarrays:
+                statistic_7m, p_value_7m = ks_2samp(y_inactive_7m, y_agn_7m)
+                print(f'7m {y_column} stats')
+                print(f"KS statistic: {statistic_7m}")
+                print(f"P-value: {p_value_7m}")
+                if p_value_7m < 0.05:
+                    print("Distributions differ.")
+                else:
+                    print("Distributions may be the same.")
+
+                statistic_comb, p_value_comb = ks_2samp(y_inactive_comb, y_agn_comb)
+                print(f'Combined {y_column} stats')
+                print(f"KS statistic: {statistic_comb}")
+                print(f"P-value: {p_value_comb}")
+                if p_value_comb < 0.05:
+                    print("Distributions differ.")
+                else:
+                    print("Distributions may be the same.")
+
+            
 
             # Axis limits
         data_x = []
         data_y = []
         if soloplot in (None, 'AGN'):
-            data_x.append(x_agn)
-            data_y.append(y_agn)
+            data_x.append(x_agn_12m)
+            data_y.append(y_agn_12m)
         if soloplot in (None, 'inactive'):
-            data_x.append(x_inactive)
-            data_y.append(y_inactive)
+            data_x.append(x_inactive_12m)
+            data_y.append(y_inactive_12m)
         if soloplot is None and use_gb21:
             data_x.append(x_gb21)
             data_y.append(y_gb21)
@@ -301,23 +442,61 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         # Plot scatter points
         if soloplot in (None, 'AGN'):
             ax_scatter.errorbar(
-                x_agn, y_agn,
-                xerr=xerr_agn, yerr=yerr_agn,
-                fmt="s", color="red", label="LLAMA AGN", markersize=6,
+                x_agn_12m, y_agn_12m,
+                xerr=xerr_agn_12m, yerr=yerr_agn_12m,
+                fmt="s", color="red", label="LLAMA AGN 12m", markersize=6,
                 capsize=2, elinewidth=1, alpha=0.8
             )
-            for x, y, name in zip(x_agn, y_agn, names_agn):
+            for x, y, name in zip(x_agn_12m, y_agn_12m, names_agn_12m):
                 ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='darkred', zorder=10)
+
+            if allarrays:
+                ax_scatter.errorbar(
+                    x_agn_7m, y_agn_7m,
+                    xerr=xerr_agn_7m, yerr=yerr_agn_7m,
+                    fmt="s", color="orange", label="LLAMA AGN 7m", markersize=6,
+                    capsize=2, elinewidth=1, alpha=0.6
+                )
+                for x, y, name in zip(x_agn_7m, y_agn_7m, names_agn_7m):
+                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=6, color='darkorange', zorder=10)
+
+                ax_scatter.errorbar(
+                    x_agn_comb, y_agn_comb,
+                    xerr=xerr_agn_comb, yerr=yerr_agn_comb,
+                    fmt="s", color="darkred", label="LLAMA AGN 12m+7m", markersize=6,
+                    capsize=2, elinewidth=1, alpha=0.6
+                )
+                for x, y, name in zip(x_agn_comb, y_agn_comb, names_agn_comb):
+                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=6, color='maroon', zorder=10)
 
         if soloplot in (None, 'inactive'):
             ax_scatter.errorbar(
-                x_inactive, y_inactive,
-                xerr=xerr_inactive, yerr=yerr_inactive,
+                x_inactive_12m, y_inactive_12m,
+                xerr=xerr_inactive_12m, yerr=yerr_inactive_12m,
                 fmt="v", color="blue", label="LLAMA Inactive", markersize=6,
                 capsize=2, elinewidth=1, alpha=0.8
             )
-            for x, y, name in zip(x_inactive, y_inactive, names_inactive):
+            for x, y, name in zip(x_inactive_12m, y_inactive_12m, names_inactive_12m):
                 ax_scatter.text(float(x), float(y), name, fontsize=7, color='navy', zorder=10)
+
+            if allarrays:
+                ax_scatter.errorbar(
+                    x_inactive_7m, y_inactive_7m,
+                    xerr=xerr_inactive_7m, yerr=yerr_inactive_7m,
+                    fmt="v", color="cyan", label="LLAMA Inactive 7m", markersize=6,
+                    capsize=2, elinewidth=1, alpha=0.6
+                )
+                for x, y, name in zip(x_inactive_7m, y_inactive_7m, names_inactive_7m):
+                    ax_scatter.text(float(x), float(y), name, fontsize=6, color='darkcyan', zorder=10)
+
+                ax_scatter.errorbar(
+                    x_inactive_comb, y_inactive_comb,
+                    xerr=xerr_inactive_comb, yerr=yerr_inactive_comb,
+                    fmt="v", color="darkblue", label="LLAMA Inactive 12m+7m", markersize=6,
+                    capsize=2, elinewidth=1, alpha=0.6
+                )
+                for x, y, name in zip(x_inactive_comb, y_inactive_comb, names_inactive_comb):
+                    ax_scatter.text(float(x), float(y), name, fontsize=6, color='midnightblue', zorder=10)
 
         # apply scale and limits
         if logx:
@@ -347,20 +526,49 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         ax_hist = fig.add_subplot(gs[1], sharey=ax_scatter)
 
         if soloplot in (None, 'AGN'):
-            ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
+            ax_hist.hist(y_agn_12m, bins=bin_edges, orientation='horizontal', 
                         color='red', alpha=0.4, label='AGN')
-            median_agn = np.median(y_agn)
+            median_agn = np.median(y_agn_12m)
             ax_hist.axhline(median_agn, color='red', linestyle='--')
             ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn, 
                         f"{median_agn:.2f}", color='red', fontsize=8, va='center')
+            
+            if allarrays:
+                ax_hist.hist(y_agn_7m, bins=bin_edges, orientation='horizontal', 
+                            color='orange', alpha=0.4, label='AGN 7m')
+                median_agn_7m = np.median(y_agn_7m)
+                ax_hist.axhline(median_agn_7m, color='orange', linestyle='--')
+                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn_7m, 
+                            f"{median_agn_7m:.2f}", color='orange', fontsize=8, va='center')
+
+                ax_hist.hist(y_agn_comb, bins=bin_edges, orientation='horizontal', 
+                            color='darkred', alpha=0.4, label='AGN 12m+7m')
+                median_agn_comb = np.median(y_agn_comb)
+                ax_hist.axhline(median_agn_comb, color='darkred', linestyle='--')
+                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn_comb, 
+                            f"{median_agn_comb:.2f}", color='darkred', fontsize=8, va='center')
 
         if soloplot in (None, 'inactive'):
-            ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
+            ax_hist.hist(y_inactive_12m, bins=bin_edges, orientation='horizontal', 
                         color='blue', alpha=0.4, label='Inactive')
-            median_inactive = np.median(y_inactive)
+            median_inactive = np.median(y_inactive_12m)
             ax_hist.axhline(median_inactive, color='blue', linestyle='--')
             ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive, 
                         f"{median_inactive:.2f}", color='blue', fontsize=8, va='center')
+            if allarrays:
+                ax_hist.hist(y_inactive_7m, bins=bin_edges, orientation='horizontal', 
+                            color='cyan', alpha=0.4, label='Inactive 7m')
+                median_inactive_7m = np.median(y_inactive_7m)
+                ax_hist.axhline(median_inactive_7m, color='cyan', linestyle='--')
+                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive_7m, 
+                            f"{median_inactive_7m:.2f}", color='cyan', fontsize=8, va='center')
+
+                ax_hist.hist(y_inactive_comb, bins=bin_edges, orientation='horizontal', 
+                            color='darkblue', alpha=0.4, label='Inactive 12m+7m')
+                median_inactive_comb = np.median(y_inactive_comb)
+                ax_hist.axhline(median_inactive_comb, color='darkblue', linestyle='--')
+                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive_comb, 
+                            f"{median_inactive_comb:.2f}", color='darkblue', fontsize=8, va='center')
 
         if soloplot is None and use_gb21:
             ax_hist.hist(y_gb21, bins=bin_edges, orientation='horizontal', 
@@ -375,33 +583,35 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         # Save
         suffix = f"_{soloplot}" if soloplot else ""
         output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
+        if allarrays:
+            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}_allarrays.png'
         plt.savefig(output_path)
         print(f"Saved plot to: {output_path}")
 
-        diffs = []
+        diffs_12m = []
         valid_pairs = 0
 
         for _, row in df_pairs.iterrows():
             agn_name = row["Active Galaxy"].strip()
             inactive_name = row["Inactive Galaxy"].strip()
 
-            agn_val = merged_AGN.loc[merged_AGN["Name_clean"] == agn_name, y_column]
-            inactive_val = merged_inactive.loc[merged_inactive["Name_clean"] == inactive_name, y_column]
+            agn_val_12m = merged_AGN_12m.loc[merged_AGN_12m["Name_clean"] == agn_name, y_column]
+            inactive_val_12m = merged_inactive_12m.loc[merged_inactive_12m["Name_clean"] == inactive_name, y_column]
 
-            if not agn_val.empty and not inactive_val.empty:
-                diff = float(agn_val.values[0]) - float(inactive_val.values[0])
+            if not agn_val_12m.empty and not inactive_val_12m.empty:
+                diff = float(agn_val_12m.values[0]) - float(inactive_val_12m.values[0])
                 if diff == diff:  # Check for NaN
-                    diffs.append(diff)
+                    diffs_12m.append(diff)
                     valid_pairs += 1
 
-        diffs = np.array(diffs)
-        diffs = diffs[np.isfinite(diffs)]
+        diffs_12m = np.array(diffs_12m)
+        diffs_12m = diffs_12m[np.isfinite(diffs_12m)]
 
         fig, ax = plt.subplots(figsize=(8, 5))
-        ax.hist(diffs, bins=10, color="grey", alpha=0.4, edgecolor="black")
-        ax.axvline(np.median(diffs), color="red", linestyle="--", label=f"Median = {np.median(diffs):.2f}")
-        ax.axvline(np.percentile(diffs,25), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,25):.2f}")
-        ax.axvline(np.percentile(diffs,75), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,75):.2f}")
+        ax.hist(diffs_12m, bins=10, color="grey", alpha=0.4, edgecolor="black")
+        ax.axvline(np.median(diffs_12m), color="red", linestyle="--", label=f"Median = {np.median(diffs_12m):.2f}")
+        ax.axvline(np.percentile(diffs_12m,25), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs_12m,25):.2f}")
+        ax.axvline(np.percentile(diffs_12m,75), color="blue", linestyle="--", label=f"Upper quartile = {np.percentile(diffs_12m,75):.2f}")
         ax.axvline(0, color="black", linestyle="solid")  # reference line
 
         ax.set_xlabel(f"Δ {y_column} (AGN - Inactive)")
@@ -409,9 +619,81 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
         ax.legend()
 
-        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/pair_diffs/{y_column}_pair_differences.png'
+        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/pair_diffs/{y_column}_pair_differences_12m.png'
         plt.savefig(output_path)
-        print(f"Saved matched-pairs plot to: {output_path}")
+        print(f"Saved 12m matched-pairs plot to: {output_path}")
+
+        if allarrays:
+            diffs_7m = []
+            valid_pairs_7m = 0
+
+            for _, row in df_pairs.iterrows():
+                agn_name = row["Active Galaxy"].strip()
+                inactive_name = row["Inactive Galaxy"].strip()
+
+                agn_val_7m = merged_AGN_7m.loc[merged_AGN_7m["Name_clean"] == agn_name, y_column]
+                inactive_val_7m = merged_inactive_7m.loc[merged_inactive_7m["Name_clean"] == inactive_name, y_column]
+
+                if not agn_val_7m.empty and not inactive_val_7m.empty:
+                    diff = float(agn_val_7m.values[0]) - float(inactive_val_7m.values[0])
+                    if diff == diff:  # Check for NaN
+                        diffs_7m.append(diff)
+                        valid_pairs_7m += 1
+
+            diffs_7m = np.array(diffs_7m)
+            diffs_7m = diffs_7m[np.isfinite(diffs_7m)]
+
+            fig, ax = plt.subplots(figsize=(8, 5))
+            ax.hist(diffs_7m, bins=10, color="grey", alpha=0.4, edgecolor="black")
+            ax.axvline(np.median(diffs_7m), color="red", linestyle="--", label=f"Median = {np.median(diffs_7m):.2f}")
+            ax.axvline(np.percentile(diffs_7m,25), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs_7m,25):.2f}")
+            ax.axvline(np.percentile(diffs_7m,75), color="blue", linestyle="--", label=f"Upper quartile = {np.percentile(diffs_7m,75):.2f}")
+            ax.axvline(0, color="black", linestyle="solid")  # reference line
+
+            ax.set_xlabel(f"Δ {y_column} (AGN - Inactive)")
+            ax.set_ylabel("Number of pairs")
+            ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs_7m})")
+            ax.legend()
+
+            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/pair_diffs/{y_column}_pair_differences_7m.png'
+            plt.savefig(output_path)
+            print(f"Saved 7m matched-pairs plot to: {output_path}")
+
+
+            diffs_comb = []
+            valid_pairs_comb = 0
+
+            for _, row in df_pairs.iterrows():
+                agn_name = row["Active Galaxy"].strip()
+                inactive_name = row["Inactive Galaxy"].strip()
+
+                agn_val_comb = merged_AGN_comb.loc[merged_AGN_comb["Name_clean"] == agn_name, y_column]
+                inactive_val_comb = merged_inactive_comb.loc[merged_inactive_comb["Name_clean"] == inactive_name, y_column]
+
+                if not agn_val_comb.empty and not inactive_val_comb.empty:
+                    diff = float(agn_val_comb.values[0]) - float(inactive_val_comb.values[0])
+                    if diff == diff:  # Check for NaN
+                        diffs_comb.append(diff)
+                        valid_pairs_comb += 1
+
+            diffs_comb = np.array(diffs_comb)
+            diffs_comb = diffs_comb[np.isfinite(diffs_comb)]
+
+            fig, ax = plt.subplots(figsize=(8, 5))
+            ax.hist(diffs_comb, bins=10, color="grey", alpha=0.4, edgecolor="black")
+            ax.axvline(np.median(diffs_comb), color="red", linestyle="--", label=f"Median = {np.median(diffs_comb):.2f}")
+            ax.axvline(np.percentile(diffs_comb,25), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs_comb,25):.2f}")
+            ax.axvline(np.percentile(diffs_comb,75), color="blue", linestyle="--", label=f"Upper quartile = {np.percentile(diffs_comb,75):.2f}")
+            ax.axvline(0, color="black", linestyle="solid")  # reference line
+
+            ax.set_xlabel(f"Δ {y_column} (AGN - Inactive)")
+            ax.set_ylabel("Number of pairs")
+            ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs_comb})")
+            ax.legend()
+
+            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/pair_diffs/{y_column}_pair_differences_comb.png'
+            plt.savefig(output_path)
+            print(f"Saved combined matched-pairs plot to: {output_path}")
 
     elif is_x_categorical or is_y_categorical:
         figsize = 8
@@ -426,51 +708,85 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         ax_bar = fig.add_subplot(gs[0])
         ax_bar.set_facecolor('none')
                     # Axis limits
-        data_x = []
-        data_y = []
+        data_x_12m = []
+        data_y_12m = []
         if soloplot in (None, 'AGN'):
-            data_x.append(x_agn)
-            data_y.append(y_agn)
+            data_x_12m.append(x_agn_12m)
+            data_y_12m.append(y_agn_12m)
         if soloplot in (None, 'inactive'):
-            data_x.append(x_inactive)
-            data_y.append(y_inactive)
+            data_x_12m.append(x_inactive_12m)
+            data_y_12m.append(y_inactive_12m)
         if soloplot is None and use_gb21:
-            data_x.append(x_gb21)
-            data_y.append(y_gb21)
+            data_x_12m.append(x_gb21)
+            data_y_12m.append(y_gb21)
 
-        all_x = pd.concat(data_x)
-        all_y = pd.concat(data_y)
+        all_x_12m = pd.concat(data_x_12m)
+        all_y_12m = pd.concat(data_y_12m)
+
+        if allarrays:
+            data_x_7m = []
+            data_y_7m = []
+            if soloplot in (None, 'AGN'):
+                data_x_7m.append(x_agn_7m)
+                data_y_7m.append(y_agn_7m)
+            if soloplot in (None, 'inactive'):
+                data_x_7m.append(x_inactive_7m)
+                data_y_7m.append(y_inactive_7m)
+            if soloplot is None and use_gb21:
+                data_x_7m.append(x_gb21)
+                data_y_7m.append(y_gb21)
+
+            all_x_7m = pd.concat(data_x_7m)
+            all_y_7m = pd.concat(data_y_7m)
+
+            data_x_comb = []
+            data_y_comb = []
+            if soloplot in (None, 'AGN'):
+                data_x_comb.append(x_agn_comb)
+                data_y_comb.append(y_agn_comb)
+            if soloplot in (None, 'inactive'):
+                data_x_comb.append(x_inactive_comb)
+                data_y_comb.append(y_inactive_comb)
+            if soloplot is None and use_gb21:
+                data_x_comb.append(x_gb21)
+                data_y_comb.append(y_gb21)
+
+            all_x_comb = pd.concat(data_x_comb)
+            all_y_comb = pd.concat(data_y_comb)
+
+            all_x = pd.concat([all_x_12m, all_x_7m, all_x_comb])
+            all_y = pd.concat([all_y_12m, all_y_7m, all_y_comb])
 
         if is_x_categorical:
-            cat_order = sorted(set(x_agn.dropna()) | set(x_inactive.dropna()))
-            agn_median = []
-            inactive_median = []
-            agn_std = []
-            inactive_std = []
+            cat_order = sorted(set(x_agn_12m.dropna()) | set(x_inactive_12m.dropna()))
+            agn_median_12m = []
+            inactive_median_12m = []
+            agn_std_12m = []
+            inactive_std_12m = []
 
             for cat in cat_order:
-                agn_vals = merged_AGN_clean.loc[merged_AGN_clean[x_column] == cat, y_column].dropna()
-                inact_vals = merged_inactive_clean.loc[merged_inactive_clean[x_column] == cat, y_column].dropna()
+                agn_vals_12m = merged_AGN_clean_12m.loc[merged_AGN_clean_12m[x_column] == cat, y_column].dropna()
+                inact_vals_12m = merged_inactive_clean_12m.loc[merged_inactive_clean_12m[x_column] == cat, y_column].dropna()
 
-                if len(agn_vals) > 0:
-                    agn_median.append(np.nanmedian(agn_vals))
-                    agn_std.append(np.nanstd(agn_vals))
+                if len(agn_vals_12m) > 0:
+                    agn_median.append(np.nanmedian(agn_vals_12m))
+                    agn_std.append(np.nanstd(agn_vals_12m))
                 else:
                     agn_median.append(np.nan)
                     agn_std.append(np.nan)
 
-                if len(inact_vals) > 0:
-                    inactive_median.append(np.nanmedian(inact_vals))
-                    inactive_std.append(np.nanstd(inact_vals))
+                if len(inact_vals_12m) > 0:
+                    inactive_median.append(np.nanmedian(inact_vals_12m))
+                    inactive_std.append(np.nanstd(inact_vals_12m))
                 else:
-                    inactive_median.append(np.nan)
-                    inactive_std.append(np.nan)
+                    inactive_median_12m.append(np.nan)
+                    inactive_std_12m.append(np.nan)
 
             x = np.arange(len(cat_order))
             width = 0.35
 
-            ax_bar.bar(x - width/2, agn_median, width, yerr=agn_std, label="AGN", color="red", alpha=0.7, capsize=4)
-            ax_bar.bar(x + width/2, inactive_median, width, yerr=inactive_std, label="Inactive", color="blue", alpha=0.7, capsize=4)
+            ax_bar.bar(x - width/2, agn_median_12m, width, yerr=agn_std_12m, label="AGN", color="red", alpha=0.7, capsize=4)
+            ax_bar.bar(x + width/2, inactive_median_12m, width, yerr=inactive_std_12m, label="Inactive", color="blue", alpha=0.7, capsize=4)
             ax_bar.set_xticks(x)
             ax_bar.set_xticklabels(cat_order, rotation=45, ha="right")
             ax_bar.set_xlabel(x_column)
@@ -489,7 +805,62 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ylower = all_y.min() - pad_y
                 yupper = all_y.max() + pad_y
 
-                    # Histogram bin edges
+            if allarrays:
+                agn_median_7m = []
+                inactive_median_7m = []
+                agn_std_7m = []
+                inactive_std_7m = []
+                for cat in cat_order:
+                    agn_vals_7m = merged_AGN_clean_7m.loc[merged_AGN_clean_7m[x_column] == cat, y_column].dropna()
+                    inact_vals_7m = merged_inactive_clean_7m.loc[merged_inactive_clean_7m[x_column] == cat, y_column].dropna()
+
+                    if len(agn_vals_7m) > 0:
+                        agn_median_7m.append(np.nanmedian(agn_vals_7m))
+                        agn_std_7m.append(np.nanstd(agn_vals_7m))
+                    else:
+                        agn_median_7m.append(np.nan)
+                        agn_std_7m.append(np.nan)
+
+                    if len(inact_vals_7m) > 0:
+                        inactive_median_7m.append(np.nanmedian(inact_vals_7m))
+                        inactive_std_7m.append(np.nanstd(inact_vals_7m))
+                    else:
+                        inactive_median_7m.append(np.nan)
+                        inactive_std_7m.append(np.nan)
+
+                ax_bar.bar(x - width/2, agn_median_7m, width, yerr=agn_std_7m, label="AGN 7m", color="orange", alpha=0.5, capsize=4)
+                ax_bar.bar(x + width/2, inactive_median_7m, width, yerr=inactive_std_7m, label="Inactive 7m", color="cyan", alpha=0.5, capsize=4)
+                leg = ax_bar.legend(loc=legend_loc)
+                leg.set_zorder(30)
+
+                agn_median_comb = []
+                inactive_median_comb = []
+                agn_std_comb = []
+                inactive_std_comb = []
+                for cat in cat_order:
+                    agn_vals_comb = merged_AGN_clean_comb.loc[merged_AGN_clean_comb[x_column] == cat, y_column].dropna()
+                    inact_vals_comb = merged_inactive_clean_comb.loc[merged_inactive_clean_comb[x_column] == cat, y_column].dropna()
+
+                    if len(agn_vals_comb) > 0:
+                        agn_median_comb.append(np.nanmedian(agn_vals_comb))
+                        agn_std_comb.append(np.nanstd(agn_vals_comb))
+                    else:
+                        agn_median_comb.append(np.nan)
+                        agn_std_comb.append(np.nan)
+
+                    if len(inact_vals_comb) > 0:
+                        inactive_median_comb.append(np.nanmedian(inact_vals_comb))
+                        inactive_std_comb.append(np.nanstd(inact_vals_comb))
+                    else:
+                        inactive_median_comb.append(np.nan)
+                        inactive_std_comb.append(np.nan)
+
+                ax_bar.bar(x - width/2, agn_median_comb, width, yerr=agn_std_comb, label="AGN 12m+7m", color="darkred", alpha=0.5, capsize=4)
+                ax_bar.bar(x + width/2, inactive_median_comb, width, yerr=inactive_std_comb, label="Inactive 12m+7m", color="darkblue", alpha=0.5, capsize=4)
+                leg = ax_bar.legend(loc=legend_loc)
+                leg.set_zorder(30)
+
+
 
             y_for_bins = all_y[(all_y >= ylower) & (all_y <= yupper)]
             if y_for_bins.empty:
@@ -500,7 +871,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ax_hist = fig.add_subplot(gs[1], sharey=ax_bar)
 
             if soloplot in (None, 'AGN'):
-                ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
+                ax_hist.hist(y_agn_12m, bins=bin_edges, orientation='horizontal', 
                             color='red', alpha=0.4, label='AGN')
                 median_agn = np.median(y_agn)
                 ax_hist.axhline(median_agn, color='red', linestyle='--')
@@ -508,7 +879,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                             f"{median_agn:.2f}", color='red', fontsize=8, va='center')
 
             if soloplot in (None, 'inactive'):
-                ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
+                ax_hist.hist(y_inactive_12m, bins=bin_edges, orientation='horizontal', 
                             color='blue', alpha=0.4, label='Inactive')
                 median_inactive = np.median(y_inactive)
                 ax_hist.axhline(median_inactive, color='blue', linestyle='--')

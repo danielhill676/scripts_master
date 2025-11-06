@@ -2,104 +2,92 @@
 import os
 from casatasks import exportfits as casa_exportfits
 
-# --- Patch casaStuff for your function ---
-casaStuff = type('casaStuff', (), {'exportfits': casa_exportfits})
-
-# --- Include your function definition here (unchanged except logger/casaStuff will now work) ---
-def export_imaging_to_fits(
-        image_root=None,
-        imaging_method='tclean',
-        bitpix=-32,
-        just_image=False):
-    """
-    Export the products associated with a CASA imaging run to FITS.
-    """
-
-    exts = ['alpha', 'alpha.error',
-            'beta', 'beta.error',
-            'image.tt0', 'image.tt1', 'image.tt2',
-            'model.tt0', 'model.tt1', 'model.tt2',
-            'residual.tt0', 'residual.tt1', 'residual.tt2',
-            'mask.tt0', 'mask.tt1', 'mask.tt2',
-            'pb.tt0', 'pb.tt1', 'pb.tt2',
-            'psf.tt0', 'psf.tt1', 'psf.tt2',
-            'weight.tt0', 'weight.tt1', 'weight.tt2',
-            'image', 'model', 'residual', 'mask', 'pb', 'psf', 'weight']
-
-    ext_map = {}
-
-    if imaging_method == 'tclean':
-        for ext in exts:
-            if ext == 'image':
-                ext_map['.%s' % ext] = '.fits'
-            elif 'image' in ext and 'tt0' in ext:
-                ext_map['.%s' % ext] = '.fits'
-            elif 'image' in ext:
-                ext_map['.%s' % ext] = '%s.fits' % ext.replace('image', '').replace('.', '_')
-            elif 'tt0' in ext:
-                ext_map['.%s' % ext] = '_%s.fits' % ext.replace('.tt0', '').replace('.', '_')
-            else:
-                ext_map['.%s' % ext] = '_%s.fits' % ext.replace('.', '_')
-    elif imaging_method == 'sdintimaging':
-        cube_exts = ['sd.cube', 'int.cube', 'joint.cube', 'joint.multiterm']
-        for cube_ext in cube_exts:
-            for ext in exts:
-                if ext == 'image':
-                    ext_map['.%s.%s' % (cube_ext, ext)] = '_%s.fits' % cube_ext.replace('.', '_')
-                elif 'image' in ext and 'tt0' in ext:
-                    ext_map['.%s.%s' % (cube_ext, ext)] = '_%s.fits' % cube_ext.replace('.', '_')
-                elif 'image' in ext:
-                    ext_map['.%s.%s' % (cube_ext, ext)] = '_%s_%s.fits' % (cube_ext.replace('.', '_'),
-                                                                           ext.replace('image', '').replace('.', '_'))
-                elif 'tt0' in ext:
-                    ext_map['.%s.%s' % (cube_ext, ext)] = '_%s_%s.fits' % (cube_ext.replace('.', '_'),
-                                                                           ext.replace('.tt0', '').replace('.', '_'))
-                else:
-                    ext_map['.%s.%s' % (cube_ext, ext)] = '_%s_%s.fits' % (cube_ext.replace('.', '_'),
-                                                                           ext.replace('.', '_'))
-
-    for this_ext in ext_map.keys():
-        if just_image and ((this_ext != '.tt0') and this_ext != '.image'):
-            continue
-
-        this_casa_ext = this_ext
-        this_fits_ext = ext_map[this_ext]
-
-        casa_image = image_root + this_casa_ext
-        if not os.path.isdir(casa_image):
-            continue
-        fits_image = image_root + this_fits_ext
-
-        print('exportfits from ' + casa_image + ' to ' + fits_image)
-        casaStuff.exportfits(imagename=casa_image,
-                             fitsimage=fits_image,
-                             velocity=True, overwrite=True, dropstokes=True,
-                             dropdeg=True, bitpix=bitpix)
-
-    return ()
-
-
-# --- Main scanning script ---
-def export_all_images(base_dir, skiplist=None):
-    endings = ['co21.image', 'co32.image', 'cont.image']
-
-    for root, dirs, files in os.walk(base_dir):
-        for d in dirs:
-            if d not in skiplist:
-                for end in endings:
-                    image_path = os.path.join(root, d, end)
-                    if os.path.isdir(image_path):
-                        fits_path = image_path.replace('.image', '.fits')
-                        if not os.path.exists(fits_path):
-                            print(f"Exporting {image_path} → {fits_path}")
-                            export_imaging_to_fits(
-                                image_root=image_path[:-6],  # strip ".image"
-                                just_image=True
-                            )
-                        else:
-                            print(f"Skipping existing FITS: {fits_path}")
-
-# --- Run ---
-skiplist = ['NGC4593','NGC2775']
+# ---- CONFIG ----
 base_dir = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/imaging'
-export_all_images(base_dir, skiplist=skiplist)
+skip_targets = {'NGC4593', 'NGC2775'}
+bitpix = -32
+# ----------------
+
+SUFFIXES = [
+    # co21 set
+    'co21.image', 'co21.mask', 'co21.weight', 'co21.model', 'co21.pb', 'co21.psf', 'co21.residual',
+    # cont set (including multi-term tt variants)
+    'cont.image', 'cont.mask', 'cont.weight', 'cont.model', 'cont.pb', 'cont.psf', 'cont.residual',
+    'cont.alpha', 'cont.alpha.error',
+    'cont.image.tt0', 'cont.image.tt1',
+    'cont.model.tt0', 'cont.model.tt1',
+    'cont.pb.tt0',
+    'cont.psf.tt0', 'cont.psf.tt1', 'cont.psf.tt2',
+    'cont.residual.tt0', 'cont.residual.tt1',
+    'cont.weight.tt0', 'cont.weight.tt1', 'cont.weight.tt2'
+]
+
+
+def fits_name_from_casa_dirname(dirname):
+    """Apply naming rules for FITS output."""
+    name = dirname.replace('.', '_')
+    name = name.replace('_image', '')  # drop '_image'
+    name = name.replace('_tt0', '')    # drop '_tt0'
+    return name + '.fits'
+
+
+def export_one(casa_dirpath, fits_path):
+    """Call CASA exportfits safely."""
+    try:
+        print(f'Exporting: {casa_dirpath}  ->  {fits_path}')
+        casa_exportfits(
+            imagename=casa_dirpath,
+            fitsimage=fits_path,
+            velocity=True,
+            overwrite=True,
+            dropstokes=True,
+            dropdeg=True,
+            bitpix=bitpix
+        )
+        print('  ✅ done')
+    except Exception as e:
+        print(f'  ❌ exportfits failed for {casa_dirpath}: {e}')
+
+
+def main():
+    if not os.path.isdir(base_dir):
+        raise SystemExit(f'Base directory not found: {base_dir}')
+
+    for target_name in sorted(os.listdir(base_dir)):
+        target_path = os.path.join(base_dir, target_name)
+        if not os.path.isdir(target_path):
+            continue
+        if target_name in skip_targets:
+            print(f"\nSkipping target (in skiplist): {target_name}")
+            continue
+
+        print(f"\n=== Processing target: {target_name} ===")
+
+        # Collect directory entries (depth 1)
+        dirnames = [d for d in os.listdir(target_path) if os.path.isdir(os.path.join(target_path, d))]
+        found_suffixes = set()
+
+        for entry in sorted(dirnames):
+            for suf in SUFFIXES:
+                if entry.endswith(suf):
+                    found_suffixes.add(suf)
+                    casa_path = os.path.join(target_path, entry)
+                    fits_path = os.path.join(target_path, fits_name_from_casa_dirname(entry))
+                    if os.path.exists(fits_path):
+                        print(f"Skipping existing FITS: {fits_path}")
+                    else:
+                        export_one(casa_path, fits_path)
+                    break
+
+        # Report missing expected suffixes
+        missing_suffixes = [s for s in SUFFIXES if s not in found_suffixes]
+        if missing_suffixes:
+            print(f"  ⚠️  Missing CASA products for {target_name}:")
+            for m in missing_suffixes:
+                print(f"     - {m}")
+        else:
+            print(f"  ✅ All expected CASA products found for {target_name}")
+
+
+if __name__ == '__main__':
+    main()
