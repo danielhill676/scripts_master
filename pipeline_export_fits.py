@@ -1,119 +1,234 @@
-def _fits_name_from_casa_dirname(dirname):
-    """Apply naming rules for FITS output (same as before)."""
-    name = dirname.replace('.', '_')
-    name = name.replace('_image', '')  # drop '_image'
-    name = name.replace('_tt0', '')    # drop '_tt0'
-    return name + '.fits'
+#!/usr/bin/env python3
+"""
+Export PHANGS CASA imaging dirs to FITS (depth=1).
 
-def _casa_dir_candidates_for_suffix(target_name, suffix):
+Rules implemented:
+ - Look only one level down: base_dir/<TARGET>/
+ - For each target, check immediate directory entries (no recursion).
+ - Expected CASA "suffixes" (e.g. 'co21.image', 'cont.image', 'cont.image.tt1', etc.)
+ - A suffix is considered present if:
+     * a CASA directory exists whose name endswith the suffix (or suffix + .ttX for cont)
+     * OR a previously exported FITS exists that matches the naming convention
+ - Export using casatasks.exportfits when a CASA dir exists and FITS is absent.
+ - Print explicit missing suffixes per target.
+"""
+
+import os
+import sys
+from casatasks import exportfits
+
+# ----------------- USER CONFIG -----------------
+base_dir = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/imaging'
+skip_targets = set(['NGC4593','NGC2775'])  # example skiplist; adjust if needed
+# ------------------------------------------------
+
+# Suffix list required (base suffixes)
+LINE_SUFFIXES = [
+    'co21.image', 'co21.mask', 'co21.weight', 'co21.model', 'co21.pb', 'co21.psf', 'co21.residual'
+]
+CONT_SUFFIXES = [
+    'cont.alpha.error', 'cont.alpha',
+    'cont.image.tt0', 'cont.image.tt1',
+    'cont.model.tt0', 'cont.model.tt1',
+    'cont.pb.tt0',
+    'cont.psf.tt0', 'cont.psf.tt1', 'cont.psf.tt2',
+    'cont.residual.tt0', 'cont.residual.tt1',
+    'cont.weight.tt0', 'cont.weight.tt1', 'cont.weight.tt2'
+]
+
+# Combined expected suffixes for reporting
+EXPECTED_SUFFIXES = LINE_SUFFIXES + CONT_SUFFIXES
+
+# helper functions ---------------------------------------------------------
+
+def fits_name_from_casa_dir(casa_dirname):
     """
-    Return a list of possible CASA directory name substrings that
-    should count as matching 'suffix'. This implements the
-    tt-variant rule: cont.image will match cont.image, cont.image.tt0, cont.image.tt1, ...
-    Also makes co21.* match exact endings only.
+    Convert a CASA directory name (e.g. NGC5845_12m_cont.image.tt1 or NGC5845_12m_co21.image)
+    to the target FITS filename according to the rules:
+      - replace '.' -> '_'
+      - remove the literal substring '_image' (so .image variants don't add '_image')
+      - remove trailing '_tt0' (so tt0 files do not add '_tt0'), but keep '_tt1'/_tt2
+    Return filename (no path).
     """
-    if suffix.startswith('cont.'):
-        # base 'cont.image' should match 'cont.image', 'cont.image.tt0', 'cont.image.tt1', etc.
-        base = suffix  # e.g. 'cont.image' or 'cont.residual'
-        return [base, base + '.tt0', base + '.tt1', base + '.tt2']
+    fn = casa_dirname.replace('.', '_')
+    # remove the _image substring if present
+    fn = fn.replace('_image', '')
+    # remove _tt0 (but keep other ttN)
+    fn = fn.replace('_tt0', '')
+    return fn + '.fits'
+
+def probable_fits_candidates_for_suffix(target_name, suffix):
+    """
+    Generate one or two plausible FITS names that could already exist and
+    should be treated as evidence the suffix is present.
+    Eg suffix 'cont.image.tt1' -> target_name + '_cont_tt1.fits' (per user examples)
+       suffix 'co21.weight' -> target_name + '_co21_weight.fits'
+       suffix 'cont.alpha.error' -> target_name + '_cont_alpha_error.fits'
+    We'll return a small set of guessed names to check for existence.
+    """
+    base = suffix.replace('.', '_')
+    # special handling to match the user's naming conventions:
+    # - .image files: they don't want '_image' in final FITS; for tt1 we add '_tt1'
+    candidates = []
+    if suffix.startswith('cont.image'):
+        # cont.image.tt1 -> _cont_tt1.fits ; cont.image.tt0 -> _cont.fits
+        if '.tt1' in suffix:
+            candidates.append(f"{target_name}_cont_tt1.fits")
+        elif '.tt2' in suffix:
+            candidates.append(f"{target_name}_cont_tt2.fits")
+        else:
+            # plain cont.image or tt0 -> just target_cont.fits
+            candidates.append(f"{target_name}_cont.fits")
+    elif suffix.startswith('cont.') and ('alpha' in suffix):
+        # cont.alpha.error -> target_cont_alpha_error.fits
+        candidates.append(f"{target_name}_{base}.fits")
     else:
-        # For line products (co21, co32 etc) we require direct match or likely tt variants are not used
-        return [suffix]
+        # general mapping: target_<suffix with dots->underscores>.fits
+        candidates.append(f"{target_name}_{base}.fits")
+    # Also be liberal: also check a more general candidate (some runs produce other variants)
+    candidates.append(f"{target_name}_{base}_tt0.fits")
+    return list(dict.fromkeys(candidates))  # unique order-preserving
+
+def export_one(casa_path, fits_path):
+    """Run exportfits for a CASA dir -> fits path."""
+    print(f"Exporting: {casa_path} -> {fits_path}")
+    try:
+        exportfits(imagename=casa_path, fitsimage=fits_path,
+                   velocity=True, overwrite=True, dropstokes=True, dropdeg=True, bitpix=-32)
+    except Exception as e:
+        print(f"  ❌ exportfits FAILED for {casa_path} -> {fits_path} : {e}")
+
+# main loop ----------------------------------------------------------------
 
 def main():
     if not os.path.isdir(base_dir):
-        raise SystemExit(f'Base directory not found: {base_dir}')
+        print(f"Base directory not found: {base_dir}", file=sys.stderr)
+        return 1
 
-    for target_name in sorted(os.listdir(base_dir)):
-        target_path = os.path.join(base_dir, target_name)
-        if not os.path.isdir(target_path):
+    targets = sorted([d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))])
+    if not targets:
+        print("No target directories found under base_dir.")
+        return 0
+
+    for target in targets:
+        if target in skip_targets:
+            print(f"\nSkipping target (in skiplist): {target}")
             continue
-        if target_name in skip_targets:
-            print(f"\nSkipping target (in skiplist): {target_name}")
-            continue
 
-        print(f"\n=== Processing target: {target_name} ===")
+        targdir = os.path.join(base_dir, target)
+        print(f"\n=== Target: {target} ===")
+        # list immediate entries (files & dirs) only
+        entries = os.listdir(targdir)
+        dir_entries = [d for d in entries if os.path.isdir(os.path.join(targdir, d))]
+        file_entries = [f for f in entries if os.path.isfile(os.path.join(targdir, f))]
+        dirset = set(dir_entries)
+        fileset = set(file_entries)
 
-        # depth=1 subdirectories only
-        dirnames = [d for d in os.listdir(target_path) if os.path.isdir(os.path.join(target_path, d))]
-        found_suffixes = set()
+        found = set()  # suffixes we've satisfied
 
-        # Build a set of dirnames for quick membership tests
-        dirset = set(dirnames)
+        # Check each expected suffix
+        for suf in EXPECTED_SUFFIXES:
+            satisfied = False
 
-        # Also precompute existing FITS filenames in target_path
-        fits_files = set(os.listdir(target_path))
-
-        for suf in SUFFIXES:
-            # generate candidate CASA dir substrings that should satisfy 'suf'
-            candidates = _casa_dir_candidates_for_suffix(target_name, suf)
-            matched = False
-
-            # Check for CASA directory matches (endswith candidate)
-            for d in dirset:
-                for cand in candidates:
-                    if d.endswith(cand):
-                        matched = True
-                        break
-                if matched:
+            # 1) Does any CASA dir endwith this suffix OR (for cont) .tt variants?
+            #    We check immediate dir entries only.
+            #    A dir like 'NGC2775_12m_cont.image.tt1' should satisfy 'cont.image.tt1' and 'cont.image'
+            for d in dir_entries:
+                # direct match
+                if d.endswith(suf):
+                    satisfied = True
+                    # remember the actual directory that satisfied it
+                    matched_dir = d
                     break
-
-            # If not matched by CASA dir look for an already-existing FITS file
-            if not matched:
-                # Build expected FITS filename(s) for this suffix.
-                # There are multiple possible FITS names because our export naming rules convert dots to underscores
-                # Special-case: .image -> no '_image' in FITS, and .tt0 -> drop _tt0.
-                # We'll try a few likely candidates:
-                basename = None
-                # Try common naming produced by export_imaging_to_fits:
-                # e.g., NGC2775_12m_cont_alpha_error.fits  or NGC2775_12m_cont_tt1.fits  or NGC2775_12m_co21_weight.fits
-                # Construct prefix from target files already present: try to find any file starting with target_name and containing suffix parts
-                for f in fits_files:
-                    if f.endswith('.fits') and f.startswith(target_name):
-                        # quick heuristic: if suffix parts (replace '.'->'_') appear in filename treat as match
-                        if suffix.replace('.', '_') in f:
-                            matched = True
-                            break
-                        # Accept tt variants as fulfilling base cont.image
-                        if suffix.startswith('cont.') and ('cont_' + suffix.split('.',1)[1] + '_tt' in f or 'cont_tt' in f):
-                            matched = True
-                            break
-
-            if matched:
-                found_suffixes.add(suf)
-                # Export if needed: find the CASA dir that matched (prefer CASA dir export if no FITS exists)
-                # We only export when CASA dir exists and corresponding FITS is absent.
-                # Find CASA dir path:
-                matching_dir = None
-                for d in dirset:
-                    for cand in _casa_dir_candidates_for_suffix(target_name, suf):
-                        if d.endswith(cand):
-                            matching_dir = d
-                            break
-                    if matching_dir:
+                # if suffix is cont.<x> (base cont type) allow tt variants to satisfy base cont suffix
+                if suf.startswith('cont.') and d.endswith(suf + '.tt0'):
+                    satisfied = True
+                    matched_dir = d
+                    break
+                if suf.startswith('cont.') and d.endswith(suf + '.tt1'):
+                    satisfied = True
+                    matched_dir = d
+                    break
+                if suf.startswith('cont.') and d.endswith(suf + '.tt2'):
+                    satisfied = True
+                    matched_dir = d
+                    break
+                # also allow base cont.image to be satisfied by cont.image.tt1/tt0 etc:
+                if suf.startswith('cont.') and suf.count('.') == 1:
+                    # suf like 'cont.image' : check if dir endswith 'cont.image.ttX'
+                    if d.endswith(suf + '.tt0') or d.endswith(suf + '.tt1') or d.endswith(suf + '.tt2'):
+                        satisfied = True
+                        matched_dir = d
                         break
 
-                if matching_dir:
-                    casa_path = os.path.join(target_path, matching_dir)
-                    fits_path = os.path.join(target_path, _fits_name_from_casa_dirname(matching_dir))
+            if satisfied:
+                found.add(suf)
+                # If the CASA dir existed, attempt export if FITS absent
+                # find the matching CASA dir to use for export (prefer exact match, else any matching)
+                match_dir_for_export = None
+                for d in dir_entries:
+                    if d.endswith(suf):
+                        match_dir_for_export = d
+                        break
+                if match_dir_for_export is None:
+                    # choose first dir that endswith the base cont.* or .tt
+                    for d in dir_entries:
+                        if suf.startswith('cont.') and (d.endswith(suf) or d.endswith(suf + '.tt1') or d.endswith(suf + '.tt0') or d.endswith(suf + '.tt2')):
+                            match_dir_for_export = d
+                            break
+
+                if match_dir_for_export:
+                    casa_path = os.path.join(targdir, match_dir_for_export)
+                    fits_name = fits_name_from_casa_dir(match_dir_for_export)
+                    fits_path = os.path.join(targdir, fits_name)
                     if os.path.exists(fits_path):
                         print(f"Skipping existing FITS: {fits_path}")
                     else:
                         export_one(casa_path, fits_path)
-                else:
-                    # no CASA dir matched, but FITS exists -> nothing to export
-                    expected_fits_guess = os.path.join(target_path, target_name + '_' + suf.replace('.', '_') + '.fits')
-                    if any(f.startswith(target_name) and suffix.replace('.', '_') in f for f in fits_files):
-                        print(f"Found FITS for {suf}, skipping export.")
-                    else:
-                        # nothing to do - will print missing later if truly absent
-                        pass
 
-        # Report missing expected suffixes (after checking for CASA dirs and existing FITS)
-        missing_suffixes = [s for s in SUFFIXES if s not in found_suffixes]
-        if missing_suffixes:
-            print(f"  ⚠️  Missing CASA products for {target_name}:")
-            for m in missing_suffixes:
+                continue  # next suffix
+
+            # 2) Not matched by CASA dir — check for existing FITS that indicate exported product
+            #    Use plausible FITS names and also any file that contains suffix->underscores
+            candidates = probable_fits_candidates_for_suffix(target, suf)
+            for cand in candidates:
+                if cand in fileset:
+                    satisfied = True
+                    break
+            # also looser check: any existing fits that contains the suffix pattern
+            if not satisfied:
+                for f in file_entries:
+                    if f.endswith('.fits') and (suf.replace('.', '_') in f):
+                        satisfied = True
+                        break
+                    # treat cont_tt presence as evidence of cont.image existence
+                    if suf.startswith('cont.') and ('cont_tt' in f or f.startswith(target + '_cont_')):
+                        # only accept if file starts with target (reduce false positives)
+                        if f.startswith(target):
+                            satisfied = True
+                            break
+
+            if satisfied:
+                found.add(suf)
+                # nothing to export (no CASA dir), FITS already present
+                print(f"Found existing FITS for {suf} (no CASA dir) for {target}")
+                continue
+
+            # if we get here suffix is not satisfied
+            # do not print missing immediately — collect and print after loop
+            # but mark nothing
+
+        # Report missing suffixes explicitly (those not in found)
+        missing = [s for s in EXPECTED_SUFFIXES if s not in found]
+        if missing:
+            print(f"\n  ⚠️  Missing CASA/FITS products for {target}:")
+            for m in missing:
                 print(f"     - {m}")
         else:
-            print(f"  ✅ All expected CASA products found for {target_name}")
+            print(f"  ✅ All expected CASA/FITS products found for {target}")
+
+    return 0
+
+if __name__ == '__main__':
+    rc = main()
+    sys.exit(rc)
