@@ -17,14 +17,21 @@ import os
 import sys
 from casatasks import exportfits
 
+co32 = True  # set to True to process CO(3-2) products instead of CO(2-1)
+
 # ----------------- USER CONFIG -----------------
 base_dir = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/imaging'
-skip_targets = set(['NGC4593','NGC2775'])  # example skiplist; adjust if needed
+if co32:
+    base_dir = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/imaging' 
+skip_targets = set([])  # example skiplist; adjust if needed
 # ------------------------------------------------
+line = 'co21'
+if co32:
+    line = 'co32'
 
 # Suffix list required (base suffixes)
 LINE_SUFFIXES = [
-    'co21.image', 'co21.mask', 'co21.weight', 'co21.model', 'co21.pb', 'co21.psf', 'co21.residual'
+    f'{line}.image', f'{line}.mask', f'{line}.weight', f'{line}.model', f'{line}.pb', f'{line}.psf', f'{line}.residual'
 ]
 CONT_SUFFIXES = [
     'cont.alpha.error', 'cont.alpha',

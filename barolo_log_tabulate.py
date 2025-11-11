@@ -36,17 +36,41 @@ for chunk in chunks:
     # Convergence failures
     convergence_failures = len(re.findall(r"Can not achieve convergence in ring", chunk))
 
+    # successful rings
+    successful_rings = round((num_rings - failed_rings - convergence_failures) / num_rings,1) if num_rings is not None else None
+
+    # Segfault detection
+    num_segfault = len(re.findall(r"Segmentation fault", chunk))
+    if num_segfault > 0:
+        segfault = True
+        successful_rings = 0
+    else:
+        segfault = False
+
+    # no source detection
+
+    num_nosource = len(re.findall(r"No sources detected in the datacube", chunk))
+    if num_nosource > 0:
+        no_source = True
+        successful_rings = 0
+    else:
+        no_source = False
+
     # Source count (mask-building step)
     match_source = re.search(r"Final object count\s*=\s*(\d+)", chunk)
     source_count = int(match_source.group(1)) if match_source else None
+    
 
 
     records.append({
         "Galaxy": galaxy,
         "Num_Rings": num_rings,
         "Ring_Width_arcsec": ring_width,
+        "segfault": segfault,
+        "no_source": no_source,
         "Rings_Failed": failed_rings,
         "Convergence_Failures": convergence_failures,
+        "Successful_Rings": successful_rings,
         "Source_Count": source_count
     })
 
