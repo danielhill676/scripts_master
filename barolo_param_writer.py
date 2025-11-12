@@ -72,8 +72,8 @@ source ~/.zshrc  # or ~/.bashrc if you use bash
         for attempt in range(max_retries):
             try:
                 Ned_table = Ned.query_object(name_full)
-                RA = float(Ned_table['RA'][0])
-                DEC = float(Ned_table['DEC'][0])
+                RA = format_coord(float(Ned_table['RA'][0]))
+                DEC = format_coord(float(Ned_table['DEC'][0]))
                 if "Velocity" in Ned_table.colnames:
                     vsys = float(Ned_table["Velocity"][0])
                 elif "Redshift" in Ned_table.colnames:
