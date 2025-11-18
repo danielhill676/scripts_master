@@ -108,7 +108,8 @@ source ~/.zshrc  # or ~/.bashrc if you use bash
 
 
         # Calculate NRADII
-        R = 206.265 / D_Mpc  # 1 kpc in arcsec
+        n_kpc = 1.0
+        R = n_kpc * (206.265 / D_Mpc)  # 1 kpc in arcsec
         NRADII = math.floor(R / BMAJ) if BMAJ > 0 else 1
         LINEAR = 0.425  # typical for ALMA channelization
 
@@ -142,7 +143,7 @@ VSYS        {vsys:.2f}
 FREE        VROT VDISP PA INC
 
 # Normalization & mask (emphasis on kinematics)
-NORM        AZIM
+NORM        AZIM   # could change to LOCAL because maybe it don't worling...
 MASK        SMOOTH&SEARCH
 FACTOR      2
 BLANKCUT    3
