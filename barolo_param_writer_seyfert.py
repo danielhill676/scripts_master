@@ -7,6 +7,8 @@ import time
 import requests
 from astroquery.exceptions import RemoteServiceError
 
+co32 = False
+
 # ---------------------------------------------------------------------
 # Load LLAMA table
 # ---------------------------------------------------------------------
@@ -86,7 +88,10 @@ source ~/.zshrc
                 if "Velocity" in Ned_table.colnames:
                     vsys = float(Ned_table["Velocity"][0])
                 elif "Redshift" in Ned_table.colnames:
-                    vsys = float(Ned_table["Redshift"][0]) * 299792.458
+                    if not co32:
+                        vsys = float(Ned_table["Redshift"][0]) * 299792.458
+                    if co32:
+                        vsys = float(Ned_table["Redshift"][0]) * 345796
                 else:
                     vsys = 0.0
                 break
@@ -167,9 +172,16 @@ DISTANCE    {D_Mpc}
 # ---------------------------------------------------------------------
 # Run it
 # ---------------------------------------------------------------------
+
+if not co32:
+    indir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived/"
+else:
+    indir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/"
+
+
 write_barolo_params(
     "/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived/",
-    "/Users/administrator/Astro/LLAMA/ALMA/barolo"
+    "/data/c3040163/llama/alma/barolo"
 )
 
 
