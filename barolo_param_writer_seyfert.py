@@ -26,6 +26,7 @@ def format_coord(value):
         val_str = '+' + val_str
     return val_str + 'd'
 
+
 # ---------------------------------------------------------------------
 # Main parameter file writer
 # ---------------------------------------------------------------------
@@ -33,17 +34,23 @@ def write_barolo_params(rootfolder, outfolder):
 
     os.makedirs(outfolder, exist_ok=True)
 
-    # Initialise the execute script once
+    # -----------------------------------------------------------------
+    # ALWAYS RECREATE barolo_execute.sh
+    # -----------------------------------------------------------------
     execfile = os.path.join(outfolder, 'barolo_execute.sh')
-    if not os.path.exists(execfile):
-        with open(execfile, 'w') as f:
-            f.write(
+
+    with open(execfile, 'w') as f:
+        f.write(
 """#!/bin/bash
-shopt -s expand_aliases
-source ~/.zshrc
+# Auto-generated BBarolo runner
+# Rewritten every time this script is executed
+
 """
-            )
-        os.chmod(execfile, 0o755)
+        )
+    os.chmod(execfile, 0o755)
+
+    BBAROLO_EXE = "/data/c3040163/apps/BBarolo"   # absolute path
+
 
     # -----------------------------------------------------------------
     # Walk through subdirectories looking for {name}/{name}_12m_co21.fits
@@ -90,7 +97,7 @@ source ~/.zshrc
                 elif "Redshift" in Ned_table.colnames:
                     if not co32:
                         vsys = float(Ned_table["Redshift"][0]) * 299792.458
-                    if co32:
+                    else:
                         vsys = float(Ned_table["Redshift"][0]) * 345796
                 else:
                     vsys = 0.0
@@ -164,9 +171,9 @@ DISTANCE    {D_Mpc}
         # Append to execute script
         # -------------------------------------------------------------
         with open(execfile, 'a') as f:
-            f.write(f"\nbbarolo -p {name}.par")
+            f.write(f"{BBAROLO_EXE} -p {name}.par\n")
 
-    print("✔️ Finished writing parameter files.")
+    print("✔️ Finished writing parameter files and barolo_execute.sh.")
 
 
 # ---------------------------------------------------------------------
@@ -178,18 +185,7 @@ if not co32:
 else:
     indir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/"
 
-
 write_barolo_params(
-    "/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived/",
+    indir,
     "/data/c3040163/llama/alma/barolo"
 )
-
-
-
-
-
-
-
-
-
-

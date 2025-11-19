@@ -1,19 +1,29 @@
 import re
 import pandas as pd
 
-log_path = "/Users/administrator/Astro/LLAMA/ALMA/barolo/barolo4.log"
+seyfert = True
+
+basedir = "/Users/administrator/Astro/LLAMA/ALMA/barolo/"
+if seyfert:
+    basedir = '/data/c3040163/llama/alma/barolo/'
+log_path = f"{basedir}barolo1.log"
 with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
     log_text = f.read()
 
 
 # Define the starting string after which to read the log
 start_string = "(base) administrator@MSP-MAC-522839 barolo % ./barolo_execute.sh"
+if seyfert:
+    start_string = ""
 
-# Only keep log content after the last occurrence of start_string
-if start_string in log_text:
-    _, _, log_text = log_text.rpartition(start_string)
-else:
-    print("Warning: start string not found in log. Parsing entire file.")
+# Only trim the log if a non-empty start_string is given
+if start_string:
+    if start_string in log_text:
+        _, _, log_text = log_text.rpartition(start_string)
+    else:
+        print("Warning: start string not found in log. Parsing entire file.")
+# else: skip trimming entirely
+
 
 # Split the log into chunks by galaxies
 chunks = re.split(r"FITS file to be analysed.*=", log_text)[1:]
@@ -23,7 +33,9 @@ records = []
 for chunk in chunks:
     # Galaxy name (from the FITS filename)
     match_name = re.search(r"\s+(\S+\.fits)", chunk)
-    galaxy = match_name.group(1).replace(".fits", "") if match_name else None
+    if seyfert:
+        match_name = re.search(r"\s+(\S+\_12m_co21.fits)", chunk)
+    galaxy = match_name.group(1).replace("_12m_co21.fits", "") if match_name else None
 
     # Number of rings and ring width
     match_rings = re.search(r"Fitting\s+#(\d+).*rings of width\s+([\d\.]+)", chunk)
@@ -46,6 +58,13 @@ for chunk in chunks:
         successful_rings = 0
     else:
         segfault = False
+
+    # Plot error detection
+    num_plot_errors = len(re.findall(r"Something went wrong! Check plotting scripts in the output folder", chunk))
+    if num_plot_errors > 0:
+        plot_error = True
+    else:
+        plot_error = False
 
     # no source detection
 
@@ -71,7 +90,8 @@ for chunk in chunks:
         "Rings_Failed": failed_rings,
         "Convergence_Failures": convergence_failures,
         "Successful_Rings": successful_rings,
-        "Source_Count": source_count
+        "Source_Count": source_count,
+        "Plot_Error": plot_error
     })
 
 # Convert to DataFrame
@@ -79,6 +99,8 @@ df = pd.DataFrame(records)
 
 # Save to CSV
 csv_path = "/Users/administrator/Astro/LLAMA/ALMA/barolo/fit_summary.csv"
+if seyfert:
+    csv_path = '/data/c3040163/llama/alma/barolo/fit_summary_seyfert.csv'
 df.to_csv(csv_path, index=False)
 
 print(f"Saved summary table with source count to: {csv_path}")
