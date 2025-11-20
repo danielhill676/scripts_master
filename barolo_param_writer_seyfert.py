@@ -116,10 +116,11 @@ def write_barolo_params(rootfolder, outfolder):
                     vsys = 0.0
 
         # -------------------------------------------------------------
-        # Compute NRADII (inner 1 kpc)
+        # Compute NRADII
         # -------------------------------------------------------------
-        R_1kpc = 206.265 / D_Mpc  # arcsec per kpc
-        NRADII = math.floor(R_1kpc / BMAJ) if BMAJ > 0 else 1
+        nkpc = 2.0
+        R_kpc = nkpc * (206.265 / D_Mpc)
+        NRADII = math.floor(R_kpc / BMAJ) if BMAJ > 0 else 1
         LINEAR = 0.425  # ALMA typical
 
         # -------------------------------------------------------------
