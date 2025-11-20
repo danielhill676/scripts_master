@@ -217,19 +217,23 @@ def process_file(args):
         radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
         valid = np.isfinite(profile) & np.isfinite(profile_err)
         radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
-        try:
-            popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
-                                   absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
-            perr = np.sqrt(np.diag(pcov))
-            sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
-            rs_arcsec = popt[1] * pixel_scale_arcsec
-            rs_arcsec_err = perr[1] * pixel_scale_arcsec
-            rs_pc = rs_arcsec * pc_per_arcsec
-            rs_pc_err = rs_arcsec_err * pc_per_arcsec
-            rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
-        except Exception:
+        if profile.size == 0:
             sigma0 = "fit failed"
             rs = "fit failed"
+        else:
+            try:
+                popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
+                                    absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
+                perr = np.sqrt(np.diag(pcov))
+                sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
+                rs_arcsec = popt[1] * pixel_scale_arcsec
+                rs_arcsec_err = perr[1] * pixel_scale_arcsec
+                rs_pc = rs_arcsec * pc_per_arcsec
+                rs_pc_err = rs_arcsec_err * pc_per_arcsec
+                rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
+            except Exception:
+                sigma0 = "fit failed"
+                rs = "fit failed"
 
         del image, images_mc, error_map
         gc.collect()
@@ -287,17 +291,21 @@ def process_directory_parallel(outer_dir, llamatab, base_output_dir):
         return
 
     with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-        results = list(executor.map(process_file, args_list))
+        results_raw = list(executor.map(process_file, args_list))
 
-    results = [res for res in results if res is not None]
-    if not results:
-        print("No results produced.")
-        return
+    
+    results = []
+    meta_info_clean = []
+    
+    for res, meta in zip(results_raw, meta_info):
+        if res is not None:
+            results.append(res)
+            meta_info_clean.append(meta)
 
     df = pd.DataFrame(results)
-    df["id"] = [mi[0] for mi in meta_info]
-    df["group"] = [mi[1] for mi in meta_info]
-
+    df["id"] = [mi[0] for mi in meta_info_clean]
+    df["group"] = [mi[1] for mi in meta_info_clean]
+    
     for group in ["AGN", "inactive"]:
         group_df = df[df["group"] == group]
         if not group_df.empty:
