@@ -50,6 +50,7 @@ def safe_process(args):
     """Run process_file but never let the worker die silently. Return either dict or a tuple marker with traceback."""
     try:
         # call actual processing function
+        print(args)
         return process_file(args)
     except BaseException as e:
         tb = traceback.format_exc()
@@ -339,6 +340,7 @@ def process_directory_parallel(outer_dir, llamatab, base_output_dir, co32):
                 print(f"Skipping {name}: required files not found")
 
         # Separate ESO021 from the parallel batch
+        print(args_list)
         parallel_args = []
         parallel_meta = []
         eso021_args = None
