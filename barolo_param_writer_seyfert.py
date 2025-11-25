@@ -76,6 +76,10 @@ def write_barolo_params(rootfolder, outfolder):
         # Extract FITS header beam
         header = fits.getheader(cube_file)
         BMAJ = header.get("BMAJ", 0) * 3600.0  # deg -> arcsec
+        Xcen = header.get("CRPIX1", 0.0)
+        print(f"Xcen: {Xcen}")
+        Ycen = header.get("CRPIX2", 0.0)
+        print(f"Ycen: {Ycen}")
 
         PA   = row['PA'][0]
         D_Mpc = row['D [Mpc]'][0]
@@ -118,9 +122,9 @@ def write_barolo_params(rootfolder, outfolder):
         # -------------------------------------------------------------
         # Compute NRADII
         # -------------------------------------------------------------
-        nkpc = 2.0
+        nkpc = 2.5
         R_kpc = nkpc * (206.265 / D_Mpc)
-        NRADII = math.floor(R_kpc / BMAJ) if BMAJ > 0 else 1
+        NRADII = math.floor(R_kpc / (1.5 * BMAJ)) if BMAJ > 0 else 1 # RADSEP changed from 1 to 1.5
         LINEAR = 0.425  # ALMA typical
 
         # -------------------------------------------------------------
@@ -135,10 +139,10 @@ THREADS     4
 
 3DFIT       true
 NRADII      {NRADII}
-RADSEP      {BMAJ:.3f}
+RADSEP      {(2.5*BMAJ):.3f}
 
-XPOS        {RA}
-YPOS        {DEC}
+XPOS        {Xcen}
+YPOS        {Ycen}
 INC         {inc}
 PA          {PA}
 
@@ -151,8 +155,8 @@ FREE        VROT VDISP PA INC
 
 NORM        AZIM
 MASK        SMOOTH&SEARCH
-FACTOR      2
-BLANKCUT    3
+FACTOR      1.5 
+BLANKCUT    2 
 
 TWOSTAGE    false
 REGTYPE     auto
