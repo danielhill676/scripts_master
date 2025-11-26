@@ -155,15 +155,15 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         exclude_norm = [n.strip().upper() for n in exclude_names]
 
         merged_AGN_clean = merged_AGN_clean[
-            ~merged_AGN_clean["Name"].str.strip().str.upper().isin(exclude_norm)
+            ~merged_AGN_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
         ]
         merged_inactive_clean = merged_inactive_clean[
-            ~merged_inactive_clean["Name"].str.strip().str.upper().isin(exclude_norm)
+            ~merged_inactive_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
         ]
-        agn_bol = agn_bol[~agn_bol["Name"].str.strip().str.upper().isin(exclude_norm)]
-        inactive_bol = inactive_bol[~inactive_bol["Name"].str.strip().str.upper().isin(exclude_norm)]
+        agn_bol = agn_bol[~agn_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)]
+        inactive_bol = inactive_bol[~inactive_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)]
         if use_gb21:
-            GB21 = [row for row in GB21 if str(row["Name"]).strip().upper() not in exclude_norm]
+            GB21 = [row for row in GB21 if str(row["Name_clean"]).strip().upper() not in exclude_norm]
     
     merged_AGN_clean = merged_AGN_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
     merged_inactive_clean = merged_inactive_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
@@ -881,7 +881,7 @@ plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_dat
 
 plot_llama_property('Hubble Stage', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)
 
-plot_llama_property('total_mass (M_sun)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)
+plot_llama_property('total_mass (M_sun)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)#,exclude_names=['NGC 1365'])
 plot_llama_property('total_mass (M_sun)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)
 plot_llama_property('total_mass (M_sun)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)
 plot_llama_property('total_mass (M_sun)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,False)
