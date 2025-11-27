@@ -124,7 +124,7 @@ def write_barolo_params(rootfolder, outfolder):
         # -------------------------------------------------------------
         nkpc = 2.5
         R_kpc = nkpc * (206.265 / D_Mpc)
-        NRADII = math.floor(R_kpc / (1.5 * BMAJ)) if BMAJ > 0 else 1 # RADSEP changed from 1 to 1.5
+        NRADII = math.floor(R_kpc / (2.5 * BMAJ)) if BMAJ > 0 else 1 # RADSEP changed from 1 to 1.5
         LINEAR = 0.425  # ALMA typical
 
         # -------------------------------------------------------------
@@ -135,36 +135,36 @@ def write_barolo_params(rootfolder, outfolder):
             f.write(f"""
 # BBarolo parameter file for {name}
 FITSFILE    {cube_file}
-THREADS     4
+#THREADS     24
 
 3DFIT       true
 NRADII      {NRADII}
 RADSEP      {(2.5*BMAJ):.3f}
 
-XPOS        {Xcen}
-YPOS        {Ycen}
-INC         {inc}
-PA          {PA}
+#XPOS        {Xcen}
+#YPOS        {Ycen}
+#INC         {inc}
+#PA          {PA}
 
-VROT        200
-VDISP       10
+#VROT        200
+#VDISP       10
 VRAD        0
-VSYS        {vsys:.2f}
+#VSYS        {vsys:.2f}
 
 FREE        VROT VDISP PA INC
 
-NORM        AZIM
+NORM        LOCAL
 MASK        SMOOTH&SEARCH
 FACTOR      1.5 
 BLANKCUT    2 
 
-TWOSTAGE    false
+TWOSTAGE    true
 REGTYPE     auto
-FTYPE       2
-WFUNC       2
+#FTYPE       2
+#WFUNC       2
 LINEAR      {LINEAR}
-SIDE        B
-FLAGERRORS  false
+#SIDE        B
+FLAGERRORS  true
 BADOUT      true
 NORMALCUBE  true
 DISTANCE    {D_Mpc}
