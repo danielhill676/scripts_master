@@ -933,7 +933,6 @@ AGN_data = [
      "log L14–195 (erg s⁻¹)": 43.16, "log L2–10 (erg s⁻¹)": 42.77, "log L12 μm (erg s⁻¹)": 42.97,
      "log NH (cm⁻²)": "≤19.2", "Hubble Stage": 3.0, "Axis Ratio": 0.74, "Bar": "B"},
     
-    # ... continued for remaining 10 galaxies
     {"Name": "NGC 5128 (Cen A)", "Distance (Mpc)": 3.8, "AGN Classification": "Sy 2", "log LH (L⊙)": 10.22,
      "log L14–195 (erg s⁻¹)": 42.38, "log L2–10 (erg s⁻¹)": 41.50, "log L12 μm (erg s⁻¹)": 41.82,
      "log NH (cm⁻²)": "23.1d", "Hubble Stage": -2.0, "Axis Ratio": 0.78, "Bar": "L"},
