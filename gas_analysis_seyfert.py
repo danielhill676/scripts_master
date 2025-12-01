@@ -10,6 +10,7 @@ from astropy.table import Table
 from scipy.ndimage import uniform_filter
 from scipy.optimize import curve_fit
 from concurrent.futures import ProcessPoolExecutor
+import matplotlib.pyplot as plt
 
 try:
     import psutil
@@ -36,6 +37,68 @@ def monte_carlo_metric(func, images, mask, **kwargs):
         values.append(val)
     values = np.array(values)
     return np.nanmedian(values), np.nanstd(values)
+
+def process_mc_chunk(chunk, mask, metric_kwargs):
+    """Worker: compute metrics over a chunk of MC images."""
+    gini_vals = []
+    asym_vals = []
+    smooth_vals = []
+    conc_vals = []
+    tm_vals = []
+    mw_vals = []
+    aw_vals = []
+    clump_vals = []
+
+    for img in chunk:
+        try:
+            gini_vals.append(gini_single(img, mask))
+            asym_vals.append(asymmetry_single(img, mask))
+            smooth_vals.append(smoothness_single(img, mask,
+                                                 pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
+                                                 pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]))
+            conc_vals.append(concentration_single(img, mask,
+                                                  pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
+                                                  pc_per_arcsec=metric_kwargs["pc_per_arcsec"]))
+            tm_vals.append(total_mass_single(img, mask,
+                                             metric_kwargs["pixel_area_pc2"],
+                                             metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                             metric_kwargs["alpha_CO"],
+                                             metric_kwargs["name"],
+                                             co32=metric_kwargs["co32"]))
+            mw_vals.append(mass_weighted_sd_single(img, mask,
+                                                   metric_kwargs["pixel_area_pc2"],
+                                                   metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                   metric_kwargs["alpha_CO"],
+                                                   metric_kwargs["name"],
+                                                   co32=metric_kwargs["co32"]))
+            aw_vals.append(area_weighted_sd_single(img, mask,
+                                                   metric_kwargs["pixel_area_pc2"],
+                                                   metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                   metric_kwargs["alpha_CO"],
+                                                   metric_kwargs["name"],
+                                                   co32=metric_kwargs["co32"]))
+            clump_vals.append(clumping_factor_single(img, mask,
+                                                     metric_kwargs["pixel_area_pc2"],
+                                                     metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                     metric_kwargs["alpha_CO"],
+                                                     metric_kwargs["name"],
+                                                     co32=metric_kwargs["co32"]))
+        except:
+            pass
+
+    import numpy as np
+
+    # Convert to medians + std for this chunk
+    return {
+        "gini":   (np.nanmedian(gini_vals), np.nanstd(gini_vals)),
+        "asym":   (np.nanmedian(asym_vals), np.nanstd(asym_vals)),
+        "smooth": (np.nanmedian(smooth_vals), np.nanstd(smooth_vals)),
+        "conc":   (np.nanmedian(conc_vals), np.nanstd(conc_vals)),
+        "tmass":  (np.nanmedian(tm_vals), np.nanstd(tm_vals)),
+        "mw":     (np.nanmedian(mw_vals), np.nanstd(mw_vals)),
+        "aw":     (np.nanmedian(aw_vals), np.nanstd(aw_vals)),
+        "clump":  (np.nanmedian(clump_vals), np.nanstd(clump_vals)),
+    }
 
 # ------------------ Metric Functions ------------------
 
@@ -165,15 +228,19 @@ def safe_process(args):
         tb = traceback.format_exc()
         print(f"Error processing {name}: {e}")
         return ("__ERROR__", name, str(e), tb)
-
+    
 def process_file(args):
-    mom0_file, emom0_file, subdir, output_dir, co32 = args
+    mom0_file, emom0_file, subdir, output_dir, co32, rebin, mask = args
     file = mom0_file
     error_map_file = emom0_file
+
+    # Galaxy name extraction (now robust)
+    base = os.path.basename(file)
+    name = base.split("_12m")[0]
+
+    # Load LLAMA table once per galaxy
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
-    name = os.path.basename(file).split("_12m_co21_broad_mom0.fits")[0]
-    if co32:
-        name = os.path.basename(file).split("_12m_co32_broad_mom0.fits")[0]
+
     # Skip incompatible galaxies
     if not co32 and name in ['NGC4388','NGC6814','NGC5728']:
         return None
@@ -182,11 +249,11 @@ def process_file(args):
 
     print(f"Processing {name}...")
 
-    # Load data
+    # Load FITS
     image = fits.getdata(file, memmap=True)
     error_map = fits.getdata(error_map_file, memmap=True)
+
     mask = np.isnan(image) | np.isnan(error_map)
-    mask = mask.astype(bool)
 
     header = fits.getheader(file)
     D_Mpc = llamatab[llamatab['id'] == name]['D [Mpc]'][0]
@@ -196,51 +263,77 @@ def process_file(args):
     pixel_area_pc2 = (pixel_scale_arcsec * pc_per_arcsec)**2
     R_21, R_31, alpha_CO = 0.7, 0.31, 4.35
 
-    # Monte Carlo
-    images_mc = generate_random_images(image, error_map, n_iter=1000)
-    gini, gini_err = monte_carlo_metric(gini_single, images_mc, mask)
-    asym, asym_err = monte_carlo_metric(asymmetry_single, images_mc, mask)
-    smooth, smooth_err = monte_carlo_metric(smoothness_single, images_mc, mask,
-                                            pc_per_arcsec=pc_per_arcsec, pixel_scale_arcsec=pixel_scale_arcsec)
-    conc, conc_err = monte_carlo_metric(concentration_single, images_mc, mask,
-                                        pixel_scale_arcsec=pixel_scale_arcsec, pc_per_arcsec=pc_per_arcsec)
-    total_mass, total_mass_err = monte_carlo_metric(total_mass_single, images_mc, mask,
-                                                    pixel_area_pc2=pixel_area_pc2,
-                                                    R_21=R_21, R_31=R_31, alpha_CO=alpha_CO,
-                                                    name=name, co32=co32)
-    mw_sd, mw_sd_err = monte_carlo_metric(mass_weighted_sd_single, images_mc, mask,
-                                            pixel_area_pc2=pixel_area_pc2,
-                                            R_21=R_21, R_31=R_31, alpha_CO=alpha_CO,
-                                            name=name, co32=co32)
-    aw_sd, aw_sd_err = monte_carlo_metric(area_weighted_sd_single, images_mc, mask,
-                                            pixel_area_pc2=pixel_area_pc2,
-                                            R_21=R_21, R_31=R_31, alpha_CO=alpha_CO,
-                                            name=name, co32=co32)
-    clump, clump_err = monte_carlo_metric(clumping_factor_single, images_mc, mask,
-                                            pixel_area_pc2=pixel_area_pc2,
-                                            R_21=R_21, R_31=R_31, alpha_CO=alpha_CO,
-                                            name=name, co32=co32)
+    # Generate Monte-Carlo images (full set)
+    N_MC = 1000
+    images_mc = generate_random_images(image, error_map, n_iter=N_MC)
 
-    # Radial profile
+    # ---- PARALLEL MC PROCESSING HERE ----
+    cpu = multiprocessing.cpu_count()
+    chunk_size = N_MC // cpu
+    chunks = [images_mc[i:i+chunk_size] for i in range(0, N_MC, chunk_size)]
+
+    metric_kwargs = dict(
+        name=name,
+        co32=co32,
+        pixel_area_pc2=pixel_area_pc2,
+        R_21=R_21,
+        R_31=R_31,
+        alpha_CO=alpha_CO,
+        pc_per_arcsec=pc_per_arcsec,
+        pixel_scale_arcsec=pixel_scale_arcsec
+    )
+
+    with ProcessPoolExecutor(max_workers=cpu) as ex:
+        results = list(ex.map(process_mc_chunk,
+                              chunks,
+                              [mask]*len(chunks),
+                              [metric_kwargs]*len(chunks)))
+
+    # Aggregate results across chunks
+    def merge(metric):
+        meds = [r[metric][0] for r in results]
+        stds = [r[metric][1] for r in results]
+        return float(np.nanmean(meds)), float(np.nanmean(stds))
+
+    gini, gini_err = merge("gini")
+    asym, asym_err = merge("asym")
+    smooth, smooth_err = merge("smooth")
+    conc, conc_err = merge("conc")
+    total_mass, total_mass_err = merge("tmass")
+    mw_sd, mw_sd_err = merge("mw")
+    aw_sd, aw_sd_err = merge("aw")
+    clump, clump_err = merge("clump")
+
+    # Radial profile unchanged
     radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
     valid = np.isfinite(profile) & np.isfinite(profile_err)
     radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
-    if profile.size == 0:
-        sigma0, rs = "fit failed", "fit failed"
-    else:
-        try:
-            popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
-                                    absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
-            perr = np.sqrt(np.diag(pcov))
-            sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
-            rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
-            rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
-            rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
-        except:
-            sigma0, rs = "fit failed", "fit failed"
 
-    del image, images_mc, error_map
-    gc.collect()
+    try:
+        popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
+                               absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
+        perr = np.sqrt(np.diag(pcov))
+        sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
+        rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
+        rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
+        rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
+
+        bin_widths = np.diff(np.linspace(0, radii.max(), len(radii)+1))
+        bin_widths_pc = bin_widths * pixel_scale_arcsec * pc_per_arcsec
+        radii_pc = radii * pixel_scale_arcsec * pc_per_arcsec
+        plt.errorbar(radii_pc, profile, yerr=profile_err, fmt='x', label="Data", capsize=3, xerr=bin_widths_pc / 2)
+        plt.plot(radii_pc, exp_profile(radii, *popt), label="Fit", color='orange')
+        plt.xlabel("Radius (pc)")
+        plt.ylabel("Integrated intensity [Jy/beam km/s]")
+        plt.title(name)
+        plt.legend()
+        plt.tight_layout()
+        plot_path = os.path.join(output_dir, f"{name}_{mask}_{rebin}_expfit.png")
+        plt.savefig(plot_path)
+        plt.close()
+
+    except:
+        sigma0, rs = "fit failed", "fit failed"
 
     return {
         "Galaxy": name,
@@ -258,29 +351,133 @@ def process_file(args):
         "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1)
     }
 
+
+# def process_file(args):
+#     mom0_file, emom0_file, subdir, output_dir, co32, rebin, mask = args
+#     file = mom0_file
+#     error_map_file = emom0_file
+#     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
+#     if not co32 and rebin is not None:
+#         name = os.path.basename(file).split(f"_12m_co21_{rebin}pc_{mask}_mom0.fits")[0]
+#     elif co32 and rebin is not None:
+#         name = os.path.basename(file).split(f"_12m_co32_{rebin}pc_{mask}_mom0.fits")[0]
+#     elif co32 and rebin is None:
+#         name = os.path.basename(file).split(f"_12m_co32_{mask}_mom0.fits")[0]
+#     else:
+#         name = os.path.basename(file).split(f"_12m_co21_{mask}_mom0.fits")[0]
+#     # Skip incompatible galaxies
+#     if not co32 and name in ['NGC4388','NGC6814','NGC5728']:
+#         return None
+#     if co32 and name not in ['NGC4388','NGC6814','NGC5728']:
+#         return None
+
+#     print(f"Processing {name}...")
+
+#     # Load data
+#     image = fits.getdata(file, memmap=True)
+#     error_map = fits.getdata(error_map_file, memmap=True)
+#     mask = np.isnan(image) | np.isnan(error_map)
+#     mask = mask.astype(bool)
+
+#     header = fits.getheader(file)
+#     D_Mpc = llamatab[llamatab['id'] == name]['D [Mpc]'][0]
+#     pixel_scale_arcsec = np.abs(header.get("CDELT1", 0)) * 3600
+#     pc_per_arcsec = (D_Mpc * 1e6) / 206265
+#     beam_scale_pc = np.sqrt(np.abs(header.get("BMAJ", 0) * header.get("BMIN", 0))) * 3600 * pc_per_arcsec
+#     pixel_area_pc2 = (pixel_scale_arcsec * pc_per_arcsec)**2
+#     R_21, R_31, alpha_CO = 0.7, 0.31, 4.35
+
+#     # Monte Carlo
+#     images_mc = generate_random_images(image, error_map, n_iter=1000)
+#     gini, gini_err = monte_carlo_metric(gini_single, images_mc, mask)
+#     asym, asym_err = monte_carlo_metric(asymmetry_single, images_mc, mask)
+#     smooth, smooth_err = monte_carlo_metric(smoothness_single, images_mc, mask,
+#                                             pc_per_arcsec=pc_per_arcsec, pixel_scale_arcsec=pixel_scale_arcsec)
+#     conc, conc_err = monte_carlo_metric(concentration_single, images_mc, mask,
+#                                         pixel_scale_arcsec=pixel_scale_arcsec, pc_per_arcsec=pc_per_arcsec)
+#     total_mass, total_mass_err = monte_carlo_metric(total_mass_single, images_mc, mask,
+#                                                     pixel_area_pc2=pixel_area_pc2,
+#                                                     R_21=R_21, R_31=R_31, alpha_CO=alpha_CO,
+#                                                     name=name, co32=co32)
+#     mw_sd, mw_sd_err = monte_carlo_metric(mass_weighted_sd_single, images_mc, mask,
+#                                             pixel_area_pc2=pixel_area_pc2,
+#                                             R_21=R_21, R_31=R_31, alpha_CO=alpha_CO,
+#                                             name=name, co32=co32)
+#     aw_sd, aw_sd_err = monte_carlo_metric(area_weighted_sd_single, images_mc, mask,
+#                                             pixel_area_pc2=pixel_area_pc2,
+#                                             R_21=R_21, R_31=R_31, alpha_CO=alpha_CO,
+#                                             name=name, co32=co32)
+#     clump, clump_err = monte_carlo_metric(clumping_factor_single, images_mc, mask,
+#                                             pixel_area_pc2=pixel_area_pc2,
+#                                             R_21=R_21, R_31=R_31, alpha_CO=alpha_CO,
+#                                             name=name, co32=co32)
+
+#     # Radial profile
+#     radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
+#     valid = np.isfinite(profile) & np.isfinite(profile_err)
+#     radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
+#     if profile.size == 0:
+#         sigma0, rs = "fit failed", "fit failed"
+#     else:
+#         try:
+#             popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
+#                                     absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
+#             perr = np.sqrt(np.diag(pcov))
+#             sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
+#             rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
+#             rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
+#             rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
+#         except:
+#             sigma0, rs = "fit failed", "fit failed"
+
+#     del image, images_mc, error_map
+#     gc.collect()
+
+#     return {
+#         "Galaxy": name,
+#         "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
+#         "Asymmetry": round(asym, 3), "Asymmetry_err": round(asym_err, 3),
+#         "Smoothness": round(smooth, 3), "Smoothness_err": round(smooth_err, 3),
+#         "Concentration": round(conc, 3), "Concentration_err": round(conc_err, 3),
+#         "Sigma0 (Jy/beam km/s)": sigma0,
+#         "rs (pc)": rs,
+#         "Resolution (pc)": round(beam_scale_pc, 2),
+#         "clumping_factor": round(clump, 3), "clumping_factor_err": round(clump_err, 3),
+#         "pc_per_arcsec": round(pc_per_arcsec, 1),
+#         "total_mass (M_sun)": round(total_mass, 2), "total_mass_err (M_sun)": round(total_mass_err, 2),
+#         "mass_weighted_sd": round(mw_sd, 1), "mass_weighted_sd_err": round(mw_sd_err, 1),
+#         "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1)
+#     }
+
 # ------------------ Parallel Directory Processing ------------------
 
-def process_directory_parallel(outer_dir, llamatab, base_output_dir, co32):
+def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, mask='broad'):
     valid_names = set(llamatab['id'])
     subdirs = [d for d in os.listdir(outer_dir)
                 if os.path.isdir(os.path.join(outer_dir, d)) and d in valid_names]
 
     args_list, meta_info = [], []
     for name in subdirs:
-        if name != 'ESO021':
-            continue  # Handle ESO021 separately
         subdir = os.path.join(outer_dir, name)
-        mom0_file = os.path.join(subdir, f"{name}_12m_co21_broad_mom0.fits")
-        emom0_file = os.path.join(subdir, f"{name}_12m_co21_broad_emom0.fits")
-        if co32:
-            mom0_file = os.path.join(subdir, f"{name}_12m_co32_broad_mom0.fits")
-            emom0_file = os.path.join(subdir, f"{name}_12m_co32_broad_emom0.fits")
+        if rebin is not None and not co32:
+            mom0_file = os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_mom0.fits")
+            emom0_file = os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_emom0.fits")
+        elif rebin is not None and co32:
+            mom0_file = os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_mom0.fits")
+            emom0_file = os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_emom0.fits")
+        elif not rebin and not co32:
+            mom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_mom0.fits")
+            emom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_emom0.fits")
+        else:
+            mom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_mom0.fits")
+            emom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_emom0.fits")
+
         type_val = llamatab[llamatab['id'] == name]['type'][0]
         output_dir = os.path.join(base_output_dir, "inactive" if type_val=="i" else "AGN")
         group = "inactive" if type_val=="i" else "AGN"
         os.makedirs(output_dir, exist_ok=True)
         if os.path.exists(mom0_file) and os.path.exists(emom0_file):
-            args_list.append((mom0_file, emom0_file, subdir, output_dir, co32))
+            args_list.append((mom0_file, emom0_file, subdir, output_dir, co32,rebin,mask))
             meta_info.append((name, group, output_dir))
         else:
             print(f"Skipping {name}: required files not found")
@@ -317,7 +514,10 @@ def process_directory_parallel(outer_dir, llamatab, base_output_dir, co32):
         group_df = df[df["group"] == group]
         if not group_df.empty:
             outdir = os.path.join(base_output_dir, group)
-            outfile = os.path.join(outdir, "gas_analysis_summary.csv")
+            if rebin is not None:
+                outfile = os.path.join(outdir, f"gas_analysis_summary_{rebin}pc_{mask}.csv")
+            else:
+                outfile = os.path.join(outdir, f"gas_analysis_summary_{mask}.csv")
             if os.path.exists(outfile):
                 existing_df = pd.read_csv(outfile)
                 group_df = pd.concat([existing_df, group_df], ignore_index=True)
@@ -334,10 +534,10 @@ if __name__ == '__main__':
     # CO(2-1)
     outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
     print("Starting CO(2-1) analysis...")
-    process_directory_parallel(outer_dir_co21, llamatab, base_output_dir, co32=False)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='broad')
 
     # CO(3-2)
     co32 = True
     outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
     print("Starting CO(3-2) analysis...")
-    process_directory_parallel(outer_dir_co32, llamatab, base_output_dir, co32=True)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='broad')

@@ -9,6 +9,9 @@ from scipy.stats import ks_2samp
 from matplotlib.transforms import Bbox
 import difflib
 import re
+import os
+
+stats_table = pd.DataFrame()
 
 def strip_units(colname: str) -> str:
     """Return column name without units in parentheses."""
@@ -56,7 +59,7 @@ def is_categorical(series):
     return False
 
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, GB21, wis, phangs, sim, use_gb21=False, soloplot=None, exclude_names=None, logx=False, logy=False,
-                        background_image=None, manual_limits=None, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False):
+                        background_image=None, manual_limits=None, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,rebin=None,mask=None):
     """possible x_column: 'Distance (Mpc)', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -79,8 +82,56 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     # Load LLAMA table
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
     llama_df = llamatab.to_pandas()
-    fit_data_AGN = pd.read_csv('/data/c3040163/llama/alma/gas_analysis_results/AGN/gas_analysis_summary.csv')
-    fit_data_inactive = pd.read_csv('/data/c3040163/llama/alma/gas_analysis_results/inactive/gas_analysis_summary.csv')
+
+    base_AGN = "/data/c3040163/llama/alma/gas_analysis_results/AGN"
+    base_inactive = "/data/c3040163/llama/alma/gas_analysis_results/inactive"
+
+    base_AGN = "/data/c3040163/llama/alma/gas_analysis_results/AGN"
+    base_inactive = "/data/c3040163/llama/alma/gas_analysis_results/inactive"
+
+    default_AGN = f"{base_AGN}/gas_analysis_summary.csv"
+    default_inactive = f"{base_inactive}/gas_analysis_summary.csv"
+
+    # Handle all filename logic
+    if rebin is not None and mask is not None:
+        AGN_path = f"{base_AGN}/gas_analysis_summary_{rebin}pc_{mask}.csv"
+        inactive_path = f"{base_inactive}/gas_analysis_summary_{rebin}pc_{mask}.csv"
+
+    elif rebin is None and mask is not None:
+        AGN_path = f"{base_AGN}/gas_analysis_summary_{mask}.csv"
+        inactive_path = f"{base_inactive}/gas_analysis_summary_{mask}.csv"
+
+    elif mask is None:
+        # NEW RULE:
+        # If mask=None but gas_analysis_summary_broad.csv exists → use that
+        broad_AGN = f"{base_AGN}/gas_analysis_summary_broad.csv"
+        broad_inactive = f"{base_inactive}/gas_analysis_summary_broad.csv"
+
+        if os.path.exists(broad_AGN) and os.path.exists(broad_inactive):
+            AGN_path = broad_AGN
+            inactive_path = broad_inactive
+            print("Using broad CSV because mask=None and broad files exist.")
+        else:
+            AGN_path = default_AGN
+            inactive_path = default_inactive
+
+    else:
+        # Fallback protection
+        AGN_path = default_AGN
+        inactive_path = default_inactive
+
+    # ---- Final fallback checks ----
+    if not os.path.exists(AGN_path):
+        print(f"WARNING: {AGN_path} not found → using default {default_AGN}")
+        AGN_path = default_AGN
+
+    if not os.path.exists(inactive_path):
+        print(f"WARNING: {inactive_path} not found → using default {default_inactive}")
+        inactive_path = default_inactive
+
+    # ---- Load files ----
+    fit_data_AGN = pd.read_csv(AGN_path)
+    fit_data_inactive = pd.read_csv(inactive_path)
 
     def normalize_name(col):
         # col can be a Pandas Series or Astropy Table Column
@@ -186,20 +237,24 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         names_gb21 = GB21_clean["Name"].values
     if use_wis:
         wis_df = pd.DataFrame(wis)
+        df_wis = pd.DataFrame(wis_properties)
+        wis_df = pd.merge(wis_df, df_wis, left_on='Name', right_on='Name',how='left')
         wis_df[x_column] = pd.to_numeric(wis_df[x_column], errors='coerce')
         wis_df[y_column] = pd.to_numeric(wis_df[y_column], errors='coerce')
         wis_clean = wis_df.dropna(subset=[x_column, y_column])
         x_wis = wis_clean[x_column]
         y_wis = wis_clean[y_column]
-        names_wis = wis_clean["Name_clean"].values
+        names_wis = wis_clean["Name"].values
     if use_phangs:
         phangs_df = pd.DataFrame(phangs)
+        df_phangs = pd.DataFrame(phangs_properties)
+        phangs_df = pd.merge(phangs_df, df_phangs, left_on='Name', right_on='name',how='left')
         phangs_df[x_column] = pd.to_numeric(phangs_df[x_column], errors='coerce')
         phangs_df[y_column] = pd.to_numeric(phangs_df[y_column], errors='coerce')
         phangs_clean = phangs_df.dropna(subset=[x_column, y_column])
         x_phangs = phangs_clean[x_column]
         y_phangs = phangs_clean[y_column]
-        names_phangs = phangs_clean["Name_clean"].values
+        names_phangs = phangs_clean["Name"].values
     if use_sim:
         sim_df = pd.DataFrame(sim)
         sim_df[x_column] = pd.to_numeric(sim_df[x_column], errors='coerce')
@@ -207,7 +262,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         sim_clean = sim_df.dropna(subset=[x_column, y_column])
         x_sim = sim_clean[x_column]
         y_sim = sim_clean[y_column]
-        names_sim = sim_clean["Name_clean"].values
+        names_sim = sim_clean["Name"].values
 
     # Extract values
     x_agn = merged_AGN_clean[x_column]
@@ -254,16 +309,78 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         ax_scatter = fig.add_subplot(gs[0])
         ax_scatter.set_facecolor('none')
 
-            # KS test only if both are present
-        if soloplot is None:
-            statistic, p_value = ks_2samp(y_inactive, y_agn)
-            print(f'{y_column} stats')
-            print(f"KS statistic: {statistic}")
-            print(f"P-value: {p_value}")
-            if p_value < 0.05:
-                print("Distributions differ.")
-            else:
-                print("Distributions may be the same.")
+        from scipy.stats import spearmanr
+
+        # ---- Append statistics to global stats table ----
+        global stats_table
+
+        if soloplot is None: 
+            statistic, p_value = ks_2samp(y_inactive, y_agn) 
+
+        # Helper: return (rho, p) or (None, None)
+        def safe_spearman(x, y, enabled):
+            if not enabled:
+                return None, None
+            if x is None or y is None or len(x) < 3 or len(y) < 3:
+                return None, None
+            rho, p = spearmanr(x, y, nan_policy='omit')
+            return float(rho), float(p)
+
+        # Compute spearman values for each group
+        rho_agn, p_agn = safe_spearman(x_agn, y_agn, True)
+        rho_inact, p_inact = safe_spearman(x_inactive, y_inactive, True)
+
+        rho_comb, p_comb = safe_spearman(
+            pd.concat([x_agn, x_inactive]), 
+            pd.concat([y_agn, y_inactive]), 
+            True
+        )
+        if use_gb21:
+            rho_gb21, p_gb21 = safe_spearman(x_gb21, y_gb21, use_gb21)
+        else:
+            rho_gb21, p_gb21 = None, None
+        if use_wis:
+            rho_wis, p_wis = safe_spearman(x_wis, y_wis, use_wis)
+        else:
+            rho_wis, p_wis = None, None
+        if use_phangs:
+            rho_phangs, p_phangs = safe_spearman(x_phangs, y_phangs, use_phangs)
+        else:
+            rho_phangs, p_phangs = None, None
+        if use_sim:
+            rho_sim, p_sim = safe_spearman(x_sim, y_sim, use_sim)
+        else:
+            rho_sim, p_sim = None, None
+
+        # KS value (already computed earlier)
+        ks_stat = statistic if soloplot is None else None
+        ks_p = p_value if soloplot is None else None
+
+        new_row = {
+            "x_column": x_column,
+            "y_column": y_column,
+            "ks_stat": ks_stat,
+            "ks_p": ks_p,
+            "spearman_agn": rho_agn,
+            "spearman_agn_p": p_agn,
+            "spearman_inactive": rho_inact,
+            "spearman_inactive_p": p_inact,
+            "spearman_llama_comb": rho_comb,
+            "spearman_llama_comb_p": p_comb,
+            "spearman_gb21": rho_gb21,
+            "spearman_gb21_p": p_gb21,
+            "spearman_wis": rho_wis,
+            "spearman_wis_p": p_wis,
+            "spearman_phangs": rho_phangs,
+            "spearman_phangs_p": p_phangs,
+            "spearman_sim": rho_sim,
+            "spearman_sim_p": p_sim,
+            "rebin": rebin,
+            "mask": mask
+        }
+
+        stats_table = pd.concat([stats_table, pd.DataFrame([new_row])], ignore_index=True)
+
 
             # Axis limits
         data_x = []
@@ -277,6 +394,15 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         if soloplot is None and use_gb21:
             data_x.append(x_gb21)
             data_y.append(y_gb21)
+        if soloplot is None and use_wis:
+            data_x.append(x_wis)
+            data_y.append(y_wis)
+        if soloplot is None and use_phangs:
+            data_x.append(x_phangs)
+            data_y.append(y_phangs)
+        if soloplot is None and use_sim:
+            data_x.append(x_sim)
+            data_y.append(y_sim)
 
         all_x = pd.concat(data_x)
         all_y = pd.concat(data_y)
@@ -367,9 +493,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         
         if soloplot is None and use_gb21:
             ax_scatter.scatter(
-                x_gb21, y_gb21,
-                marker='o', color='green', label='GB21', markersize=6,
-                capsize=2, elinewidth=1, alpha=0.8
+            x_gb21, y_gb21,
+            marker='o', color='green', label='GB21', s=36, alpha=0.8, edgecolors='none'
             )
             if not comb_llama:
                 for x, y, name in zip(x_gb21, y_gb21, names_gb21):
@@ -377,27 +502,26 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
         if soloplot is None and use_wis:
             ax_scatter.scatter(
-                x_wis, y_wis,
-                marker='^', color='purple', label='WIS', markersize=6,
-                capsize=2, elinewidth=1, alpha=0.8
+            x_wis, y_wis,
+            marker='^', color='purple', label='WIS', s=36, alpha=0.8, edgecolors='none'
             )
             if not comb_llama:
                 for x, y, name in zip(x_wis, y_wis, names_wis):
                     ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
+
         if soloplot is None and use_phangs:
             ax_scatter.scatter(
-                x_phangs, y_phangs,
-                marker='D', color='orange', label='PHANGS', markersize=6,
-                capsize=2, elinewidth=1, alpha=0.8
+            x_phangs, y_phangs,
+            marker='D', color='orange', label='PHANGS', s=36, alpha=0.8, edgecolors='none'
             )
             if not comb_llama:
                 for x, y, name in zip(x_phangs, y_phangs, names_phangs):
                     ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkorange', zorder=10)
+
         if soloplot is None and use_sim:
             ax_scatter.scatter(
-                x_sim, y_sim,
-                marker='X', color='brown', label='Simulations', markersize=6,
-                capsize=2, elinewidth=1, alpha=0.8
+            x_sim, y_sim,
+            marker='X', color='brown', label='Simulations', s=36, alpha=0.8, edgecolors='none'
             )
             if not comb_llama:
                 for x, y, name in zip(x_sim, y_sim, names_sim):
@@ -430,7 +554,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     # Histogram subplot
         ax_hist = fig.add_subplot(gs[1], sharey=ax_scatter)
 
-        if soloplot in (None, 'AGN'):
+        if soloplot in (None, 'AGN') and not comb_llama:
             ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
                         color='red', alpha=0.4, label='AGN')
             median_agn = np.median(y_agn)
@@ -438,13 +562,22 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn, 
                         f"{median_agn:.2f}", color='red', fontsize=8, va='center')
 
-        if soloplot in (None, 'inactive'):
+        if soloplot in (None, 'inactive') and not comb_llama:
             ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
                         color='blue', alpha=0.4, label='Inactive')
             median_inactive = np.median(y_inactive)
             ax_hist.axhline(median_inactive, color='blue', linestyle='--')
             ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive, 
                         f"{median_inactive:.2f}", color='blue', fontsize=8, va='center')
+            
+        if comb_llama:
+            combined_y = pd.concat([y_agn, y_inactive])
+            ax_hist.hist(combined_y, bins=bin_edges, orientation='horizontal', 
+                        color='black', alpha=0.4, label='LLAMA Galaxies')
+            median_combined = np.median(combined_y)
+            ax_hist.axhline(median_combined, color='black', linestyle='--')
+            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_combined, 
+                        f"{median_combined:.2f}", color='black', fontsize=8, va='center')
 
         if soloplot is None and use_gb21:
             ax_hist.hist(y_gb21, bins=bin_edges, orientation='horizontal', 
@@ -454,10 +587,49 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_gb21, 
                         f"{median_gb21:.2f}", color='green', fontsize=8, va='center')
 
+        if use_wis:
+            ax_hist.hist(y_wis, bins=bin_edges, orientation='horizontal', 
+                        color='purple', alpha=0.4, label='WIS')
+            median_wis = np.median(y_wis)
+            ax_hist.axhline(median_wis, color='purple', linestyle='--')
+            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_wis, 
+                        f"{median_wis:.2f}", color='purple', fontsize=8, va='center')
+        if use_phangs:
+            ax_hist.hist(y_phangs, bins=bin_edges, orientation='horizontal', 
+                        color='orange', alpha=0.4, label='PHANGS')
+            median_phangs = np.median(y_phangs)
+            ax_hist.axhline(median_phangs, color='orange', linestyle='--')
+            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_phangs, 
+                        f"{median_phangs:.2f}", color='orange', fontsize=8, va='center')
+        if use_sim:
+            ax_hist.hist(y_sim, bins=bin_edges, orientation='horizontal', 
+                        color='brown', alpha=0.4, label='Simulations')
+            median_sim = np.median(y_sim)
+            ax_hist.axhline(median_sim, color='brown', linestyle='--')
+            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_sim, 
+                        f"{median_sim:.2f}", color='brown', fontsize=8, va='center')
+
         ax_hist.axis('off')
 
         # Save
-        suffix = f"_{soloplot}" if soloplot else ""
+        parts = []
+        if soloplot:
+            parts.append(f"_{soloplot}")
+        if use_gb21:
+            parts.append('_gb21')
+        if use_wis:
+            parts.append('_wis')
+        if use_phangs:
+            parts.append('_phangs')
+        if use_sim:
+            parts.append('_sim')
+        if comb_llama:
+            parts.append('_comb')
+        if rebin is not None:
+            parts.append(f'_{rebin}pc')
+        if mask is not None:
+            parts.append(f'_{mask}')
+        suffix = ''.join(parts)
         output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
         plt.savefig(output_path)
         print(f"Saved plot to: {output_path}")
@@ -497,6 +669,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         plt.savefig(output_path)
         print(f"Saved matched-pairs plot to: {output_path}")
 
+
     elif is_x_categorical or is_y_categorical:
         figsize = 8
         if truescale == True:
@@ -521,6 +694,15 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         if soloplot is None and use_gb21:
             data_x.append(x_gb21)
             data_y.append(y_gb21)
+        if soloplot is None and use_wis:
+            data_x.append(x_wis)
+            data_y.append(y_wis)
+        if soloplot is None and use_phangs:
+            data_x.append(x_phangs)
+            data_y.append(y_phangs)
+        if soloplot is None and use_sim:
+            data_x.append(x_sim)
+            data_y.append(y_sim)
 
         all_x = pd.concat(data_x)
         all_y = pd.concat(data_y)
@@ -632,12 +814,20 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ax_hist.axis('off')
 
                     # Save
-            suffix = f"_{soloplot}" if soloplot else ""
-            suffix.append('_gb21') if use_gb21 else None    
-            suffix.append('_wis') if use_wis else None
-            suffix.append('_phangs') if use_phangs else None    
-            suffix.append('_sim') if use_sim else None
-            suffix.append('_comb') if comb_llama else None
+            parts = []
+            if soloplot:
+                parts.append(f"_{soloplot}")
+            if use_gb21:
+                parts.append('_gb21')
+            if use_wis:
+                parts.append('_wis')
+            if use_phangs:
+                parts.append('_phangs')
+            if use_sim:
+                parts.append('_sim')
+            if comb_llama:
+                parts.append('_comb')
+            suffix = ''.join(parts)
             output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
             plt.savefig(output_path)
             print(f"Saved plot to: {output_path}")
@@ -685,6 +875,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
             plt.savefig(output_path)
             print(f"Saved plot to: {output_path}")
+
+    
 
 
 
@@ -1030,8 +1222,133 @@ phangs = pd.DataFrame([
     ["NGC6300", 0.78, 0.01, 0.36, 0.01, 0.87, 0.01],
     ["NGC7496", 0.53, 0.01, 0.28, 0.01, 0.77, 0.06]
 ], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness", "Smoothness_err", "Gini", "Gini_err"])
-    
 
+
+wis_properties = [
+    # --- AGN ---
+    {"Name": "NGC 2110", "Optical_type": "Sy 2 (1h)", "log LX": 43.64, "Hubble Stage": -3.0, "Axis Ratio": 0.74, "Distance (Mpc)": 34, "Redshift": 0.007789},
+    {"Name": "NGC 2992", "Optical_type": "Sy 1.8", "log LX": 42.62, "Hubble Stage": 1.0, "Axis Ratio": 0.30, "Distance (Mpc)": 36, "Redshift": 0.00771},
+    {"Name": "MCG-05-23-016", "Optical_type": "Sy 1.9", "log LX": 43.47, "Hubble Stage": -1.0, "Axis Ratio": 0.45, "Distance (Mpc)": 35, "Redshift": 0.008486},
+    {"Name": "NGC 3081", "Optical_type": "Sy 2 (1h)", "log LX": 43.06, "Hubble Stage": 0.0, "Axis Ratio": 0.77, "Distance (Mpc)": 34, "Redshift": 0.007976},
+    {"Name": "ESO 021-G004", "Optical_type": "Sy 2", "log LX": 42.49, "Hubble Stage": -0.4, "Axis Ratio": 0.45, "Distance (Mpc)": 39, "Redshift": 0.009841},
+    {"Name": "NGC 5728", "Optical_type": "Sy 2", "log LX": 43.21, "Hubble Stage": 1.0, "Axis Ratio": 0.57, "Distance (Mpc)": 39, "Redshift": 0.009353},
+    {"Name": "ESO 137-G034", "Optical_type": "Sy 2", "log LX": 42.62, "Hubble Stage": 0.0, "Axis Ratio": 0.79, "Distance (Mpc)": 35, "Redshift": 0.009144},
+    {"Name": "NGC 7172", "Optical_type": "Sy 2 (1i)", "log LX": 43.45, "Hubble Stage": 1.4, "Axis Ratio": 0.56, "Distance (Mpc)": 37, "Redshift": 0.008683},
+    {"Name": "NGC 7582", "Optical_type": "Sy 2 (1i)", "log LX": 42.67, "Hubble Stage": 2.0, "Axis Ratio": 0.42, "Distance (Mpc)": 22, "Redshift": 0.005254},
+
+    # --- Inactive ---
+    {"Name": "NGC 718", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.87, "Distance (Mpc)": 23, "Redshift": 0.005781},
+    {"Name": "NGC 1079", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 0.0, "Axis Ratio": 0.60, "Distance (Mpc)": 19, "Redshift": 0.004843},
+    {"Name": "NGC 1315", "Optical_type": "inactive", "log LX": None, "Hubble Stage": -1.0, "Axis Ratio": 0.89, "Distance (Mpc)": 21, "Redshift": 0.005387},
+    {"Name": "NGC 1947", "Optical_type": "inactive", "log LX": None, "Hubble Stage": -3.0, "Axis Ratio": 0.87, "Distance (Mpc)": 19, "Redshift": 0.003669},
+    {"Name": "ESO 208-G021", "Optical_type": "inactive", "log LX": None, "Hubble Stage": -3.0, "Axis Ratio": 0.70, "Distance (Mpc)": 17, "Redshift": 0.003619},
+    {"Name": "NGC 2775", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 2.0, "Axis Ratio": 0.77, "Distance (Mpc)": 21, "Redshift": 0.004503},
+    {"Name": "NGC 3175", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.26, "Distance (Mpc)": 14, "Redshift": 0.003673},
+    {"Name": "NGC 3351", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 3.0, "Axis Ratio": 0.93, "Distance (Mpc)": 11, "Redshift": 0.002595},
+    {"Name": "ESO 093-G003", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 0.3, "Axis Ratio": 0.60, "Distance (Mpc)": 22, "Redshift": 0.006106},
+    {"Name": "NGC 3717", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 3.0, "Axis Ratio": 0.18, "Distance (Mpc)": 24, "Redshift": 0.005781},
+    {"Name": "NGC 3749", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.25, "Distance (Mpc)": 42, "Redshift": 0.009013},
+    {"Name": "NGC 4224", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.35, "Distance (Mpc)": 41, "Redshift": 0.008683},
+    {"Name": "NGC 4254", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 5.0, "Axis Ratio": 0.87, "Distance (Mpc)": 15, "Redshift": 0.008029},
+    {"Name": "NGC 5037", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.32, "Distance (Mpc)": 35, "Redshift": 0.006351},
+    {"Name": "NGC 5845", "Optical_type": "inactive", "log LX": None, "Hubble Stage": -4.6, "Axis Ratio": 0.63, "Distance (Mpc)": 25, "Redshift": 0.00491},
+    {"Name": "NGC 5921", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 4.0, "Axis Ratio": 0.82, "Distance (Mpc)": 21, "Redshift": 0.004937},
+    {"Name": "IC 4653", "Optical_type": "inactive", "log LX": None, "Hubble Stage": -0.5, "Axis Ratio": 0.63, "Distance (Mpc)": 26, "Redshift": 0.00517},
+    {"Name": "NGC 7727", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.74, "Distance (Mpc)": 26, "Redshift": 0.006231},
+]
+
+phangs_properties = [
+    {"name":"NGC 0247","logMstar":9.53,"r25":10.6,"Re":5.0,"la":3.3,"logSFR":-0.75,"logLCO":6.79,"Corr":1.42,"logMstarHI":9.24,"is_limit":False},
+    {"name":"NGC 0253","logMstar":10.64,"r25":14.4,"Re":4.7,"la":2.8,"logSFR":0.70,"logLCO":8.96,"Corr":1.00,"logMstarHI":9.33,"is_limit":False},
+    {"name":"NGC 0300","logMstar":9.27,"r25":5.9,"Re":2.0,"la":1.3,"logSFR":-0.82,"logLCO":6.61,"Corr":1.50,"logMstarHI":9.32,"is_limit":False},
+    {"name":"NGC 0628","logMstar":10.34,"r25":14.1,"Re":3.9,"la":2.9,"logSFR":0.24,"logLCO":8.41,"Corr":1.73,"logMstarHI":9.70,"is_limit":False},
+    {"name":"NGC 0685","logMstar":10.07,"r25":8.7,"Re":5.0,"la":3.1,"logSFR":-0.38,"logLCO":7.87,"Corr":1.25,"logMstarHI":9.57,"is_limit":False},
+    {"name":"NGC 1068","logMstar":10.91,"r25":12.4,"Re":0.9,"la":7.3,"logSFR":1.64,"logLCO":9.23,"Corr":1.30,"logMstarHI":9.06,"is_limit":False},
+    {"name":"NGC 1097","logMstar":10.76,"r25":20.9,"Re":2.6,"la":4.3,"logSFR":0.68,"logLCO":8.93,"Corr":1.31,"logMstarHI":9.61,"is_limit":False},
+    {"name":"NGC 1087","logMstar":9.94,"r25":6.9,"Re":3.2,"la":2.1,"logSFR":0.11,"logLCO":8.32,"Corr":1.06,"logMstarHI":9.10,"is_limit":False},
+    {"name":"NGC 1313","logMstar":9.26,"r25":7.0,"Re":2.5,"la":2.1,"logSFR":-0.14,"logLCO":None,"Corr":None,"logMstarHI":9.28,"is_limit":False},
+    {"name":"NGC 1300","logMstar":10.62,"r25":16.4,"Re":6.5,"la":3.7,"logSFR":0.07,"logLCO":8.50,"Corr":1.28,"logMstarHI":9.38,"is_limit":False},
+    {"name":"NGC 1317","logMstar":10.62,"r25":8.5,"Re":1.8,"la":2.4,"logSFR":-0.32,"logLCO":8.10,"Corr":1.28,"logMstarHI":None,"is_limit":False},
+    {"name":"IC 1954","logMstar":9.67,"r25":5.6,"Re":2.4,"la":1.5,"logSFR":-0.44,"logLCO":7.78,"Corr":1.10,"logMstarHI":8.85,"is_limit":False},
+    {"name":"NGC 1365","logMstar":11.00,"r25":34.2,"Re":2.8,"la":13.1,"logSFR":1.24,"logLCO":9.49,"Corr":1.36,"logMstarHI":9.94,"is_limit":False},
+    {"name":"NGC 1385","logMstar":9.98,"r25":8.5,"Re":3.4,"la":2.6,"logSFR":0.32,"logLCO":8.37,"Corr":1.09,"logMstarHI":9.19,"is_limit":False},
+    {"name":"NGC 1433","logMstar":10.87,"r25":16.8,"Re":4.3,"la":6.9,"logSFR":0.05,"logLCO":8.47,"Corr":1.38,"logMstarHI":9.40,"is_limit":False},
+    {"name":"NGC 1511","logMstar":9.92,"r25":8.2,"Re":2.4,"la":1.7,"logSFR":0.35,"logLCO":8.22,"Corr":1.09,"logMstarHI":9.57,"is_limit":False},
+    {"name":"NGC 1512","logMstar":10.72,"r25":23.1,"Re":4.8,"la":6.2,"logSFR":0.11,"logLCO":8.26,"Corr":1.45,"logMstarHI":9.88,"is_limit":False},
+    {"name":"NGC 1546","logMstar":10.37,"r25":9.5,"Re":2.2,"la":2.1,"logSFR":-0.08,"logLCO":8.44,"Corr":1.13,"logMstarHI":8.68,"is_limit":False},
+    {"name":"NGC 1559","logMstar":10.37,"r25":11.8,"Re":3.9,"la":2.4,"logSFR":0.60,"logLCO":8.66,"Corr":1.11,"logMstarHI":9.52,"is_limit":False},
+    {"name":"NGC 1566","logMstar":10.79,"r25":18.6,"Re":3.2,"la":3.9,"logSFR":0.66,"logLCO":8.89,"Corr":1.22,"logMstarHI":9.80,"is_limit":False},
+    {"name":"NGC 1637","logMstar":9.95,"r25":5.4,"Re":2.8,"la":1.8,"logSFR":-0.20,"logLCO":7.98,"Corr":1.10,"logMstarHI":9.20,"is_limit":False},
+    {"name":"NGC 1672","logMstar":10.73,"r25":17.4,"Re":3.4,"la":5.8,"logSFR":0.88,"logLCO":9.05,"Corr":1.25,"logMstarHI":10.21,"is_limit":False},
+    {"name":"NGC 1809","logMstar":9.77,"r25":10.9,"Re":4.5,"la":2.4,"logSFR":0.76,"logLCO":7.49,"Corr":4.24,"logMstarHI":9.60,"is_limit":False},
+    {"name":"NGC 1792","logMstar":10.62,"r25":13.1,"Re":4.1,"la":2.4,"logSFR":0.57,"logLCO":8.95,"Corr":1.11,"logMstarHI":9.25,"is_limit":False},
+    {"name":"NGC 2090","logMstar":10.04,"r25":7.7,"Re":1.9,"la":1.7,"logSFR":-0.39,"logLCO":7.67,"Corr":1.47,"logMstarHI":9.37,"is_limit":False},
+    {"name":"NGC 2283","logMstar":9.89,"r25":5.5,"Re":3.2,"la":1.9,"logSFR":-0.28,"logLCO":7.69,"Corr":1.16,"logMstarHI":9.70,"is_limit":False},
+    {"name":"NGC 2566","logMstar":10.71,"r25":14.5,"Re":5.1,"la":4.0,"logSFR":0.93,"logLCO":9.06,"Corr":1.13,"logMstarHI":9.37,"is_limit":False},
+    {"name":"NGC 2775","logMstar":11.07,"r25":14.3,"Re":4.6,"la":4.1,"logSFR":-0.06,"logLCO":8.40,"Corr":1.29,"logMstarHI":8.65,"is_limit":False},
+    {"name":"NGC 2835","logMstar":10.00,"r25":11.4,"Re":3.3,"la":2.2,"logSFR":0.10,"logLCO":7.71,"Corr":1.72,"logMstarHI":9.48,"is_limit":False},
+    {"name":"NGC 2903","logMstar":10.64,"r25":17.4,"Re":3.7,"la":3.5,"logSFR":0.49,"logLCO":8.76,"Corr":1.18,"logMstarHI":9.54,"is_limit":False},
+    {"name":"NGC 2997","logMstar":10.73,"r25":21.0,"Re":6.1,"la":4.0,"logSFR":0.64,"logLCO":8.97,"Corr":1.25,"logMstarHI":9.86,"is_limit":False},
+    {"name":"NGC 3059","logMstar":10.38,"r25":11.2,"Re":5.0,"la":3.2,"logSFR":0.38,"logLCO":8.59,"Corr":1.07,"logMstarHI":9.75,"is_limit":False},
+    {"name":"NGC 3137","logMstar":9.88,"r25":13.2,"Re":4.1,"la":3.0,"logSFR":-0.30,"logLCO":7.60,"Corr":1.35,"logMstarHI":9.68,"is_limit":False},
+    {"name":"NGC 3239","logMstar":9.18,"r25":5.7,"Re":3.1,"la":2.0,"logSFR":-0.41,"logLCO":6.62,"Corr":1.54,"logMstarHI":9.16,"is_limit":True},
+    {"name":"NGC 3351","logMstar":10.37,"r25":10.5,"Re":3.0,"la":2.1,"logSFR":0.12,"logLCO":8.13,"Corr":1.55,"logMstarHI":8.93,"is_limit":False},
+    {"name":"NGC 3489","logMstar":10.29,"r25":5.9,"Re":1.3,"la":1.4,"logSFR":-1.59,"logLCO":6.89,"Corr":1.37,"logMstarHI":7.40,"is_limit":False},
+    {"name":"NGC 3511","logMstar":10.03,"r25":12.2,"Re":4.4,"la":2.4,"logSFR":-0.09,"logLCO":8.15,"Corr":1.07,"logMstarHI":9.37,"is_limit":False},
+    {"name":"NGC 3507","logMstar":10.40,"r25":10.0,"Re":3.7,"la":2.3,"logSFR":-0.00,"logLCO":8.34,"Corr":1.17,"logMstarHI":9.32,"is_limit":False},
+    {"name":"NGC 3521","logMstar":11.03,"r25":16.0,"Re":3.9,"la":4.9,"logSFR":0.57,"logLCO":8.98,"Corr":1.18,"logMstarHI":9.83,"is_limit":False},
+    {"name":"NGC 3596","logMstar":9.66,"r25":6.0,"Re":1.6,"la":2.0,"logSFR":-0.52,"logLCO":7.81,"Corr":1.13,"logMstarHI":8.85,"is_limit":False},
+    {"name":"NGC 3599","logMstar":10.04,"r25":6.9,"Re":1.7,"la":2.0,"logSFR":-1.35,"logLCO":6.70,"Corr":1.35,"logMstarHI":None,"is_limit":True},
+    {"name":"NGC 3621","logMstar":10.06,"r25":9.8,"Re":2.7,"la":2.0,"logSFR":-0.00,"logLCO":8.13,"Corr":1.27,"logMstarHI":9.66,"is_limit":False},
+    {"name":"NGC 3626","logMstar":10.46,"r25":8.6,"Re":1.8,"la":2.1,"logSFR":-0.68,"logLCO":7.75,"Corr":1.14,"logMstarHI":8.89,"is_limit":False},
+    {"name":"NGC 3627","logMstar":10.84,"r25":16.9,"Re":3.6,"la":3.7,"logSFR":0.59,"logLCO":8.98,"Corr":1.16,"logMstarHI":9.09,"is_limit":False},
+    {"name":"NGC 4207","logMstar":9.72,"r25":3.4,"Re":1.4,"la":0.7,"logSFR":-0.72,"logLCO":7.71,"Corr":1.03,"logMstarHI":8.58,"is_limit":False},
+    {"name":"NGC 4254","logMstar":10.42,"r25":9.6,"Re":2.4,"la":1.8,"logSFR":0.49,"logLCO":8.93,"Corr":1.15,"logMstarHI":9.48,"is_limit":False},
+    {"name":"NGC 4293","logMstar":10.52,"r25":14.3,"Re":4.7,"la":2.8,"logSFR":-0.30,"logLCO":8.12,"Corr":1.57,"logMstarHI":7.67,"is_limit":False},
+    {"name":"NGC 4298","logMstar":10.04,"r25":5.5,"Re":3.0,"la":1.6,"logSFR":-0.34,"logLCO":8.26,"Corr":1.09,"logMstarHI":8.87,"is_limit":False},
+    {"name":"NGC 4303","logMstar":10.51,"r25":17.0,"Re":3.4,"la":3.1,"logSFR":0.73,"logLCO":9.00,"Corr":1.40,"logMstarHI":9.67,"is_limit":False},
+    {"name":"NGC 4321","logMstar":10.75,"r25":13.5,"Re":5.5,"la":3.6,"logSFR":0.55,"logLCO":9.02,"Corr":1.25,"logMstarHI":9.43,"is_limit":False},
+    {"name":"NGC 4424","logMstar":9.93,"r25":7.2,"Re":3.7,"la":2.2,"logSFR":-0.53,"logLCO":7.59,"Corr":1.16,"logMstarHI":8.30,"is_limit":False},
+    {"name":"NGC 4457","logMstar":10.42,"r25":6.1,"Re":1.5,"la":2.2,"logSFR":-0.52,"logLCO":8.21,"Corr":1.15,"logMstarHI":8.36,"is_limit":False},
+    {"name":"NGC 4459","logMstar":10.68,"r25":9.6,"Re":2.1,"la":3.3,"logSFR":-0.65,"logLCO":7.46,"Corr":2.41,"logMstarHI":None,"is_limit":False},
+    {"name":"NGC 4476","logMstar":9.81,"r25":4.3,"Re":1.2,"la":1.2,"logSFR":-1.39,"logLCO":7.05,"Corr":1.09,"logMstarHI":None,"is_limit":False},
+    {"name":"NGC 4477","logMstar":10.59,"r25":8.5,"Re":2.1,"la":2.1,"logSFR":-1.10,"logLCO":6.76,"Corr":1.58,"logMstarHI":None,"is_limit":False},
+    {"name":"NGC 4496A","logMstar":9.55,"r25":7.3,"Re":3.0,"la":1.9,"logSFR":-0.21,"logLCO":7.55,"Corr":1.15,"logMstarHI":9.24,"is_limit":False},
+    {"name":"NGC 4535","logMstar":10.54,"r25":18.7,"Re":6.3,"la":3.8,"logSFR":0.34,"logLCO":8.61,"Corr":1.78,"logMstarHI":9.56,"is_limit":False},
+    {"name":"NGC 4536","logMstar":10.40,"r25":16.7,"Re":4.4,"la":2.7,"logSFR":0.53,"logLCO":8.62,"Corr":1.06,"logMstarHI":9.54,"is_limit":False},
+    {"name":"NGC 4540","logMstar":9.79,"r25":5.0,"Re":2.0,"la":1.4,"logSFR":-0.78,"logLCO":7.69,"Corr":1.16,"logMstarHI":8.44,"is_limit":False},
+    {"name":"NGC 4548","logMstar":10.70,"r25":13.1,"Re":5.4,"la":3.0,"logSFR":-0.28,"logLCO":8.16,"Corr":2.00,"logMstarHI":8.84,"is_limit":False},
+    {"name":"NGC 4569","logMstar":10.81,"r25":20.9,"Re":5.9,"la":4.3,"logSFR":0.12,"logLCO":8.81,"Corr":1.40,"logMstarHI":8.84,"is_limit":False},
+    {"name":"NGC 4571","logMstar":10.10,"r25":7.7,"Re":3.8,"la":2.0,"logSFR":-0.54,"logLCO":7.88,"Corr":1.55,"logMstarHI":8.70,"is_limit":False},
+    {"name":"NGC 4579","logMstar":11.15,"r25":15.3,"Re":5.4,"la":4.4,"logSFR":0.33,"logLCO":8.79,"Corr":1.38,"logMstarHI":9.02,"is_limit":False},
+    {"name":"NGC 4596","logMstar":10.59,"r25":9.0,"Re":2.7,"la":3.8,"logSFR":-0.96,"logLCO":6.72,"Corr":1.83,"logMstarHI":None,"is_limit":False},
+    {"name":"NGC 4654","logMstar":10.57,"r25":15.1,"Re":5.6,"la":4.0,"logSFR":0.58,"logLCO":8.84,"Corr":1.18,"logMstarHI":9.75,"is_limit":False},
+    {"name":"NGC 4689","logMstar":10.24,"r25":8.3,"Re":4.7,"la":3.0,"logSFR":-0.39,"logLCO":8.22,"Corr":1.19,"logMstarHI":8.54,"is_limit":False},
+    {"name":"NGC 4694","logMstar":9.90,"r25":4.6,"Re":1.9,"la":1.6,"logSFR":-0.81,"logLCO":7.41,"Corr":1.30,"logMstarHI":8.51,"is_limit":False},
+    {"name":"NGC 4731","logMstar":9.50,"r25":12.2,"Re":7.3,"la":3.0,"logSFR":-0.22,"logLCO":7.29,"Corr":2.52,"logMstarHI":9.44,"is_limit":False},
+    {"name":"NGC 4781","logMstar":9.64,"r25":6.1,"Re":2.0,"la":1.1,"logSFR":-0.32,"logLCO":7.82,"Corr":1.05,"logMstarHI":8.94,"is_limit":False},
+    {"name":"NGC 4826","logMstar":10.24,"r25":6.7,"Re":1.5,"la":1.1,"logSFR":-0.69,"logLCO":7.79,"Corr":1.28,"logMstarHI":8.26,"is_limit":False},
+    {"name":"NGC 4941","logMstar":10.18,"r25":7.3,"Re":3.4,"la":2.2,"logSFR":-0.35,"logLCO":7.80,"Corr":1.27,"logMstarHI":8.49,"is_limit":False},
+    {"name":"NGC 4951","logMstar":9.79,"r25":6.9,"Re":1.9,"la":1.9,"logSFR":-0.46,"logLCO":7.65,"Corr":1.22,"logMstarHI":9.21,"is_limit":False},
+    {"name":"NGC 4945","logMstar":10.36,"r25":11.8,"Re":4.5,"la":1.6,"logSFR":0.19,"logLCO":8.77,"Corr":0.97,"logMstarHI":8.92,"is_limit":False},
+    {"name":"NGC 5042","logMstar":9.90,"r25":10.2,"Re":3.3,"la":2.4,"logSFR":-0.22,"logLCO":7.69,"Corr":1.84,"logMstarHI":9.29,"is_limit":False},
+    {"name":"NGC 5068","logMstar":9.41,"r25":5.7,"Re":2.0,"la":1.3,"logSFR":-0.56,"logLCO":7.26,"Corr":1.38,"logMstarHI":8.82,"is_limit":False},
+    {"name":"NGC 5134","logMstar":10.41,"r25":7.9,"Re":2.9,"la":2.1,"logSFR":-0.34,"logLCO":7.98,"Corr":1.14,"logMstarHI":8.92,"is_limit":False},
+    {"name":"NGC 5128","logMstar":10.97,"r25":13.7,"Re":4.7,"la":4.1,"logSFR":0.09,"logLCO":8.40,"Corr":0.98,"logMstarHI":8.43,"is_limit":False},
+    {"name":"NGC 5236","logMstar":10.53,"r25":9.7,"Re":3.5,"la":2.4,"logSFR":0.62,"logLCO":8.84,"Corr":1.14,"logMstarHI":9.98,"is_limit":False},
+    {"name":"NGC 5248","logMstar":10.41,"r25":8.8,"Re":3.2,"la":2.0,"logSFR":0.36,"logLCO":8.77,"Corr":1.14,"logMstarHI":9.50,"is_limit":False},
+    {"name":"ESO097-013","logMstar":10.53,"r25":5.3,"Re":1.9,"la":1.8,"logSFR":0.61,"logLCO":8.42,"Corr":1.40,"logMstarHI":9.81,"is_limit":False},
+    {"name":"NGC 5530","logMstar":10.08,"r25":8.6,"Re":3.4,"la":1.7,"logSFR":-0.48,"logLCO":7.89,"Corr":1.34,"logMstarHI":9.11,"is_limit":False},
+    {"name":"NGC 5643","logMstar":10.34,"r25":9.7,"Re":3.5,"la":1.6,"logSFR":0.41,"logLCO":8.56,"Corr":1.06,"logMstarHI":9.12,"is_limit":False},
+    {"name":"NGC 6300","logMstar":10.47,"r25":9.0,"Re":3.6,"la":2.1,"logSFR":0.29,"logLCO":8.46,"Corr":1.12,"logMstarHI":9.13,"is_limit":False},
+    {"name":"NGC 6744","logMstar":10.72,"r25":21.4,"Re":7.0,"la":4.8,"logSFR":0.38,"logLCO":8.27,"Corr":2.75,"logMstarHI":10.31,"is_limit":False},
+    {"name":"IC 5273","logMstar":9.73,"r25":6.3,"Re":2.5,"la":1.3,"logSFR":-0.27,"logLCO":7.63,"Corr":1.14,"logMstarHI":8.95,"is_limit":False},
+    {"name":"NGC 7456","logMstar":9.65,"r25":9.4,"Re":4.4,"la":2.9,"logSFR":-0.43,"logLCO":7.13,"Corr":2.02,"logMstarHI":9.28,"is_limit":False},
+    {"name":"NGC 7496","logMstar":10.00,"r25":9.1,"Re":3.8,"la":1.5,"logSFR":0.35,"logLCO":8.33,"Corr":1.15,"logMstarHI":9.07,"is_limit":False},
+    {"name":"IC 5332","logMstar":9.68,"r25":8.0,"Re":3.6,"la":2.8,"logSFR":-0.39,"logLCO":7.09,"Corr":2.26,"logMstarHI":9.30,"is_limit":False},
+    {"name":"NGC 7743","logMstar":10.36,"r25":7.7,"Re":2.9,"la":1.9,"logSFR":-0.67,"logLCO":7.50,"Corr":2.65,"logMstarHI":8.50,"is_limit":False},
+    {"name":"NGC 7793","logMstar":9.36,"r25":5.5,"Re":1.9,"la":1.1,"logSFR":-0.57,"logLCO":7.23,"Corr":1.34,"logMstarHI":8.70,"is_limit":False}
+]
 
 
 
@@ -1121,6 +1438,20 @@ plot_llama_property('Bar','clumping_factor',AGN_data, inactive_data, agn_Rosario
 
 ############### CAS WISDOM, PHANGS coplot   #############
 
-plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=True,comb_llama=True)
-plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=True,comb_llama=True)
-plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=True,comb_llama=True)
+plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120)
+plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120)
+plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120)
+
+############## galaxy properties WISDOM, PHANGS coplot #############
+
+plot_llama_property('Hubble Stage', 'Axis Ratio', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=False,use_sim=False,comb_llama=True,rebin=120)
+
+
+ #   """posible x_column: 'Distance (Mpc)', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
+ #      posible y_column: 'Smoothness', 'Asymmetry', 'Gini', 'Sigma0', 'rs'"""
+
+stats_table.to_csv(
+    "/data/c3040163/llama/alma/gas_analysis_results/Plots/statistics_summary.csv",
+    index=False
+)
+print("Saved all statistics → statistics_summary.csv")
