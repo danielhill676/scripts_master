@@ -134,12 +134,14 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     fit_data_inactive = pd.read_csv(inactive_path)
 
     def normalize_name(col):
-        # col can be a Pandas Series or Astropy Table Column
         s = pd.Series(col.astype(str))
-        return s.str.replace('–', '-', regex=False) \
-                .str.replace('−', '-', regex=False) \
-                .str.strip() \
-                .str.upper()
+        return (
+            s.str.replace('–', '-', regex=False)
+            .str.replace('−', '-', regex=False)
+            .str.strip()
+            .str.upper()
+        )
+
 
     # --- Example usage ---
     df_combined['Name_clean'] = normalize_name(df_combined['Name'])
@@ -237,17 +239,26 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         names_gb21 = GB21_clean["Name"].values
     if use_wis:
         wis_df = pd.DataFrame(wis)
+        wis_df['Name'] = normalize_name(wis_df['Name'])
+        wis_df['Name'] = wis_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
         df_wis = pd.DataFrame(wis_properties)
+        df_wis['Name'] = normalize_name(df_wis['Name'])
+        df_wis['Name'] = df_wis['Name'].str.replace(" ", "", regex=False)   # remove all spaces
         wis_df = pd.merge(wis_df, df_wis, left_on='Name', right_on='Name',how='left')
         wis_df[x_column] = pd.to_numeric(wis_df[x_column], errors='coerce')
         wis_df[y_column] = pd.to_numeric(wis_df[y_column], errors='coerce')
         wis_clean = wis_df.dropna(subset=[x_column, y_column])
+        print(wis_clean)
         x_wis = wis_clean[x_column]
         y_wis = wis_clean[y_column]
         names_wis = wis_clean["Name"].values
     if use_phangs:
         phangs_df = pd.DataFrame(phangs)
+        phangs_df['Name'] = normalize_name(phangs_df['Name'])
+        phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
         df_phangs = pd.DataFrame(phangs_properties)
+        df_phangs['name'] = normalize_name(df_phangs['name'])
+        df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)   # remove all spaces
         phangs_df = pd.merge(phangs_df, df_phangs, left_on='Name', right_on='name',how='left')
         phangs_df[x_column] = pd.to_numeric(phangs_df[x_column], errors='coerce')
         phangs_df[y_column] = pd.to_numeric(phangs_df[y_column], errors='coerce')
@@ -501,6 +512,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkgreen', zorder=10)
 
         if soloplot is None and use_wis:
+            print(x_wis, y_wis)
             ax_scatter.scatter(
             x_wis, y_wis,
             marker='^', color='purple', label='WIS', s=36, alpha=0.8, edgecolors='none'
@@ -1224,38 +1236,80 @@ phangs = pd.DataFrame([
 ], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness", "Smoothness_err", "Gini", "Gini_err"])
 
 
-wis_properties = [
-    # --- AGN ---
-    {"Name": "NGC 2110", "Optical_type": "Sy 2 (1h)", "log LX": 43.64, "Hubble Stage": -3.0, "Axis Ratio": 0.74, "Distance (Mpc)": 34, "Redshift": 0.007789},
-    {"Name": "NGC 2992", "Optical_type": "Sy 1.8", "log LX": 42.62, "Hubble Stage": 1.0, "Axis Ratio": 0.30, "Distance (Mpc)": 36, "Redshift": 0.00771},
-    {"Name": "MCG-05-23-016", "Optical_type": "Sy 1.9", "log LX": 43.47, "Hubble Stage": -1.0, "Axis Ratio": 0.45, "Distance (Mpc)": 35, "Redshift": 0.008486},
-    {"Name": "NGC 3081", "Optical_type": "Sy 2 (1h)", "log LX": 43.06, "Hubble Stage": 0.0, "Axis Ratio": 0.77, "Distance (Mpc)": 34, "Redshift": 0.007976},
-    {"Name": "ESO 021-G004", "Optical_type": "Sy 2", "log LX": 42.49, "Hubble Stage": -0.4, "Axis Ratio": 0.45, "Distance (Mpc)": 39, "Redshift": 0.009841},
-    {"Name": "NGC 5728", "Optical_type": "Sy 2", "log LX": 43.21, "Hubble Stage": 1.0, "Axis Ratio": 0.57, "Distance (Mpc)": 39, "Redshift": 0.009353},
-    {"Name": "ESO 137-G034", "Optical_type": "Sy 2", "log LX": 42.62, "Hubble Stage": 0.0, "Axis Ratio": 0.79, "Distance (Mpc)": 35, "Redshift": 0.009144},
-    {"Name": "NGC 7172", "Optical_type": "Sy 2 (1i)", "log LX": 43.45, "Hubble Stage": 1.4, "Axis Ratio": 0.56, "Distance (Mpc)": 37, "Redshift": 0.008683},
-    {"Name": "NGC 7582", "Optical_type": "Sy 2 (1i)", "log LX": 42.67, "Hubble Stage": 2.0, "Axis Ratio": 0.42, "Distance (Mpc)": 22, "Redshift": 0.005254},
-
-    # --- Inactive ---
-    {"Name": "NGC 718", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.87, "Distance (Mpc)": 23, "Redshift": 0.005781},
-    {"Name": "NGC 1079", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 0.0, "Axis Ratio": 0.60, "Distance (Mpc)": 19, "Redshift": 0.004843},
-    {"Name": "NGC 1315", "Optical_type": "inactive", "log LX": None, "Hubble Stage": -1.0, "Axis Ratio": 0.89, "Distance (Mpc)": 21, "Redshift": 0.005387},
-    {"Name": "NGC 1947", "Optical_type": "inactive", "log LX": None, "Hubble Stage": -3.0, "Axis Ratio": 0.87, "Distance (Mpc)": 19, "Redshift": 0.003669},
-    {"Name": "ESO 208-G021", "Optical_type": "inactive", "log LX": None, "Hubble Stage": -3.0, "Axis Ratio": 0.70, "Distance (Mpc)": 17, "Redshift": 0.003619},
-    {"Name": "NGC 2775", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 2.0, "Axis Ratio": 0.77, "Distance (Mpc)": 21, "Redshift": 0.004503},
-    {"Name": "NGC 3175", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.26, "Distance (Mpc)": 14, "Redshift": 0.003673},
-    {"Name": "NGC 3351", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 3.0, "Axis Ratio": 0.93, "Distance (Mpc)": 11, "Redshift": 0.002595},
-    {"Name": "ESO 093-G003", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 0.3, "Axis Ratio": 0.60, "Distance (Mpc)": 22, "Redshift": 0.006106},
-    {"Name": "NGC 3717", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 3.0, "Axis Ratio": 0.18, "Distance (Mpc)": 24, "Redshift": 0.005781},
-    {"Name": "NGC 3749", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.25, "Distance (Mpc)": 42, "Redshift": 0.009013},
-    {"Name": "NGC 4224", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.35, "Distance (Mpc)": 41, "Redshift": 0.008683},
-    {"Name": "NGC 4254", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 5.0, "Axis Ratio": 0.87, "Distance (Mpc)": 15, "Redshift": 0.008029},
-    {"Name": "NGC 5037", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.32, "Distance (Mpc)": 35, "Redshift": 0.006351},
-    {"Name": "NGC 5845", "Optical_type": "inactive", "log LX": None, "Hubble Stage": -4.6, "Axis Ratio": 0.63, "Distance (Mpc)": 25, "Redshift": 0.00491},
-    {"Name": "NGC 5921", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 4.0, "Axis Ratio": 0.82, "Distance (Mpc)": 21, "Redshift": 0.004937},
-    {"Name": "IC 4653", "Optical_type": "inactive", "log LX": None, "Hubble Stage": -0.5, "Axis Ratio": 0.63, "Distance (Mpc)": 26, "Redshift": 0.00517},
-    {"Name": "NGC 7727", "Optical_type": "inactive", "log LX": None, "Hubble Stage": 1.0, "Axis Ratio": 0.74, "Distance (Mpc)": 26, "Redshift": 0.006231},
-]
+wis_properties = {
+    "FRL49": {
+        "Type": "E★", "Dist": 85.7, "log_MH2": 8.68, "log_SigmaH2_1kpc": 2.91,
+        "log_M": 10.30, "sigma": None, "ReKs": 0.78, "log_SFR": 9.31,
+        "log_mu": 0.19, "Beam_arcsec": 77.2, "Beam_pc": None, 
+        "Mass_Ref": "Lelli+ subm.", "Data_Ref": "Lelli+subm."
+    },
+    "MRK567": {
+        "Type": "S", "Dist": 140.6, "log_MH2": 8.79, "log_SigmaH2_1kpc": 3.28,
+        "log_M": 11.26, "sigma": None, "ReKs": 1.30, "log_SFR": 9.24,
+        "log_mu": 0.14, "Beam_arcsec": 93.4, "Beam_pc": None, 
+        "Mass_Ref": "C17", "Data_Ref": None
+    },
+    "NGC0383": {
+        "Type": "E", "Dist": 66.6, "log_MH2": 9.18, "log_SigmaH2_1kpc": 2.66,
+        "log_M": 11.82, "sigma": 239, "ReKs": 0.00, "log_SFR": 9.92,
+        "log_mu": 0.13, "Beam_arcsec": 42.8, "Beam_pc": None, 
+        "Mass_Ref": "MASSIVE", "Data_Ref": "North et al. (2019)"
+    },
+    "NGC0449": {
+        "Type": "S", "Dist": 66.3, "log_MH2": 9.50, "log_SigmaH2_1kpc": 2.24,
+        "log_M": 10.07, "sigma": 250, "ReKs": 1.19, "log_SFR": 8.60,
+        "log_mu": 0.66, "Beam_arcsec": 211.2, "Beam_pc": None, 
+        "Mass_Ref": "z0MGS", "Data_Ref": None
+    },
+    "NGC0524": {
+        "Type": "E", "Dist": 23.3, "log_MH2": 7.95, "log_SigmaH2_1kpc": 1.41,
+        "log_M": 11.40, "sigma": 220, "ReKs": -0.56, "log_SFR": 9.75,
+        "log_mu": 0.32, "Beam_arcsec": 36.7, "Beam_pc": None, 
+        "Mass_Ref": "z0MGS", "Data_Ref": "Smith et al. (2019)"
+    },
+    "NGC0612": {
+        "Type": "E", "Dist": 130.4, "log_MH2": 10.30, "log_SigmaH2_1kpc": 1.73,
+        "log_M": 11.76, "sigma": None, "ReKs": 0.85, "log_SFR": 9.13,
+        "log_mu": 0.19, "Beam_arcsec": 122.2, "Beam_pc": None, 
+        "Mass_Ref": "MKs", "Data_Ref": "Ruffa+ in prep"
+    },
+    "NGC0708": {
+        "Type": "E", "Dist": 58.3, "log_MH2": 8.48, "log_SigmaH2_1kpc": 2.04,
+        "log_M": 11.75, "sigma": 230, "ReKs": -0.29, "log_SFR": 9.30,
+        "log_mu": 0.09, "Beam_arcsec": 24.1, "Beam_pc": None, 
+        "Mass_Ref": "MASSIVE", "Data_Ref": "North et al. (2021)"
+    },
+    "NGC1387": {
+        "Type": "E", "Dist": 19.9, "log_MH2": 8.33, "log_SigmaH2_1kpc": 2.04,
+        "log_M": 10.67, "sigma": 87, "ReKs": -0.68, "log_SFR": 9.51,
+        "log_mu": 0.42, "Beam_arcsec": 40.3, "Beam_pc": None, 
+        "Mass_Ref": "z0MGS", "Data_Ref": "Boyce+ in prep"
+    },
+    "NGC1574": {
+        "Type": "E", "Dist": 19.3, "log_MH2": 7.64, "log_SigmaH2_1kpc": 2.02,
+        "log_M": 10.79, "sigma": 180, "ReKs": -0.91, "log_SFR": 9.41,
+        "log_mu": 0.17, "Beam_arcsec": 15.4, "Beam_pc": None, 
+        "Mass_Ref": "z0MGS", "Data_Ref": "Ruffa+ in prep"
+    },
+    "NGC3169": {
+        "Type": "S", "Dist": 18.7, "log_MH2": 9.53, "log_SigmaH2_1kpc": 2.29,
+        "log_M": 10.84, "sigma": 165, "ReKs": 0.29, "log_SFR": 8.26,
+        "log_mu": 0.60, "Beam_arcsec": 54.0, "Beam_pc": None, 
+        "Mass_Ref": "z0MGS", "Data_Ref": None
+    },
+    "NGC3368": {
+        "Type": "S", "Dist": 18.0, "log_MH2": 9.03, "log_SigmaH2_1kpc": 2.46,
+        "log_M": 10.67, "sigma": 102, "ReKs": -0.29, "log_SFR": 8.87,
+        "log_mu": 0.20, "Beam_arcsec": 17.9, "Beam_pc": None, 
+        "Mass_Ref": "z0MGS", "Data_Ref": None
+    },
+    "NGC3607": {
+        "Type": "E", "Dist": 22.2, "log_MH2": 8.42, "log_SigmaH2_1kpc": 1.86,
+        "log_M": 11.34, "sigma": 207, "ReKs": -0.54, "log_SFR": 9.80,
+        "log_mu": 0.55, "Beam_arcsec": 59.0, "Beam_pc": None, 
+        "Mass_Ref": "A3D", "Data_Ref": None
+    }
+}
 
 phangs_properties = [
     {"name":"NGC 0247","logMstar":9.53,"r25":10.6,"Re":5.0,"la":3.3,"logSFR":-0.75,"logLCO":6.79,"Corr":1.42,"logMstarHI":9.24,"is_limit":False},
@@ -1444,8 +1498,7 @@ plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario201
 
 ############## galaxy properties WISDOM, PHANGS coplot #############
 
-plot_llama_property('Hubble Stage', 'Axis Ratio', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=False,use_sim=False,comb_llama=True,rebin=120)
-
+# nothing considered useful yet
 
  #   """posible x_column: 'Distance (Mpc)', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
  #      posible y_column: 'Smoothness', 'Asymmetry', 'Gini', 'Sigma0', 'rs'"""
