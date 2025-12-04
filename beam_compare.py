@@ -9,6 +9,8 @@ import re
 from astroquery.ned import Ned
 import warnings
 
+co32 = True
+
 def normalize_field_name(s):
     """
     Robust normalization of astronomical field names:
@@ -27,8 +29,14 @@ def normalize_field_name(s):
 # === CONFIGURATION ===
 llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
 base_dir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/imaging"
+if co32:
+    base_dir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/imaging"
 postprocess_dir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/postprocess"
+if co32:
+    postprocess_dir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/postprocess"
 output_csv = os.path.join(os.getcwd(), "beam_summary.csv")
+if co32:
+    output_csv = os.path.join(os.getcwd(), "beam_summary_co32.csv")
 
 # === TABLE HEADER ===
 results = [("Name", "MS_Directory", "SynthesizedBeam", "FITS_File", "BMAJ_arcsec", "Weighting")]
@@ -39,7 +47,9 @@ for name in sorted(os.listdir(base_dir)):
     if not os.path.isdir(name_path):
         continue
 
-    ms_dirs = sorted(glob.glob(os.path.join(name_path, "*.ms")))
+    ms_dirs = sorted(glob.glob(os.path.join(name_path, "*12m_co21.ms")))
+    if co32:
+        ms_dirs = sorted(glob.glob(os.path.join(name_path, "*12m_co32.ms")))
     for vis in ms_dirs:
         try:
             print(f"\nProcessing {vis} ...")
@@ -97,8 +107,8 @@ for name in sorted(os.listdir(base_dir)):
 
         # --- FITS file handling in postprocess directory ---
         image_stem = os.path.splitext(os.path.basename(vis))[0]
-        casa_image = os.path.join(postprocess_dir, image_stem + "_pbcorr_trimmed.image")
-        fits_file = os.path.join(postprocess_dir, image_stem + "_pbcorr_trimmed.fits")
+        casa_image = os.path.join(postprocess_dir, name, image_stem + "_pbcorr_trimmed.image")
+        fits_file = os.path.join(postprocess_dir, name, image_stem + "_pbcorr_trimmed.fits")
 
         bmaj = None
         weighting = None
@@ -107,28 +117,34 @@ for name in sorted(os.listdir(base_dir)):
         if os.path.exists(casa_image) and not os.path.exists(fits_file):
             ia = iatool()
             try:
+                print(f"Converting {casa_image} to FITS...")
                 ia.open(casa_image)
                 ia.tofits(fits_file)
             except Exception as e:
                 print(f"Failed to convert {casa_image} to FITS: {e}")
             finally:
                 ia.done()
+            
 
         # Read BMAJ and weighting from FITS
         if os.path.exists(fits_file):
             try:
                 with fits.open(fits_file) as hdul:
                     bmaj = float(hdul[0].header.get("BMAJ", 0)) * 3600  # arcsec
+                    print(f"BMAJ: {bmaj} arcsec")
 
                     for card in hdul[0].header.cards:
                         if card.keyword == "HISTORY":
-                            match = re.search(r'/\s*weighting\s*=\s*"([^"]+)"', str(card.value))
+                            match = re.search(r'weighting\s*=\s*"([^"]+)"', str(card.value))
                             if match:
                                 weighting = match.group(1)
+                                print(f"Weighting: {weighting}")
                                 break
 
             except Exception as e:
                 print(f"Error reading {fits_file}: {e}")
+        else:
+            print(f"FITS file not found: {fits_file}")
 
         # --- append results ---
         results.append((name,

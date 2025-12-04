@@ -11,6 +11,14 @@ from scipy.ndimage import uniform_filter
 from scipy.optimize import curve_fit
 from concurrent.futures import ProcessPoolExecutor
 import matplotlib.pyplot as plt
+from astropy.visualization import simple_norm
+from astropy.visualization.wcsaxes import add_scalebar
+from astropy.visualization.wcsaxes import add_beam
+from astropy.stats import sigma_clipped_stats
+
+from astropy.wcs.utils import proj_plane_pixel_scales
+from astropy.nddata import NDData
+from astropy.wcs import WCS
 
 try:
     import psutil
@@ -27,18 +35,18 @@ def generate_random_images(image, error_map, n_iter=1000, seed=None):
     rng = np.random.default_rng(seed)
     return rng.normal(loc=image, scale=error_map, size=(n_iter, *image.shape))
 
-def monte_carlo_metric(func, images, mask, **kwargs):
-    values = []
-    for img in images:
-        try:
-            val = func(img, mask, **kwargs)
-        except Exception:
-            val = np.nan
-        values.append(val)
-    values = np.array(values)
-    return np.nanmedian(values), np.nanstd(values)
+# def monte_carlo_metric(func, images, mask, **kwargs):
+#     values = []
+#     for img in images:
+#         try:
+#             val = func(img, mask, **kwargs)
+#         except Exception:
+#             val = np.nan
+#         values.append(val)
+#     values = np.array(values)
+#     return np.nanmedian(values), np.nanstd(values)
 
-def process_mc_chunk(chunk, mask, metric_kwargs):
+def process_mc_chunk(chunk, mask, metric_kwargs, isolate=None):
     """Worker: compute metrics over a chunk of MC images."""
     gini_vals = []
     asym_vals = []
@@ -51,53 +59,104 @@ def process_mc_chunk(chunk, mask, metric_kwargs):
 
     for img in chunk:
         try:
-            gini_vals.append(gini_single(img, mask))
-            asym_vals.append(asymmetry_single(img, mask))
-            smooth_vals.append(smoothness_single(img, mask,
-                                                 pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
-                                                 pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]))
-            conc_vals.append(concentration_single(img, mask,
-                                                  pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
-                                                  pc_per_arcsec=metric_kwargs["pc_per_arcsec"]))
-            tm_vals.append(total_mass_single(img, mask,
-                                             metric_kwargs["pixel_area_pc2"],
-                                             metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                             metric_kwargs["alpha_CO"],
-                                             metric_kwargs["name"],
-                                             co32=metric_kwargs["co32"]))
-            mw_vals.append(mass_weighted_sd_single(img, mask,
-                                                   metric_kwargs["pixel_area_pc2"],
-                                                   metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                   metric_kwargs["alpha_CO"],
-                                                   metric_kwargs["name"],
-                                                   co32=metric_kwargs["co32"]))
-            aw_vals.append(area_weighted_sd_single(img, mask,
-                                                   metric_kwargs["pixel_area_pc2"],
-                                                   metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                   metric_kwargs["alpha_CO"],
-                                                   metric_kwargs["name"],
-                                                   co32=metric_kwargs["co32"]))
-            clump_vals.append(clumping_factor_single(img, mask,
-                                                     metric_kwargs["pixel_area_pc2"],
-                                                     metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                     metric_kwargs["alpha_CO"],
-                                                     metric_kwargs["name"],
-                                                     co32=metric_kwargs["co32"]))
+            ### early return for isolated metrics ####
+            if 'gini' in isolate:
+                gini_vals.append(gini_single(img, mask))
+                continue
+            if 'asym' in isolate:
+                asym_vals.append(asymmetry_single(img, mask))
+                continue
+            if 'smooth' in isolate:
+                smooth_vals.append(smoothness_single(img, mask,
+                                                     pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
+                                                     pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]))
+                continue
+            if 'conc' in isolate:
+                conc_vals.append(concentration_single(img, mask,
+                                                      pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
+                                                      pc_per_arcsec=metric_kwargs["pc_per_arcsec"]))
+                continue
+            if 'tmass' in isolate:
+                tm_vals.append(total_mass_single(img, mask,
+                                                 metric_kwargs["pixel_area_pc2"],
+                                                 metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                 metric_kwargs["alpha_CO"],
+                                                 metric_kwargs["name"],
+                                                 co32=metric_kwargs["co32"]))
+                continue
+            if 'mw' in isolate:
+                mw_vals.append(mass_weighted_sd_single(img, mask,
+                                                       metric_kwargs["pixel_area_pc2"],
+                                                       metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                       metric_kwargs["alpha_CO"],
+                                                       metric_kwargs["name"],
+                                                       co32=metric_kwargs["co32"]))
+                continue
+            if 'aw' in isolate:
+                aw_vals.append(area_weighted_sd_single(img, mask,
+                                                       metric_kwargs["pixel_area_pc2"],
+                                                       metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                       metric_kwargs["alpha_CO"],
+                                                       metric_kwargs["name"],
+                                                       co32=metric_kwargs["co32"]))
+                continue
+            if 'clump' in isolate:
+                clump_vals.append(clumping_factor_single(img, mask,
+                                                         metric_kwargs["pixel_area_pc2"],
+                                                         metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                         metric_kwargs["alpha_CO"],
+                                                         metric_kwargs["name"],
+                                                         co32=metric_kwargs["co32"]))
+                continue
+
+            if isolate == None:
+                gini_vals.append(gini_single(img, mask))
+                asym_vals.append(asymmetry_single(img, mask))
+                smooth_vals.append(smoothness_single(img, mask,
+                                                    pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
+                                                    pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]))
+                conc_vals.append(concentration_single(img, mask,
+                                                    pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
+                                                    pc_per_arcsec=metric_kwargs["pc_per_arcsec"]))
+                tm_vals.append(total_mass_single(img, mask,
+                                                metric_kwargs["pixel_area_pc2"],
+                                                metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                metric_kwargs["alpha_CO"],
+                                                metric_kwargs["name"],
+                                                co32=metric_kwargs["co32"]))
+                mw_vals.append(mass_weighted_sd_single(img, mask,
+                                                    metric_kwargs["pixel_area_pc2"],
+                                                    metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                    metric_kwargs["alpha_CO"],
+                                                    metric_kwargs["name"],
+                                                    co32=metric_kwargs["co32"]))
+                aw_vals.append(area_weighted_sd_single(img, mask,
+                                                    metric_kwargs["pixel_area_pc2"],
+                                                    metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                    metric_kwargs["alpha_CO"],
+                                                    metric_kwargs["name"],
+                                                    co32=metric_kwargs["co32"]))
+                clump_vals.append(clumping_factor_single(img, mask,
+                                                        metric_kwargs["pixel_area_pc2"],
+                                                        metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                        metric_kwargs["alpha_CO"],
+                                                        metric_kwargs["name"],
+                                                        co32=metric_kwargs["co32"]))
         except:
             pass
 
     import numpy as np
 
-    # Convert to medians + std for this chunk
+
     return {
-        "gini":   (np.nanmedian(gini_vals), np.nanstd(gini_vals)),
-        "asym":   (np.nanmedian(asym_vals), np.nanstd(asym_vals)),
-        "smooth": (np.nanmedian(smooth_vals), np.nanstd(smooth_vals)),
-        "conc":   (np.nanmedian(conc_vals), np.nanstd(conc_vals)),
-        "tmass":  (np.nanmedian(tm_vals), np.nanstd(tm_vals)),
-        "mw":     (np.nanmedian(mw_vals), np.nanstd(mw_vals)),
-        "aw":     (np.nanmedian(aw_vals), np.nanstd(aw_vals)),
-        "clump":  (np.nanmedian(clump_vals), np.nanstd(clump_vals)),
+        "gini":   gini_vals,
+        "asym":   asym_vals,
+        "smooth": smooth_vals,
+        "conc":   conc_vals,
+        "tmass":  tm_vals,
+        "mw":     mw_vals,
+        "aw":     aw_vals,
+        "clump":  clump_vals,
     }
 
 # ------------------ Metric Functions ------------------
@@ -214,6 +273,33 @@ def radial_profile_with_errors(data, errors, mask, center=None, nbins=30):
 def exp_profile(r, Sigma0, rs):
     return Sigma0 * np.exp(-r / rs)
 
+# ----------------- Moment map plotting ------------------
+
+def plot_moment_map(image,outfolder,name_short,BMAJ,BMIN,R_kpc):
+    # Initialise plot
+    plt.rcParams.update({'font.size': 35})
+    fig = plt.figure(figsize=(18 , 18))
+    ax = fig.add_subplot(111, projection=image.wcs)
+    ax.margins(x=0,y=0)
+    # ax.set_axis_off()
+
+    add_scalebar(ax,1/3600,label="1''",corner='top left',color='black',borderpad=0.5,size_vertical=0.5)
+    add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='black',borderpad=0.5,fill=False,linewidth=3,hatch='///')
+
+    fig.tight_layout()
+    if np.isfinite(image.data).any():
+        norm_sqrt = simple_norm(image.data, 'sqrt', vmin=np.nanmin(image.data))
+    else:
+        print("Moment data empty or all NaNs — skipping normalization.")
+        # Handle the empty case, e.g., set norm_sqrt = None or use a fallback norm
+        norm_sqrt = None
+    #plt.title(f'{name_short}',fontsize=75)
+    im=plt.imshow(image.data,origin='lower',norm=norm_sqrt,cmap='RdBu_r')
+    # im.axes.get_xaxis().set_visible(False)
+    # im.axes.get_yaxis().set_visible(False)
+
+    plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+        
 # ------------------ Processing ------------------
 
 def init_worker(table):
@@ -229,8 +315,8 @@ def safe_process(args):
         print(f"Error processing {name}: {e}")
         return ("__ERROR__", name, str(e), tb)
     
-def process_file(args):
-    mom0_file, emom0_file, subdir, output_dir, co32, rebin, mask = args
+def process_file(args,isolate=None):
+    mom0_file, emom0_file, subdir, output_dir, co32, rebin, mask, R_kpc = args
     file = mom0_file
     error_map_file = emom0_file
 
@@ -250,90 +336,151 @@ def process_file(args):
     print(f"Processing {name}...")
 
     # Load FITS
-    image = fits.getdata(file, memmap=True)
-    error_map = fits.getdata(error_map_file, memmap=True)
+    image_untrimmed = fits.getdata(file, memmap=True)
+    error_map_untrimmed = fits.getdata(error_map_file, memmap=True)
 
-    mask = np.isnan(image) | np.isnan(error_map)
+    mask_untrimmed = np.isnan(image_untrimmed) | np.isnan(error_map_untrimmed)
 
     header = fits.getheader(file)
     D_Mpc = llamatab[llamatab['id'] == name]['D [Mpc]'][0]
     pixel_scale_arcsec = np.abs(header.get("CDELT1", 0)) * 3600
     pc_per_arcsec = (D_Mpc * 1e6) / 206265
-    beam_scale_pc = np.sqrt(np.abs(header.get("BMAJ", 0) * header.get("BMIN", 0))) * 3600 * pc_per_arcsec
+    BMAJ = header.get("BMAJ", 0)
+    BMIN = header.get("BMIN", 0)
+    beam_scale_pc = np.sqrt(np.abs(BMAJ * BMIN)) * 3600 * pc_per_arcsec
     pixel_area_pc2 = (pixel_scale_arcsec * pc_per_arcsec)**2
     R_21, R_31, alpha_CO = 0.7, 0.31, 4.35
+    R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
 
-    # Generate Monte-Carlo images (full set)
-    N_MC = 1000
-    images_mc = generate_random_images(image, error_map, n_iter=N_MC)
+    ny, nx = image_untrimmed.shape
+    cx, cy = nx // 2, ny // 2
+    x1, x2 = cx - R_pixel, cx + R_pixel
+    y1, y2 = cy - R_pixel, cy + R_pixel
 
-    # ---- PARALLEL MC PROCESSING HERE ----
-    cpu = multiprocessing.cpu_count()
-    chunk_size = N_MC // cpu
-    chunks = [images_mc[i:i+chunk_size] for i in range(0, N_MC, chunk_size)]
+    image = image_untrimmed[y1:y2, x1:x2]
+    error_map = error_map_untrimmed[y1:y2, x1:x2]
+    mask = mask_untrimmed[y1:y2, x1:x2]
 
-    metric_kwargs = dict(
-        name=name,
-        co32=co32,
-        pixel_area_pc2=pixel_area_pc2,
-        R_21=R_21,
-        R_31=R_31,
-        alpha_CO=alpha_CO,
-        pc_per_arcsec=pc_per_arcsec,
-        pixel_scale_arcsec=pixel_scale_arcsec
-    )
+        # --- Rebuild WCS to match trimmed image ---
+    wcs_full = WCS(header)
 
-    with ProcessPoolExecutor(max_workers=cpu) as ex:
-        results = list(ex.map(process_mc_chunk,
-                              chunks,
-                              [mask]*len(chunks),
-                              [metric_kwargs]*len(chunks)))
+    # Shift reference pixel because we trimmed the image
+    wcs_trimmed = wcs_full.deepcopy()
+    wcs_trimmed.wcs.crpix[0] -= x1
+    wcs_trimmed.wcs.crpix[1] -= y1
 
-    # Aggregate results across chunks
-    def merge(metric):
-        meds = [r[metric][0] for r in results]
-        stds = [r[metric][1] for r in results]
-        return float(np.nanmean(meds)), float(np.nanmean(stds))
+    # wrap data + WCS into an NDData object
+    image_nd = NDData(data=image, wcs=wcs_trimmed)
 
-    gini, gini_err = merge("gini")
-    asym, asym_err = merge("asym")
-    smooth, smooth_err = merge("smooth")
-    conc, conc_err = merge("conc")
-    total_mass, total_mass_err = merge("tmass")
-    mw_sd, mw_sd_err = merge("mw")
-    aw_sd, aw_sd_err = merge("aw")
-    clump, clump_err = merge("clump")
+    if isolate == None or 'plot' in isolate:
+        plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc)
 
-    # Radial profile unchanged
-    radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
-    valid = np.isfinite(profile) & np.isfinite(profile_err)
-    radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
+    if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','mw','aw','clump']):
 
-    try:
-        popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
-                               absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
-        perr = np.sqrt(np.diag(pcov))
-        sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
-        rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
-        rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
-        rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
+        # Generate Monte-Carlo images (full set)
+        N_MC = 1000
+        images_mc = generate_random_images(image, error_map, n_iter=N_MC)
 
-        bin_widths = np.diff(np.linspace(0, radii.max(), len(radii)+1))
-        bin_widths_pc = bin_widths * pixel_scale_arcsec * pc_per_arcsec
-        radii_pc = radii * pixel_scale_arcsec * pc_per_arcsec
-        plt.errorbar(radii_pc, profile, yerr=profile_err, fmt='x', label="Data", capsize=3, xerr=bin_widths_pc / 2)
-        plt.plot(radii_pc, exp_profile(radii, *popt), label="Fit", color='orange')
-        plt.xlabel("Radius (pc)")
-        plt.ylabel("Integrated intensity [Jy/beam km/s]")
-        plt.title(name)
-        plt.legend()
-        plt.tight_layout()
-        plot_path = os.path.join(output_dir, f"{name}_{mask}_{rebin}_expfit.png")
-        plt.savefig(plot_path)
-        plt.close()
+        # ---- PARALLEL MC PROCESSING HERE ----
+        cpu = multiprocessing.cpu_count()
+        chunk_size = N_MC // cpu
+        chunks = [images_mc[i:i+chunk_size] for i in range(0, N_MC, chunk_size)]
 
-    except:
-        sigma0, rs = "fit failed", "fit failed"
+        metric_kwargs = dict(
+            name=name,
+            co32=co32,
+            pixel_area_pc2=pixel_area_pc2,
+            R_21=R_21,
+            R_31=R_31,
+            alpha_CO=alpha_CO,
+            pc_per_arcsec=pc_per_arcsec,
+            pixel_scale_arcsec=pixel_scale_arcsec
+        )
+
+        with ProcessPoolExecutor(max_workers=cpu) as ex:
+            results = list(ex.map(
+                process_mc_chunk,
+                chunks,
+                [mask] * len(chunks),
+                [metric_kwargs] * len(chunks),
+                [isolate] * len(chunks)  # if isolate is in scope
+            ))
+
+        def merge_global(metric_name):
+            """Concatenate raw MC values across chunks and compute global stats."""
+            
+            # Collect lists from every chunk
+            all_values = []
+            for r in results:
+                if metric_name in r:
+                    all_values.extend(r[metric_name])
+
+            # Convert to array
+            arr = np.array(all_values, dtype=float)
+
+            # Handle case where everything failed
+            if len(arr) == 0 or np.all(np.isnan(arr)):
+                return np.nan, np.nan
+
+            # Global median and std
+            return float(np.nanmedian(arr)), float(np.nanstd(arr))
+
+        gini, gini_err = merge_global("gini")
+        asym, asym_err = merge_global("asym")
+        smooth, smooth_err = merge_global("smooth")
+        conc, conc_err = merge_global("conc")
+        total_mass, total_mass_err = merge_global("tmass")
+        mw_sd, mw_sd_err = merge_global("mw")
+        aw_sd, aw_sd_err = merge_global("aw")
+        clump, clump_err = merge_global("clump")
+    else:
+        gini, gini_err = np.nan, np.nan
+        asym, asym_err = np.nan, np.nan
+        smooth, smooth_err = np.nan, np.nan
+        conc, conc_err = np.nan, np.nan
+        total_mass, total_mass_err = np.nan, np.nan
+        mw_sd, mw_sd_err = np.nan, np.nan
+        aw_sd, aw_sd_err = np.nan, np.nan
+        clump, clump_err = np.nan, np.nan
+
+    if isolate == None or 'expfit' in isolate:
+
+        # Radial profile unchanged
+        try:
+            radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
+            valid = np.isfinite(profile) & np.isfinite(profile_err)
+            radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
+        except:
+            radii, profile, profile_err = np.array([]), np.array([]), np.array([])
+            print(f"Radial profile extraction failed for {name}.")
+
+        try:
+            popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
+                                absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
+            perr = np.sqrt(np.diag(pcov))
+            sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
+            rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
+            rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
+            rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
+
+            bin_widths = np.diff(np.linspace(0, radii.max(), len(radii)+1))
+            bin_widths_pc = bin_widths * pixel_scale_arcsec * pc_per_arcsec
+            radii_pc = radii * pixel_scale_arcsec * pc_per_arcsec
+            plt.errorbar(radii_pc, profile, yerr=profile_err, fmt='x', label="Data", capsize=3, xerr=bin_widths_pc / 2)
+            plt.plot(radii_pc, exp_profile(radii, *popt), label="Fit", color='orange')
+            plt.xlabel("Radius (pc)")
+            plt.ylabel("Integrated intensity [Jy/beam km/s]")
+            plt.title(name)
+            plt.legend()
+            plt.tight_layout()
+            plot_path = os.path.join(output_dir, f"{name}_{mask}_{rebin}_expfit.png")
+            plt.savefig(plot_path)
+            plt.close()
+
+        except:
+            sigma0, rs = "fit failed", "fit failed"
+    else:
+        sigma0, rs = np.nan, np.nan
 
     return {
         "Galaxy": name,
@@ -353,7 +500,8 @@ def process_file(args):
 
 # ------------------ Parallel Directory Processing ------------------
 
-def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, mask='broad'):
+def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, mask='broad', R_kpc=1,isolate=None):
+    print(f"Processing directory: {outer_dir} (CO32={co32}, rebin={rebin}, mask={mask}, R_kpc={R_kpc}), isolate={isolate}")
     valid_names = set(llamatab['id'])
     subdirs = [d for d in os.listdir(outer_dir)
                 if os.path.isdir(os.path.join(outer_dir, d)) and d in valid_names]
@@ -379,7 +527,7 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
         group = "inactive" if type_val=="i" else "AGN"
         os.makedirs(output_dir, exist_ok=True)
         if os.path.exists(mom0_file) and os.path.exists(emom0_file):
-            args_list.append((mom0_file, emom0_file, subdir, output_dir, co32,rebin,mask))
+            args_list.append((mom0_file, emom0_file, subdir, output_dir, co32,rebin,mask,R_kpc))
             meta_info.append((name, group, output_dir))
         else:
             print(f"Skipping {name}: required files not found")
@@ -399,32 +547,170 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
     #     results_raw = list(executor.map(safe_process, parallel_args))
 
     for args in parallel_args:
-        res = process_file(args)
+        res = process_file(args,isolate=isolate)
         results_raw.append(res)
 
-    # Save CSV
+# ------------------ CSV merge with isolate-aware updates ------------------
+
+    # Build results + metadata lists
     results, meta_clean = [], []
     for res, meta in zip(results_raw, parallel_meta):
         if res is not None:
             results.append(res)
             meta_clean.append(meta)
-    df = pd.DataFrame(results)
-    df["id"] = [mi[0] for mi in meta_clean]
-    df["group"] = [mi[1] for mi in meta_clean]
 
-    for group in ["AGN", "inactive"]:
-        group_df = df[df["group"] == group]
-        if not group_df.empty:
-            outdir = os.path.join(base_output_dir, group)
+    if len(results) == 0:
+        print("No results to save.")
+    else:
+        df = pd.DataFrame(results)
+        df["id"] = [mi[0] for mi in meta_clean]
+        df["group"] = [mi[1] for mi in meta_clean]
+
+        # Map isolate tokens -> output column names in results rows
+        isolate_colmap = {
+            "gini":  ["Gini", "Gini_err"],
+            "asym":  ["Asymmetry", "Asymmetry_err"],
+            "smooth":["Smoothness", "Smoothness_err"],
+            "conc":  ["Concentration", "Concentration_err"],
+            "tmass": ["total_mass (M_sun)", "total_mass_err (M_sun)"],
+            "mw":    ["mass_weighted_sd", "mass_weighted_sd_err"],
+            "aw":    ["area_weighted_sd", "area_weighted_sd_err"],
+            "clump": ["clumping_factor", "clumping_factor_err"],
+            "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
+            "plot":  []  # plot-only: update nothing in CSV
+        }
+
+        # Accept isolate as string, list or None
+        isolates = isolate
+        if isolates is None:
+            isolates_list = None
+        elif isinstance(isolates, (list, tuple, set)):
+            isolates_list = [str(i) for i in isolates]
+        else:
+            isolates_list = [str(isolates)]
+
+        # Build the set of columns that we should consider 'updated' by this run
+        if isolates_list is None:
+            cols_updated = None   # means full replace
+        else:
+            cols_updated = []
+            for isok in isolates_list:
+                cols_updated += isolate_colmap.get(isok, [])
+            cols_updated = list(dict.fromkeys(cols_updated))  # uniq, preserve order
+
+        # Helper for building outfile path
+        def _outfile_path(outdir, rebin, mask, R_kpc):
             if rebin is not None:
-                outfile = os.path.join(outdir, f"gas_analysis_summary_{rebin}pc_{mask}.csv")
+                return os.path.join(outdir, f"gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv")
             else:
-                outfile = os.path.join(outdir, f"gas_analysis_summary_{mask}.csv")
-            if os.path.exists(outfile):
-                existing_df = pd.read_csv(outfile)
-                group_df = pd.concat([existing_df, group_df], ignore_index=True)
-            group_df.to_csv(outfile, index=False)
-            print(f"Results for {group} saved to {outfile}")
+                return os.path.join(outdir, f"gas_analysis_summary_{mask}_{R_kpc}kpc.csv")
+
+        for group in ["AGN", "inactive"]:
+            group_df = df[df["group"] == group].copy()
+            if group_df.empty:
+                continue
+
+            outdir = os.path.join(base_output_dir, group)
+            os.makedirs(outdir, exist_ok=True)
+            outfile = _outfile_path(outdir, rebin, mask, R_kpc)
+
+            if not os.path.exists(outfile):
+                # no existing file -> just write new (full rows)
+                # But if we are in plot-only mode, don't create an empty/NaN row
+                if isolates_list is not None and "plot" in isolates_list:
+                    print(f"Skipping CSV update for plot-only run for group {group} (no outfile existed).")
+                    continue
+                group_df.to_csv(outfile, index=False)
+                print(f"Results for {group} saved to {outfile} (new file).")
+                continue
+
+            # Existing file -> load and update intelligently
+            existing_df = pd.read_csv(outfile)
+
+            ids_new = set(group_df["id"].astype(str).values)
+
+            # If full recompute (cols_updated is None) -> replace existing rows for these ids
+            if cols_updated is None:
+                # Remove old rows with same ids and append new rows
+                existing_df = existing_df[~existing_df["id"].astype(str).isin(ids_new)]
+                merged = pd.concat([existing_df, group_df], ignore_index=True)
+                merged.to_csv(outfile, index=False)
+                print(f"Results for {group} saved to {outfile} (replaced {len(ids_new)} rows).")
+                continue
+
+            # If isolate includes 'plot', do NOT touch the CSV for those ids
+            if "plot" in (isolates_list or []):
+                # remove any new rows for ids that already exist (we don't want to change CSV)
+                ids_existing = set(existing_df["id"].astype(str).values)
+                # keep only new rows whose id is not already present (if you want to append new ids even for plot, change this)
+                append_ids = [i for i in ids_new if i not in ids_existing]
+                if len(append_ids) == 0:
+                    print(f"Plot-only run: no CSV updates for group {group} (all ids already present).")
+                    continue
+                # append only the truly new ids (these will be mostly empty metrics — probably undesired)
+                rows_to_append = group_df[group_df["id"].astype(str).isin(append_ids)]
+                if not rows_to_append.empty:
+                    existing_df = pd.concat([existing_df, rows_to_append], ignore_index=True)
+                    existing_df.to_csv(outfile, index=False)
+                    print(f"Plot-only run: appended {len(rows_to_append)} new rows to {outfile}.")
+                else:
+                    print(f"Plot-only run: nothing to append for {outfile}.")
+                continue
+
+            # General isolated metric update:
+            # For each id in the new results:
+            for id_val in ids_new:
+                mask_new = group_df["id"].astype(str) == str(id_val)
+                new_row = group_df[mask_new].iloc[0]
+
+                # If id exists in existing file -> preserve non-updated cols
+                exists_mask = existing_df["id"].astype(str) == str(id_val)
+                if exists_mask.any():
+                    old_row = existing_df[exists_mask].iloc[0]
+
+                    # Ensure all columns from existing_df are present in new_row (if not, we will create them)
+                    for col in existing_df.columns:
+                        if col not in group_df.columns:
+                            # create column in group_df filled with NaN so assignment works
+                            group_df.loc[:, col] = group_df.get(col, np.nan)
+
+                    # For each column in existing_df:
+                    for col in existing_df.columns:
+                        if col in ["id", "group"]:
+                            continue
+
+                        # If this column is one we intend to update (cols_updated),
+                        # then keep new value *if it is finite*; otherwise keep old.
+                        if col in cols_updated:
+                            new_val = new_row.get(col, np.nan)
+                            if pd.isna(new_val):
+                                # preserve old value if new is NaN
+                                group_df.loc[mask_new, col] = old_row[col]
+                            else:
+                                # keep new_val (already in group_df)
+                                pass
+                        else:
+                            # column is NOT being updated now: copy old value into the new row
+                            group_df.loc[mask_new, col] = old_row[col]
+                else:
+                    # id not in existing_df -> we will append the new row.
+                    # But ensure it has all columns existing_df expects: fill missing columns with NaN
+                    for col in existing_df.columns:
+                        if col not in group_df.columns:
+                            group_df.loc[:, col] = group_df.get(col, np.nan)
+
+            # Now remove old rows that match ids_new, then append the updated group_df rows
+            existing_df = existing_df[~existing_df["id"].astype(str).isin(ids_new)]
+            merged_df = pd.concat([existing_df, group_df], ignore_index=True)
+
+            # Reorder columns to keep original CSV column order if possible
+            try:
+                merged_df = merged_df[existing_df.columns]
+            except Exception:
+                pass
+
+            merged_df.to_csv(outfile, index=False)
+            print(f"Results for {group} saved to {outfile} (updated {len(ids_new)} rows).")
 
 
 # ------------------ Main ------------------
@@ -436,10 +722,27 @@ if __name__ == '__main__':
     # CO(2-1)
     outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
     print("Starting CO(2-1) analysis...")
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='broad')
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='broad',R_kpc=3)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=3)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=3)
+
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1)
+
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3)
+
 
     # CO(3-2)
     co32 = True
     outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
     print("Starting CO(3-2) analysis...")
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='broad')
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='broad',R_kpc=3)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=3)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=3)
+
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1)
+
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3)
