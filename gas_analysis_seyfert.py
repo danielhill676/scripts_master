@@ -275,7 +275,7 @@ def exp_profile(r, Sigma0, rs):
 
 # ----------------- Moment map plotting ------------------
 
-def plot_moment_map(image,outfolder,name_short,BMAJ,BMIN,R_kpc,rebin,mask):
+def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, norm_type='linear'):
     # Initialise plot
     plt.rcParams.update({'font.size': 35})
     fig = plt.figure(figsize=(18 , 18))
@@ -288,13 +288,18 @@ def plot_moment_map(image,outfolder,name_short,BMAJ,BMIN,R_kpc,rebin,mask):
 
     fig.tight_layout()
     if np.isfinite(image.data).any():
-        norm_sqrt = simple_norm(image.data, 'sqrt', vmin=np.nanmin(image.data))
+        if norm_type == 'sqrt':
+            norm = simple_norm(image.data, 'sqrt', vmin=np.nanmin(image.data), vmax=np.nanmax(image.data))
+        elif norm_type == 'linear':
+            norm = simple_norm(image.data, 'linear', vmin=np.nanmin(image.data), vmax=np.nanmax(image.data))
+        else:
+            raise ValueError(f"Unknown norm_type: {norm_type}")
     else:
         print("Moment data empty or all NaNs — skipping normalization.")
         # Handle the empty case, e.g., set norm_sqrt = None or use a fallback norm
-        norm_sqrt = None
+        norm = None
     #plt.title(f'{name_short}',fontsize=75)
-    im=plt.imshow(image.data,origin='lower',norm=norm_sqrt,cmap='RdBu_r')
+    im=plt.imshow(image.data,origin='lower',norm=norm,cmap='RdBu_r')
     # im.axes.get_xaxis().set_visible(False)
     # im.axes.get_yaxis().set_visible(False)
 
