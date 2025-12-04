@@ -19,6 +19,13 @@ from astropy.stats import sigma_clipped_stats
 from astropy.wcs.utils import proj_plane_pixel_scales
 from astropy.nddata import NDData
 from astropy.wcs import WCS
+from astropy.coordinates import SkyCoord
+import astropy.units as u
+from astroquery.ipac.ned import Ned
+from astroquery.exceptions import RemoteServiceError
+import requests
+import time
+
 
 try:
     import psutil
@@ -278,7 +285,7 @@ def exp_profile(r, Sigma0, rs):
 def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, norm_type='linear'):
     # Initialise plot
     plt.rcParams.update({'font.size': 35})
-    fig = plt.figure(figsize=(18 , 18))
+    fig = plt.figure(figsize=(18 , 18),constrained_layout=True)
     ax = fig.add_subplot(111, projection=image.wcs)
     ax.margins(x=0,y=0)
     # ax.set_axis_off()
@@ -286,7 +293,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     add_scalebar(ax,1/3600,label="1''",corner='top left',color='black',borderpad=0.5,size_vertical=0.5)
     add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='black',borderpad=0.5,fill=False,linewidth=3,hatch='///')
 
-    fig.tight_layout()
+    # fig.tight_layout()
     if np.isfinite(image.data).any():
         if norm_type == 'sqrt':
             norm = simple_norm(image.data, 'sqrt', vmin=np.nanmin(image.data), vmax=np.nanmax(image.data))
@@ -296,14 +303,17 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
             raise ValueError(f"Unknown norm_type: {norm_type}")
     else:
         print("Moment data empty or all NaNs — skipping normalization.")
-        # Handle the empty case, e.g., set norm_sqrt = None or use a fallback norm
         norm = None
     #plt.title(f'{name_short}',fontsize=75)
     im=plt.imshow(image.data,origin='lower',norm=norm,cmap='RdBu_r')
-    # im.axes.get_xaxis().set_visible(False)
-    # im.axes.get_yaxis().set_visible(False)
+    im.axes.get_xaxis().set_visible(False)
+    im.axes.get_yaxis().set_visible(False)
 
-    plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+    if rebin is not None:
+        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+    else:
+        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+    plt.close(fig)
         
 # ------------------ Processing ------------------
 
@@ -319,8 +329,8 @@ def safe_process(args):
         tb = traceback.format_exc()
         print(f"Error processing {name}: {e}")
         return ("__ERROR__", name, str(e), tb)
-    
-def process_file(args,isolate=None):
+
+def process_file(args, images_too_small, isolate=None):
     mom0_file, emom0_file, subdir, output_dir, co32, rebin, PHANGS_mask, R_kpc = args
     file = mom0_file
     error_map_file = emom0_file
@@ -346,6 +356,13 @@ def process_file(args,isolate=None):
 
     mask_untrimmed = np.isnan(image_untrimmed) | np.isnan(error_map_untrimmed)
 
+    # cut off wierd bit of NGC 3351
+
+    if name == 'NGC3351':
+            image_untrimmed = image_untrimmed[:, :1600]
+            error_map_untrimmed = error_map_untrimmed[:, :1600]
+            mask_untrimmed = mask_untrimmed[:, :1600]
+
     header = fits.getheader(file)
     D_Mpc = llamatab[llamatab['id'] == name]['D [Mpc]'][0]
     pixel_scale_arcsec = np.abs(header.get("CDELT1", 0)) * 3600
@@ -358,53 +375,94 @@ def process_file(args,isolate=None):
     R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
 
     ny, nx = image_untrimmed.shape
-    cx, cy = nx // 2, ny // 2
-    
-    # Target size
+        # --- Convert RA/DEC galaxy center → pixel coordinates ---
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            Ned_table = Ned.query_object(llamatab[llamatab['id'] == name]['name'][0])
+            RA = Ned_table['RA'][0]
+            DEC = Ned_table['DEC'][0]
+            break  # success, exit retry loop
+        except (requests.exceptions.ConnectionError, RemoteServiceError, requests.exceptions.ReadTimeout) as e:
+            print(f"⚠️  NED query failed for {llamatab[llamatab['id'] == name]['name'][0]} (attempt {attempt+1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                print("Retrying in 5 seconds...")
+                time.sleep(5)
+            else:
+                print("❌ All NED attempts failed.")
+                # fallback: if your FITS table already includes RA/DEC, use them
+                if 'RA' in llamatab.colnames and 'DEC' in llamatab.colnames:
+                    RA = llamatab[llamatab['id'] == name]['RA'][0]
+                    DEC = llamatab[llamatab['id'] == name]['DEC'][0]
+                    print(f"Using fallback RA/DEC from llamatab for {llamatab[llamatab['id'] == name]['name'][0]}.")
+                else:
+                    print(f"Skipping {llamatab[llamatab['id'] == name]['name'][0]} — no coordinates available.")
+                    continue
+    gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
+
+    wcs_full = WCS(header)
+
+    try:
+        cx, cy = gal_cen.to_pixel(wcs_full)
+        cx, cy = int(cx), int(cy)
+    except Exception as e:
+        print(f"WARNING: WCS conversion failed for {name}: {e}")
+        print("Falling back to image center.")
+        cx, cy = nx // 2, ny // 2
+
+    # Target padded size (square of side 2*R_pixel)
     target_size = 2 * R_pixel
     ny_full, nx_full = image_untrimmed.shape
 
-    nx_kpc = nx_full * pixel_scale_arcsec * pc_per_arcsec / 1000  # kpc
-    ny_kpc = ny_full * pixel_scale_arcsec * pc_per_arcsec / 1000  # kpc
+    # Compute physical size for warning
+    nx_kpc = nx_full * pixel_scale_arcsec * pc_per_arcsec / 1000  
+    ny_kpc = ny_full * pixel_scale_arcsec * pc_per_arcsec / 1000  
 
     if nx_full < target_size or ny_full < target_size:
         print(f"Image too small for requested R_kpc={R_kpc} kpc. "
-              f"Image size: {nx_kpc:.2f} x {ny_kpc:.2f} kpc. "
-              f"Padding to {target_size}x{target_size} pixels.")
+              f"Image size: {nx_kpc:.2f}×{ny_kpc:.2f} kpc. "
+              f"Padding to {target_size}×{target_size} pixels.")
+        images_too_small.append(name)
 
-    # Compute requested slice
+    x_end = min(target_size, nx_full)
+    y_end = min(target_size, ny_full)
+
+    target_region = image_untrimmed[:y_end, :x_end]
+
+    if np.isnan(target_region).any():
+        print(f"WARNING: Image for {name} contains NaN values within the "
+            f"{target_size}×{target_size} pixel target region.")
+        images_too_small.append(name)
+
+    # Compute slice boundaries centered on RA/DEC
     x1, x2 = cx - R_pixel, cx + R_pixel
     y1, y2 = cy - R_pixel, cy + R_pixel
 
-    # Initialize padded arrays
+    # Initialize padded outputs
     image = np.full((target_size, target_size), np.nan, dtype=image_untrimmed.dtype)
     error_map = np.full((target_size, target_size), np.nan, dtype=error_map_untrimmed.dtype)
-    mask = np.ones((target_size, target_size), dtype=bool)  # True means invalid
+    mask = np.ones((target_size, target_size), dtype=bool)
 
-    # Compute intersection with actual image
+    # Find overlap with real image bounds
     x1_img, x2_img = max(x1, 0), min(x2, nx_full)
     y1_img, y2_img = max(y1, 0), min(y2, ny_full)
 
-    # Compute positions in the padded array
-    x1_pad = x1_img - x1  # offset from target array
+    # Compute placement inside padded array
+    x1_pad = x1_img - x1
     x2_pad = x1_pad + (x2_img - x1_img)
     y1_pad = y1_img - y1
     y2_pad = y1_pad + (y2_img - y1_img)
 
-    # Copy the valid region
+    # Copy valid region
     image[y1_pad:y2_pad, x1_pad:x2_pad] = image_untrimmed[y1_img:y2_img, x1_img:x2_img]
     error_map[y1_pad:y2_pad, x1_pad:x2_pad] = error_map_untrimmed[y1_img:y2_img, x1_img:x2_img]
     mask[y1_pad:y2_pad, x1_pad:x2_pad] = mask_untrimmed[y1_img:y2_img, x1_img:x2_img]
 
-        # --- Rebuild WCS to match trimmed image ---
-    wcs_full = WCS(header)
-
-    # Shift reference pixel because we trimmed the image
+    # Update WCS for cutout
     wcs_trimmed = wcs_full.deepcopy()
     wcs_trimmed.wcs.crpix[0] -= x1
     wcs_trimmed.wcs.crpix[1] -= y1
 
-    # wrap data + WCS into an NDData object
     image_nd = NDData(data=image, wcs=wcs_trimmed)
 
     if isolate == None or 'plot' in isolate:
@@ -581,8 +639,10 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
     #                         initargs=(llamatab,), mp_context=ctx) as executor:
     #     results_raw = list(executor.map(safe_process, parallel_args))
 
+    images_too_small = []
+
     for args in parallel_args:
-        res = process_file(args,isolate=isolate)
+        res = process_file(args, images_too_small, isolate=isolate)
         results_raw.append(res)
 
 # ------------------ CSV merge with isolate-aware updates ------------------
@@ -746,6 +806,7 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
 
             merged_df.to_csv(outfile, index=False)
             print(f"Results for {group} saved to {outfile} (updated {len(ids_new)} rows).")
+            print('images too small:', images_too_small)
 
 
 # ------------------ Main ------------------
@@ -753,31 +814,32 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
 if __name__ == '__main__':
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
     base_output_dir = '/data/c3040163/llama/alma/gas_analysis_results'
+    isolate = None
 
     # CO(2-1)
     outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
     print("Starting CO(2-1) analysis...")
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='broad',R_kpc=3,isolate=['plot'])
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=3,isolate=['plot'])
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=3,isolate=['plot'])
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='broad',R_kpc=1.5)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=['plot'])
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=['plot'])
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=['plot'])
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=['plot'])
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
 
     # CO(3-2)
     co32 = True
     outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
     print("Starting CO(3-2) analysis...")
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='broad',R_kpc=3,isolate=['plot'])
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=3,isolate=['plot'])
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=3,isolate=['plot'])
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=['plot'])
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=['plot'])
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=['plot'])
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=['plot'])
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
