@@ -316,7 +316,7 @@ def safe_process(args):
         return ("__ERROR__", name, str(e), tb)
     
 def process_file(args,isolate=None):
-    mom0_file, emom0_file, subdir, output_dir, co32, rebin, mask, R_kpc = args
+    mom0_file, emom0_file, subdir, output_dir, co32, rebin, PHANGS_mask, R_kpc = args
     file = mom0_file
     error_map_file = emom0_file
 
@@ -354,12 +354,42 @@ def process_file(args,isolate=None):
 
     ny, nx = image_untrimmed.shape
     cx, cy = nx // 2, ny // 2
+    
+    # Target size
+    target_size = 2 * R_pixel
+    ny_full, nx_full = image_untrimmed.shape
+
+    nx_kpc = nx_full * pixel_scale_arcsec * pc_per_arcsec / 1000  # kpc
+    ny_kpc = ny_full * pixel_scale_arcsec * pc_per_arcsec / 1000  # kpc
+
+    if nx_full < target_size or ny_full < target_size:
+        print(f"Image too small for requested R_kpc={R_kpc} kpc. "
+              f"Image size: {nx_kpc:.2f} x {ny_kpc:.2f} kpc. "
+              f"Padding to {target_size}x{target_size} pixels.")
+
+    # Compute requested slice
     x1, x2 = cx - R_pixel, cx + R_pixel
     y1, y2 = cy - R_pixel, cy + R_pixel
 
-    image = image_untrimmed[y1:y2, x1:x2]
-    error_map = error_map_untrimmed[y1:y2, x1:x2]
-    mask = mask_untrimmed[y1:y2, x1:x2]
+    # Initialize padded arrays
+    image = np.full((target_size, target_size), np.nan, dtype=image_untrimmed.dtype)
+    error_map = np.full((target_size, target_size), np.nan, dtype=error_map_untrimmed.dtype)
+    mask = np.ones((target_size, target_size), dtype=bool)  # True means invalid
+
+    # Compute intersection with actual image
+    x1_img, x2_img = max(x1, 0), min(x2, nx_full)
+    y1_img, y2_img = max(y1, 0), min(y2, ny_full)
+
+    # Compute positions in the padded array
+    x1_pad = x1_img - x1  # offset from target array
+    x2_pad = x1_pad + (x2_img - x1_img)
+    y1_pad = y1_img - y1
+    y2_pad = y1_pad + (y2_img - y1_img)
+
+    # Copy the valid region
+    image[y1_pad:y2_pad, x1_pad:x2_pad] = image_untrimmed[y1_img:y2_img, x1_img:x2_img]
+    error_map[y1_pad:y2_pad, x1_pad:x2_pad] = error_map_untrimmed[y1_img:y2_img, x1_img:x2_img]
+    mask[y1_pad:y2_pad, x1_pad:x2_pad] = mask_untrimmed[y1_img:y2_img, x1_img:x2_img]
 
         # --- Rebuild WCS to match trimmed image ---
     wcs_full = WCS(header)
@@ -373,7 +403,7 @@ def process_file(args,isolate=None):
     image_nd = NDData(data=image, wcs=wcs_trimmed)
 
     if isolate == None or 'plot' in isolate:
-        plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, mask)
+        plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, PHANGS_mask)
 
     if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','mw','aw','clump']):
 
@@ -473,7 +503,7 @@ def process_file(args,isolate=None):
             plt.title(name)
             plt.legend()
             plt.tight_layout()
-            plot_path = os.path.join(output_dir, f"{name}_{mask}_{rebin}_expfit.png")
+            plot_path = os.path.join(output_dir, f"{name}_{PHANGS_mask}_{rebin}_{R_kpc}kpc_expfit.png")
             plt.savefig(plot_path)
             plt.close()
 
@@ -501,7 +531,7 @@ def process_file(args,isolate=None):
 # ------------------ Parallel Directory Processing ------------------
 
 def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, mask='broad', R_kpc=1,isolate=None):
-    print(f"Processing directory: {outer_dir} (CO32={co32}, rebin={rebin}, mask={mask}, R_kpc={R_kpc}), isolate={isolate}")
+    print(f"Processing directory: {outer_dir} (CO32={co32}, rebin={rebin}, mask={mask}, R_kpc={R_kpc}), isolate={isolate})")
     valid_names = set(llamatab['id'])
     subdirs = [d for d in os.listdir(outer_dir)
                 if os.path.isdir(os.path.join(outer_dir, d)) and d in valid_names]
@@ -722,29 +752,27 @@ if __name__ == '__main__':
     # CO(2-1)
     outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
     print("Starting CO(2-1) analysis...")
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='broad',R_kpc=3)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=3)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=3)
-
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1)
-
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='broad',R_kpc=3,isolate=['plot'])
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=3,isolate=['plot'])
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=3,isolate=['plot'])
 
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=['plot'])
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=['plot'])
+
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=['plot'])
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=['plot'])
 
 
     # CO(3-2)
     co32 = True
     outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
     print("Starting CO(3-2) analysis...")
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='broad',R_kpc=3)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=3)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=3)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='broad',R_kpc=3,isolate=['plot'])
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=3,isolate=['plot'])
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=3,isolate=['plot'])
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=['plot'])
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=['plot'])
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=['plot'])
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=['plot'])
