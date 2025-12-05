@@ -59,7 +59,7 @@ def is_categorical(series):
     return False
 
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, GB21, wis, phangs, sim, use_gb21=False, soloplot=None, exclude_names=None, logx=False, logy=False,
-                        background_image=None, manual_limits=None, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,rebin=None,mask=None):
+                        background_image=None, manual_limits=None, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,rebin=None,mask=None,R_kpc=1):
     """possible x_column: 'Distance (Mpc)', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -94,12 +94,12 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
     # Handle all filename logic
     if rebin is not None and mask is not None:
-        AGN_path = f"{base_AGN}/gas_analysis_summary_{rebin}pc_{mask}.csv"
-        inactive_path = f"{base_inactive}/gas_analysis_summary_{rebin}pc_{mask}.csv"
+        AGN_path = f"{base_AGN}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
+        inactive_path = f"{base_inactive}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}pc.csv"
 
     elif rebin is None and mask is not None:
-        AGN_path = f"{base_AGN}/gas_analysis_summary_{mask}.csv"
-        inactive_path = f"{base_inactive}/gas_analysis_summary_{mask}.csv"
+        AGN_path = f"{base_AGN}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
+        inactive_path = f"{base_inactive}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
 
     elif mask is None:
         # NEW RULE:
@@ -642,7 +642,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         if mask is not None:
             parts.append(f'_{mask}')
         suffix = ''.join(parts)
-        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
+        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}{x_column}_vs_{y_column}.png'
         plt.savefig(output_path)
         print(f"Saved plot to: {output_path}")
 
@@ -677,7 +677,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
         ax.legend()
 
-        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/pair_diffs/{y_column}_pair_differences.png'
+        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/pair_diffs/{mask}_{R_kpc}kpc/{y_column}_pair_differences.png'
         plt.savefig(output_path)
         print(f"Saved matched-pairs plot to: {output_path}")
 
@@ -840,7 +840,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if comb_llama:
                 parts.append('_comb')
             suffix = ''.join(parts)
-            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
+            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}{x_column}_vs_{y_column}.png'
             plt.savefig(output_path)
             print(f"Saved plot to: {output_path}")
 
@@ -884,7 +884,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             leg.set_zorder(30)
             ax_bar.set_title(f'{y_column} vs {x_column}')
             suffix = f"_{soloplot}" if soloplot else ""
-            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{x_column}_vs_{y_column}{suffix}.png'
+            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}{x_column}_vs_{y_column}.png'
             plt.savefig(output_path)
             print(f"Saved plot to: {output_path}")
 
@@ -1411,89 +1411,89 @@ phangs_properties = [
 
 ############# CAS with stellar mass #############
 
-plot_llama_property('log LH (L⊙)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('log LH (L⊙)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('log LH (L⊙)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('log LH (L⊙)','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('log LH (L⊙)','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+plot_llama_property('log LH (L⊙)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LH (L⊙)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LH (L⊙)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LH (L⊙)','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LH (L⊙)','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
 
 ############# CAS with Hubble Stage #############
 
-plot_llama_property('Hubble Stage', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('Hubble Stage', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('Hubble Stage', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('Hubble Stage', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('Hubble Stage','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+plot_llama_property('Hubble Stage', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Hubble Stage', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Hubble Stage', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Hubble Stage', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Hubble Stage','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
 
 ############# CAS with X-ray luminosity #############
 
-plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)
-plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True)
-plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False)#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
 
 
-plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive')
-plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive')
-plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive')
-plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True,soloplot='inactive')
-plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive')#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True,soloplot='inactive',exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
 
 
 plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True)
 
 ############## CAS with eachother #############
 
-plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
-plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
+plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
 
 ############## CAS with concentration #############
 
-plot_llama_property('Gini', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs, False)
-plot_llama_property('Asymmetry', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Smoothness', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('clumping_factor', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+plot_llama_property('Gini', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs, False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Asymmetry', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Smoothness', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('clumping_factor', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGCC1375','NGC1315','NGC2775','NGC4260'])
 
 ############### CAS with resolution #############
 
-plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Resolution (pc)', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,logx=False,logy=True,background_image='/data/c3040163/llama/alma/gas_analysis_results/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right')#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Resolution (pc)', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,logx=False,logy=True,background_image='/data/c3040163/llama/alma/gas_analysis_results/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',exclude_names=['NGCC1375','NGC1315','NGC2775','NGC4260'])
 plot_llama_property('Resolution (pc)', 'Resolution (pc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
 
 ############### CAS with Gas mass #############
 
-plot_llama_property('total_mass (M_sun)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)#,exclude_names=['NGC 1365'])
-plot_llama_property('total_mass (M_sun)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('total_mass (M_sun)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('total_mass (M_sun)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('total_mass (M_sun)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+plot_llama_property('total_mass (M_sun)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 1365'])
+plot_llama_property('total_mass (M_sun)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('total_mass (M_sun)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('total_mass (M_sun)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1365'])
+plot_llama_property('total_mass (M_sun)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
 
 ############### Clumping factor plot #############
 
-plot_llama_property('area_weighted_sd','mass_weighted_sd',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,logx=True,logy=True,background_image='/data/c3040163/llama/alma/gas_analysis_results/Leroy2013_plots/Sigma.png',manual_limits=[0.5,5000,0.5,5000], truescale=True)
+plot_llama_property('area_weighted_sd','mass_weighted_sd',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,logx=True,logy=True,background_image='/data/c3040163/llama/alma/gas_analysis_results/Leroy2013_plots/Sigma.png',manual_limits=[0.5,5000,0.5,5000], truescale=True,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
 
 ############### CAS with Bar #############
 
-plot_llama_property('Bar', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Bar', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Bar', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Bar', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
-plot_llama_property('Bar','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
+plot_llama_property('Bar', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Bar', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Bar', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Bar', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Bar','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
 
 ############### CAS WISDOM, PHANGS coplot   #############
 
-plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120)
-plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120)
-plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120)
+plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
 
 ############## galaxy properties WISDOM, PHANGS coplot #############
 
