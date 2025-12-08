@@ -54,7 +54,23 @@ def generate_random_images(image, error_map, n_iter=1000, seed=None):
 #     return np.nanmedian(values), np.nanstd(values)
 
 def process_mc_chunk(chunk, mask, metric_kwargs, isolate=None):
-    """Worker: compute metrics over a chunk of MC images."""
+    """
+    Worker: compute metrics over a chunk of MC images and return lists
+    of per-image metric values for each metric.
+    isolate: None | str | iterable-of-str. Valid tokens:
+      'gini','asym','smooth','conc','tmass','mw','aw','clump','LCO'
+      If None -> compute all metrics.
+    """
+
+    # Normalize isolate into a set (or None meaning "all")
+    if isolate is None:
+        isolate_set = None
+    elif isinstance(isolate, str):
+        isolate_set = {isolate}
+    else:
+        isolate_set = set(isolate)
+
+    # prepare result lists
     gini_vals = []
     asym_vals = []
     smooth_vals = []
@@ -63,97 +79,124 @@ def process_mc_chunk(chunk, mask, metric_kwargs, isolate=None):
     mw_vals = []
     aw_vals = []
     clump_vals = []
+    LCO_vals = []   # <-- NEW LIST
 
     for img in chunk:
-        try:
-            ### early return for isolated metrics ####
-            if 'gini' in isolate:
-                gini_vals.append(gini_single(img, mask))
-                continue
-            if 'asym' in isolate:
-                asym_vals.append(asymmetry_single(img, mask))
-                continue
-            if 'smooth' in isolate:
-                smooth_vals.append(smoothness_single(img, mask,
-                                                     pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
-                                                     pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]))
-                continue
-            if 'conc' in isolate:
-                conc_vals.append(concentration_single(img, mask,
-                                                      pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
-                                                      pc_per_arcsec=metric_kwargs["pc_per_arcsec"]))
-                continue
-            if 'tmass' in isolate:
-                tm_vals.append(total_mass_single(img, mask,
-                                                 metric_kwargs["pixel_area_pc2"],
-                                                 metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                 metric_kwargs["alpha_CO"],
-                                                 metric_kwargs["name"],
-                                                 co32=metric_kwargs["co32"]))
-                continue
-            if 'mw' in isolate:
-                mw_vals.append(mass_weighted_sd_single(img, mask,
-                                                       metric_kwargs["pixel_area_pc2"],
-                                                       metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                       metric_kwargs["alpha_CO"],
-                                                       metric_kwargs["name"],
-                                                       co32=metric_kwargs["co32"]))
-                continue
-            if 'aw' in isolate:
-                aw_vals.append(area_weighted_sd_single(img, mask,
-                                                       metric_kwargs["pixel_area_pc2"],
-                                                       metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                       metric_kwargs["alpha_CO"],
-                                                       metric_kwargs["name"],
-                                                       co32=metric_kwargs["co32"]))
-                continue
-            if 'clump' in isolate:
-                clump_vals.append(clumping_factor_single(img, mask,
-                                                         metric_kwargs["pixel_area_pc2"],
-                                                         metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                         metric_kwargs["alpha_CO"],
-                                                         metric_kwargs["name"],
-                                                         co32=metric_kwargs["co32"]))
-                continue
 
-            if isolate == None:
-                gini_vals.append(gini_single(img, mask))
-                asym_vals.append(asymmetry_single(img, mask))
-                smooth_vals.append(smoothness_single(img, mask,
-                                                    pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
-                                                    pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]))
-                conc_vals.append(concentration_single(img, mask,
-                                                    pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
-                                                    pc_per_arcsec=metric_kwargs["pc_per_arcsec"]))
-                tm_vals.append(total_mass_single(img, mask,
-                                                metric_kwargs["pixel_area_pc2"],
-                                                metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                metric_kwargs["alpha_CO"],
-                                                metric_kwargs["name"],
-                                                co32=metric_kwargs["co32"]))
-                mw_vals.append(mass_weighted_sd_single(img, mask,
-                                                    metric_kwargs["pixel_area_pc2"],
-                                                    metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                    metric_kwargs["alpha_CO"],
-                                                    metric_kwargs["name"],
-                                                    co32=metric_kwargs["co32"]))
-                aw_vals.append(area_weighted_sd_single(img, mask,
-                                                    metric_kwargs["pixel_area_pc2"],
-                                                    metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                    metric_kwargs["alpha_CO"],
-                                                    metric_kwargs["name"],
-                                                    co32=metric_kwargs["co32"]))
-                clump_vals.append(clumping_factor_single(img, mask,
-                                                        metric_kwargs["pixel_area_pc2"],
-                                                        metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                        metric_kwargs["alpha_CO"],
-                                                        metric_kwargs["name"],
-                                                        co32=metric_kwargs["co32"]))
-        except:
-            pass
+        # ----- GINI -----
+        if (isolate_set is None) or ('gini' in isolate_set):
+            try:
+                g = gini_single(img, mask)
+            except Exception:
+                g = np.nan
+            gini_vals.append(g)
 
-    import numpy as np
+        # ----- ASYMMETRY -----
+        if (isolate_set is None) or ('asym' in isolate_set):
+            try:
+                a = asymmetry_single(img, mask)
+            except Exception:
+                a = np.nan
+            asym_vals.append(a)
 
+        # ----- SMOOTHNESS -----
+        if (isolate_set is None) or ('smooth' in isolate_set):
+            try:
+                s = smoothness_single(
+                    img, mask,
+                    pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
+                    pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]
+                )
+            except Exception:
+                s = np.nan
+            smooth_vals.append(s)
+
+        # ----- CONCENTRATION -----
+        if (isolate_set is None) or ('conc' in isolate_set):
+            try:
+                c = concentration_single(
+                    img, mask,
+                    pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
+                    pc_per_arcsec=metric_kwargs["pc_per_arcsec"]
+                )
+            except Exception:
+                c = np.nan
+            conc_vals.append(c)
+
+        # ----- TOTAL MASS -----
+        if (isolate_set is None) or ('tmass' in isolate_set):
+            try:
+                tm = total_mass_single(
+                    img, mask,
+                    metric_kwargs["pixel_area_pc2"],
+                    metric_kwargs["R_21"], metric_kwargs["R_31"],
+                    metric_kwargs["alpha_CO"],
+                    metric_kwargs["name"],
+                    co32=metric_kwargs["co32"]
+                )
+            except Exception:
+                tm = np.nan
+            tm_vals.append(tm)
+
+        # ----- MASS-WEIGHTED SIGMA -----
+        if (isolate_set is None) or ('mw' in isolate_set):
+            try:
+                mw = mass_weighted_sd_single(
+                    img, mask,
+                    metric_kwargs["pixel_area_pc2"],
+                    metric_kwargs["R_21"], metric_kwargs["R_31"],
+                    metric_kwargs["alpha_CO"],
+                    metric_kwargs["name"],
+                    co32=metric_kwargs["co32"]
+                )
+            except Exception:
+                mw = np.nan
+            mw_vals.append(mw)
+
+        # ----- AREA-WEIGHTED SIGMA -----
+        if (isolate_set is None) or ('aw' in isolate_set):
+            try:
+                aw = area_weighted_sd_single(
+                    img, mask,
+                    metric_kwargs["pixel_area_pc2"],
+                    metric_kwargs["R_21"], metric_kwargs["R_31"],
+                    metric_kwargs["alpha_CO"],
+                    metric_kwargs["name"],
+                    co32=metric_kwargs["co32"]
+                )
+            except Exception:
+                aw = np.nan
+            aw_vals.append(aw)
+
+        # ----- CLUMPING FACTOR -----
+        if (isolate_set is None) or ('clump' in isolate_set):
+            try:
+                cl = clumping_factor_single(
+                    img, mask,
+                    metric_kwargs["pixel_area_pc2"],
+                    metric_kwargs["R_21"], metric_kwargs["R_31"],
+                    metric_kwargs["alpha_CO"],
+                    metric_kwargs["name"],
+                    co32=metric_kwargs["co32"]
+                )
+            except Exception:
+                cl = np.nan
+            clump_vals.append(cl)
+
+        # ----- NEW: LCO -----
+        if (isolate_set is None) or ('LCO' in isolate_set):
+            try:
+                lco = LCO(
+                    img, mask,
+                    metric_kwargs["pixel_area_pc2"],
+                    metric_kwargs["R_21"], metric_kwargs["R_31"],
+                    metric_kwargs["alpha_CO"],
+                    metric_kwargs["name"],
+                    co32=metric_kwargs["co32"]
+                )
+            except Exception:
+                lco = np.nan
+            LCO_vals.append(lco)
 
     return {
         "gini":   gini_vals,
@@ -164,7 +207,9 @@ def process_mc_chunk(chunk, mask, metric_kwargs, isolate=None):
         "mw":     mw_vals,
         "aw":     aw_vals,
         "clump":  clump_vals,
+        "LCO":    LCO_vals,   # <-- NEW RETURN VALUE
     }
+
 
 # ------------------ Metric Functions ------------------
 
@@ -226,6 +271,10 @@ def total_mass_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, c
     map_LprimeCO10 = map_LprimeCO / (R_31 if co32 else R_21)
     map_MH2 = alpha_CO * map_LprimeCO10
     return np.nansum(map_MH2[~mask])
+
+def LCO(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
+    map_LprimeCO = image * pixel_area_pc2
+    return np.nansum(map_LprimeCO[~mask])
 
 def mass_weighted_sd_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
     map_LprimeCO = image * pixel_area_pc2
@@ -458,6 +507,50 @@ def process_file(args, images_too_small, isolate=None):
     error_map[y1_pad:y2_pad, x1_pad:x2_pad] = error_map_untrimmed[y1_img:y2_img, x1_img:x2_img]
     mask[y1_pad:y2_pad, x1_pad:x2_pad] = mask_untrimmed[y1_img:y2_img, x1_img:x2_img]
 
+    target_image  = image
+    target_mask   = mask
+    target_emap   = error_map
+
+    # 1. Identify NaNs in the image region
+    nan_pixels = np.isnan(target_image)
+
+    if nan_pixels.any():
+        print(f"WARNING: Image for {name} contains NaN values within the "
+            f"{target_size}×{target_size} pixel target region.")
+
+        # 2. Replace NaNs in image with 0
+        target_image[nan_pixels] = 0.0
+        print(f"Replaced {np.sum(nan_pixels)} NaN pixels with 0 in image for {name}.")
+
+        # 3. Mask: set those pixels to False (invalid)
+        target_mask[nan_pixels] = False
+
+        # 4. Determine mean error for pixels in the region where image == 0
+        zero_pixels = (target_image == 0) & (~np.isnan(target_emap))
+        if zero_pixels.any():
+            mean_err = np.nanmean(target_emap[zero_pixels])
+        else:
+            # fallback if weird case — use global mean of non-NaN error
+            mean_err = np.nanmean(target_emap)
+
+        # 5. Fill errormap at the NaN-image pixels with this mean value
+        target_emap[nan_pixels] = mean_err
+
+        images_too_small.append(name)
+
+    # Write modified arrays back
+    image[:] = target_image
+    mask[:] = target_mask
+    error_map[:] = target_emap
+
+    # print(f"\n--- MASK DEBUG for {name} ---")
+    # print("image finite pixels:", np.sum(np.isfinite(image)))
+    # print("mask false (kept):", np.sum(~mask))
+    # print("mask true (masked out):", np.sum(mask))
+    # print("fraction kept:", np.sum(~mask) / image.size)
+    # print("--- END ---\n")
+
+
     # Update WCS for cutout
     wcs_trimmed = wcs_full.deepcopy()
     wcs_trimmed.wcs.crpix[0] -= x1
@@ -468,7 +561,7 @@ def process_file(args, images_too_small, isolate=None):
     if isolate == None or 'plot' in isolate:
         plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, PHANGS_mask)
 
-    if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','mw','aw','clump']):
+    if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']):
 
         # Generate Monte-Carlo images (full set)
         N_MC = 1000
@@ -513,6 +606,7 @@ def process_file(args, images_too_small, isolate=None):
 
             # Handle case where everything failed
             if len(arr) == 0 or np.all(np.isnan(arr)):
+                print(f"All MC calculations failed for metric {metric_name} in galaxy {name}.")
                 return np.nan, np.nan
 
             # Global median and std
@@ -523,15 +617,18 @@ def process_file(args, images_too_small, isolate=None):
         smooth, smooth_err = merge_global("smooth")
         conc, conc_err = merge_global("conc")
         total_mass, total_mass_err = merge_global("tmass")
+        LCO, LCO_err = merge_global("LCO")
         mw_sd, mw_sd_err = merge_global("mw")
         aw_sd, aw_sd_err = merge_global("aw")
         clump, clump_err = merge_global("clump")
     else:
+        print("Skipping metric calculations as per isolate parameter.")
         gini, gini_err = np.nan, np.nan
         asym, asym_err = np.nan, np.nan
         smooth, smooth_err = np.nan, np.nan
         conc, conc_err = np.nan, np.nan
         total_mass, total_mass_err = np.nan, np.nan
+        LCO, LCO_err = np.nan, np.nan
         mw_sd, mw_sd_err = np.nan, np.nan
         aw_sd, aw_sd_err = np.nan, np.nan
         clump, clump_err = np.nan, np.nan
@@ -575,6 +672,23 @@ def process_file(args, images_too_small, isolate=None):
     else:
         sigma0, rs = np.nan, np.nan
 
+    # print({
+    #     "Galaxy": name,
+    #     "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
+    #     "Asymmetry": round(asym, 3), "Asymmetry_err": round(asym_err, 3),
+    #     "Smoothness": round(smooth, 3), "Smoothness_err": round(smooth_err, 3),
+    #     "Concentration": round(conc, 3), "Concentration_err": round(conc_err, 3),
+    #     "Sigma0 (Jy/beam km/s)": sigma0,
+    #     "rs (pc)": rs,
+    #     "Resolution (pc)": round(beam_scale_pc, 2),
+    #     "clumping_factor": round(clump, 3), "clumping_factor_err": round(clump_err, 3),
+    #     "pc_per_arcsec": round(pc_per_arcsec, 1),
+    #     "total_mass (M_sun)": round(total_mass, 2), "total_mass_err (M_sun)": round(total_mass_err, 2),
+    #     "L'CO (K km_s pc2)": round(LCO, 3), "L'CO_err (K km_s pc2)": round(LCO_err, 3),
+    #     "mass_weighted_sd": round(mw_sd, 1), "mass_weighted_sd_err": round(mw_sd_err, 1),
+    #     "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1)
+    # })
+
     return {
         "Galaxy": name,
         "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
@@ -587,6 +701,7 @@ def process_file(args, images_too_small, isolate=None):
         "clumping_factor": round(clump, 3), "clumping_factor_err": round(clump_err, 3),
         "pc_per_arcsec": round(pc_per_arcsec, 1),
         "total_mass (M_sun)": round(total_mass, 2), "total_mass_err (M_sun)": round(total_mass_err, 2),
+        "L'CO (K km_s pc2)": round(LCO, 3), "L'CO_err (K km_s pc2)": round(LCO_err, 3),
         "mass_weighted_sd": round(mw_sd, 1), "mass_weighted_sd_err": round(mw_sd_err, 1),
         "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1)
     }
@@ -668,6 +783,7 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
             "smooth":["Smoothness", "Smoothness_err"],
             "conc":  ["Concentration", "Concentration_err"],
             "tmass": ["total_mass (M_sun)", "total_mass_err (M_sun)"],
+            "LCO":   ["L'CO (K km_s pc2)", "L'CO_err (K km_s pc2)"],
             "mw":    ["mass_weighted_sd", "mass_weighted_sd_err"],
             "aw":    ["area_weighted_sd", "area_weighted_sd_err"],
             "clump": ["clumping_factor", "clumping_factor_err"],
