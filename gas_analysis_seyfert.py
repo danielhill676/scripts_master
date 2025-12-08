@@ -653,6 +653,17 @@ def process_file(args, images_too_small, isolate=None):
             rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
             rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
 
+            # --- Create decently sized figure and control font sizes ---
+            plt.figure(figsize=(8, 6))           # Larger canvas
+            plt.rcParams.update({
+                'font.size': 10,                 # base font size
+                'axes.titlesize': 12,            # title
+                'axes.labelsize': 11,            # axis labels  
+                'xtick.labelsize': 10,
+                'ytick.labelsize': 10,
+                'legend.fontsize': 10
+})
+
             bin_widths = np.diff(np.linspace(0, radii.max(), len(radii)+1))
             bin_widths_pc = bin_widths * pixel_scale_arcsec * pc_per_arcsec
             radii_pc = radii * pixel_scale_arcsec * pc_per_arcsec
@@ -664,7 +675,7 @@ def process_file(args, images_too_small, isolate=None):
             plt.legend()
             plt.tight_layout()
             plot_path = os.path.join(output_dir, f"{name}_{PHANGS_mask}_{rebin}_{R_kpc}kpc_expfit.png")
-            plt.savefig(plot_path)
+            plt.savefig(plot_path,dpi=200)
             plt.close()
 
         except:
