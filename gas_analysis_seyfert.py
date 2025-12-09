@@ -443,7 +443,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
         if norm_type == 'sqrt':
             norm = simple_norm(image.data, 'sqrt', vmin=np.nanmin(image.data), vmax=np.nanmax(image.data))
         elif norm_type == 'linear':
-            norm = simple_norm(image.data, 'linear', vmin=np.nanmin(image.data), vmax=np.nanmax(image.data))
+            norm = simple_norm(image.data, 'linear', vmin=0, vmax=np.nanmax(image.data))
         else:
             raise ValueError(f"Unknown norm_type: {norm_type}")
     else:
@@ -483,8 +483,6 @@ def process_file(args, images_too_small, isolate=None):
     # Galaxy name extraction (now robust)
     base = os.path.basename(file)
     name = base.split("_12m")[0]
-    if name != 'NGC3351':
-        return
 
     # Load LLAMA table once per galaxy
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
