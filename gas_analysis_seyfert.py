@@ -26,12 +26,8 @@ from astroquery.ipac.ned import Ned
 from astroquery.exceptions import RemoteServiceError
 import requests
 import time
-
-
-try:
-    import psutil
-except ImportError:
-    psutil = None
+from multiprocessing import shared_memory
+from concurrent.futures import ProcessPoolExecutor
 
 np.seterr(all='ignore')
 co32 = False
@@ -54,144 +50,261 @@ def generate_random_images(image, error_map, n_iter=1000, seed=None):
 #     values = np.array(values)
 #     return np.nanmedian(values), np.nanstd(values)
 
-import traceback
-import numpy as np
-
-def process_mc_chunk(chunk, mask, metric_kwargs, isolate=None):
+def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dtype_str, mask, metric_kwargs, isolate=None, seed=None):
     """
-    Compute metrics per-MC-image. Always returns a dict with either
-    metric lists OR an 'error' key containing the exception info.
+    n_iter_chunk: number of MC images this worker should generate
+    shm_name_image: shared memory name for the base image (float64/float32)
+    shm_name_error: shared memory name for the error map
+    shape: (ny, nx)
+    dtype_str: e.g. 'float64' or 'float32'
+    mask: boolean array (this will be pickled but is small compared to images)
+    metric_kwargs: small dict of params (picklable)
     """
-    try:
-        # normalize isolate into set
-        if isolate is None:
-            isolate_set = None
-        elif isinstance(isolate, str):
-            isolate_set = {isolate}
-        else:
-            isolate_set = set(isolate)
+    # attach to shared memory blocks
+    shm_img = shared_memory.SharedMemory(name=shm_name_image)
+    shm_err = shared_memory.SharedMemory(name=shm_name_error)
+    dtype = np.dtype(dtype_str)
+    image = np.ndarray(shape, dtype=dtype, buffer=shm_img.buf)
+    errmap = np.ndarray(shape, dtype=dtype, buffer=shm_err.buf)
 
-        gini_vals = []
-        asym_vals = []
-        smooth_vals = []
-        conc_vals = []
-        tm_vals = []
-        mw_vals = []
-        aw_vals = []
-        clump_vals = []
-        LCO_vals = []
+    rng = np.random.default_rng(seed)
 
-        for img in chunk:
-            # compute each metric with per-metric try/except
-            if (isolate_set is None) or ('gini' in isolate_set):
-                try:
-                    g = gini_single(img, mask)
-                except Exception:
-                    g = np.nan
-                gini_vals.append(g)
+    # lists to collect values per-image
+    gini_vals = []
+    asym_vals = []
+    smooth_vals = []
+    conc_vals = []
+    tm_vals = []
+    mw_vals = []
+    aw_vals = []
+    clump_vals = []
+    LCO_vals = []
 
-            if (isolate_set is None) or ('asym' in isolate_set):
-                try:
-                    a = asymmetry_single(img, mask)
-                except Exception:
-                    a = np.nan
-                asym_vals.append(a)
+    for i in range(n_iter_chunk):
+        # create one MC realisation locally: image + gaussian noise scaled by errmap
+        noise = rng.standard_normal(size=shape) * errmap
+        mc_img = image + noise  # this is local to worker, no copying between processes
 
-            if (isolate_set is None) or ('smooth' in isolate_set):
-                try:
-                    s = smoothness_single(img, mask,
-                                          pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
-                                          pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"])
-                except Exception:
-                    s = np.nan
-                smooth_vals.append(s)
+        # compute metrics (use your existing functions; catch exceptions per metric)
+        try:
+            gini_vals.append(gini_single(mc_img, mask))
+        except Exception:
+            gini_vals.append(np.nan)
+        try:
+            asym_vals.append(asymmetry_single(mc_img, mask))
+        except Exception:
+            asym_vals.append(np.nan)
+        try:
+            smooth_vals.append(smoothness_single(mc_img, mask,
+                                                 pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
+                                                 pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]))
+        except Exception:
+            smooth_vals.append(np.nan)
+        try:
+            conc_vals.append(concentration_single(mc_img, mask,
+                                                  pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
+                                                  pc_per_arcsec=metric_kwargs["pc_per_arcsec"]))
+        except Exception:
+            conc_vals.append(np.nan)
+        try:
+            tm_vals.append(total_mass_single(mc_img, mask,
+                                             metric_kwargs["pixel_area_pc2"],
+                                             metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                             metric_kwargs["alpha_CO"],
+                                             metric_kwargs["name"],
+                                             co32=metric_kwargs["co32"]))
+        except Exception:
+            tm_vals.append(np.nan)
+        try:
+            mw_vals.append(mass_weighted_sd_single(mc_img, mask,
+                                                   metric_kwargs["pixel_area_pc2"],
+                                                   metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                   metric_kwargs["alpha_CO"],
+                                                   metric_kwargs["name"],
+                                                   co32=metric_kwargs["co32"]))
+        except Exception:
+            mw_vals.append(np.nan)
+        try:
+            aw_vals.append(area_weighted_sd_single(mc_img, mask,
+                                                   metric_kwargs["pixel_area_pc2"],
+                                                   metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                   metric_kwargs["alpha_CO"],
+                                                   metric_kwargs["name"],
+                                                   co32=metric_kwargs["co32"]))
+        except Exception:
+            aw_vals.append(np.nan)
+        try:
+            clump_vals.append(clumping_factor_single(mc_img, mask,
+                                                     metric_kwargs["pixel_area_pc2"],
+                                                     metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                                     metric_kwargs["alpha_CO"],
+                                                     metric_kwargs["name"],
+                                                     co32=metric_kwargs["co32"]))
+        except Exception:
+            clump_vals.append(np.nan)
+        # LCO if you added it:
+        try:
+            LCO_vals.append(LCO_single(mc_img, mask,
+                                metric_kwargs["pixel_area_pc2"],
+                                metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                metric_kwargs["alpha_CO"],
+                                metric_kwargs["name"],
+                                co32=metric_kwargs["co32"]))
+        except Exception:
+            LCO_vals.append(np.nan)
 
-            if (isolate_set is None) or ('conc' in isolate_set):
-                try:
-                    c = concentration_single(img, mask,
-                                             pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
-                                             pc_per_arcsec=metric_kwargs["pc_per_arcsec"])
-                except Exception:
-                    c = np.nan
-                conc_vals.append(c)
+    # close shared memory views (do NOT unlink here)
+    shm_img.close()
+    shm_err.close()
 
-            if (isolate_set is None) or ('tmass' in isolate_set):
-                try:
-                    tm = total_mass_single(img, mask,
-                                           metric_kwargs["pixel_area_pc2"],
-                                           metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                           metric_kwargs["alpha_CO"],
-                                           metric_kwargs["name"],
-                                           co32=metric_kwargs["co32"])
-                except Exception:
-                    tm = np.nan
-                tm_vals.append(tm)
+    # return lists (pickling these lists of scalars is small)
+    return {
+        "gini": gini_vals,
+        "asym": asym_vals,
+        "smooth": smooth_vals,
+        "conc": conc_vals,
+        "tmass": tm_vals,
+        "mw": mw_vals,
+        "aw": aw_vals,
+        "clump": clump_vals,
+        "LCO": LCO_vals,
+    }
 
-            if (isolate_set is None) or ('mw' in isolate_set):
-                try:
-                    mw = mass_weighted_sd_single(img, mask,
-                                                 metric_kwargs["pixel_area_pc2"],
-                                                 metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                 metric_kwargs["alpha_CO"],
-                                                 metric_kwargs["name"],
-                                                 co32=metric_kwargs["co32"])
-                except Exception:
-                    mw = np.nan
-                mw_vals.append(mw)
+# def process_mc_chunk(chunk, mask, metric_kwargs, isolate=None):
+#     """
+#     Compute metrics per-MC-image. Always returns a dict with either
+#     metric lists OR an 'error' key containing the exception info.
+#     """
+#     try:
+#         # normalize isolate into set
+#         if isolate is None:
+#             isolate_set = None
+#         elif isinstance(isolate, str):
+#             isolate_set = {isolate}
+#         else:
+#             isolate_set = set(isolate)
 
-            if (isolate_set is None) or ('aw' in isolate_set):
-                try:
-                    aw = area_weighted_sd_single(img, mask,
-                                                 metric_kwargs["pixel_area_pc2"],
-                                                 metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                 metric_kwargs["alpha_CO"],
-                                                 metric_kwargs["name"],
-                                                 co32=metric_kwargs["co32"])
-                except Exception:
-                    aw = np.nan
-                aw_vals.append(aw)
+#         gini_vals = []
+#         asym_vals = []
+#         smooth_vals = []
+#         conc_vals = []
+#         tm_vals = []
+#         mw_vals = []
+#         aw_vals = []
+#         clump_vals = []
+#         LCO_vals = []
 
-            if (isolate_set is None) or ('clump' in isolate_set):
-                try:
-                    cl = clumping_factor_single(img, mask,
-                                                metric_kwargs["pixel_area_pc2"],
-                                                metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                metric_kwargs["alpha_CO"],
-                                                metric_kwargs["name"],
-                                                co32=metric_kwargs["co32"])
-                except Exception:
-                    cl = np.nan
-                clump_vals.append(cl)
+#         for img in chunk:
+#             # compute each metric with per-metric try/except
+#             if (isolate_set is None) or ('gini' in isolate_set):
+#                 try:
+#                     g = gini_single(img, mask)
+#                 except Exception:
+#                     g = np.nan
+#                 gini_vals.append(g)
 
-            # new LCO metric
-            if (isolate_set is None) or ('LCO' in isolate_set):
-                try:
-                    LCO = LCO_single(img, mask,
-                                     metric_kwargs["pixel_area_pc2"],
-                                     metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                     metric_kwargs["alpha_CO"],
-                                     metric_kwargs["name"],
-                                     co32=metric_kwargs["co32"])
-                except Exception:
-                    LCO = np.nan
-                LCO_vals.append(LCO)
+#             if (isolate_set is None) or ('asym' in isolate_set):
+#                 try:
+#                     a = asymmetry_single(img, mask)
+#                 except Exception:
+#                     a = np.nan
+#                 asym_vals.append(a)
 
-        return {
-            "gini": gini_vals,
-            "asym": asym_vals,
-            "smooth": smooth_vals,
-            "conc": conc_vals,
-            "tmass": tm_vals,
-            "mw": mw_vals,
-            "aw": aw_vals,
-            "clump": clump_vals,
-            "LCO": LCO_vals
-        }
+#             if (isolate_set is None) or ('smooth' in isolate_set):
+#                 try:
+#                     s = smoothness_single(img, mask,
+#                                           pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
+#                                           pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"])
+#                 except Exception:
+#                     s = np.nan
+#                 smooth_vals.append(s)
 
-    except Exception as e:
-        # return a serializable error payload instead of crashing the worker
-        tb = traceback.format_exc()
-        return {"error": True, "exc_str": str(e), "traceback": tb}
+#             if (isolate_set is None) or ('conc' in isolate_set):
+#                 try:
+#                     c = concentration_single(img, mask,
+#                                              pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
+#                                              pc_per_arcsec=metric_kwargs["pc_per_arcsec"])
+#                 except Exception:
+#                     c = np.nan
+#                 conc_vals.append(c)
+
+#             if (isolate_set is None) or ('tmass' in isolate_set):
+#                 try:
+#                     tm = total_mass_single(img, mask,
+#                                            metric_kwargs["pixel_area_pc2"],
+#                                            metric_kwargs["R_21"], metric_kwargs["R_31"],
+#                                            metric_kwargs["alpha_CO"],
+#                                            metric_kwargs["name"],
+#                                            co32=metric_kwargs["co32"])
+#                 except Exception:
+#                     tm = np.nan
+#                 tm_vals.append(tm)
+
+#             if (isolate_set is None) or ('mw' in isolate_set):
+#                 try:
+#                     mw = mass_weighted_sd_single(img, mask,
+#                                                  metric_kwargs["pixel_area_pc2"],
+#                                                  metric_kwargs["R_21"], metric_kwargs["R_31"],
+#                                                  metric_kwargs["alpha_CO"],
+#                                                  metric_kwargs["name"],
+#                                                  co32=metric_kwargs["co32"])
+#                 except Exception:
+#                     mw = np.nan
+#                 mw_vals.append(mw)
+
+#             if (isolate_set is None) or ('aw' in isolate_set):
+#                 try:
+#                     aw = area_weighted_sd_single(img, mask,
+#                                                  metric_kwargs["pixel_area_pc2"],
+#                                                  metric_kwargs["R_21"], metric_kwargs["R_31"],
+#                                                  metric_kwargs["alpha_CO"],
+#                                                  metric_kwargs["name"],
+#                                                  co32=metric_kwargs["co32"])
+#                 except Exception:
+#                     aw = np.nan
+#                 aw_vals.append(aw)
+
+#             if (isolate_set is None) or ('clump' in isolate_set):
+#                 try:
+#                     cl = clumping_factor_single(img, mask,
+#                                                 metric_kwargs["pixel_area_pc2"],
+#                                                 metric_kwargs["R_21"], metric_kwargs["R_31"],
+#                                                 metric_kwargs["alpha_CO"],
+#                                                 metric_kwargs["name"],
+#                                                 co32=metric_kwargs["co32"])
+#                 except Exception:
+#                     cl = np.nan
+#                 clump_vals.append(cl)
+
+#             # new LCO metric
+#             if (isolate_set is None) or ('LCO' in isolate_set):
+#                 try:
+#                     LCO = LCO_single(img, mask,
+#                                      metric_kwargs["pixel_area_pc2"],
+#                                      metric_kwargs["R_21"], metric_kwargs["R_31"],
+#                                      metric_kwargs["alpha_CO"],
+#                                      metric_kwargs["name"],
+#                                      co32=metric_kwargs["co32"])
+#                 except Exception:
+#                     LCO = np.nan
+#                 LCO_vals.append(LCO)
+
+#         return {
+#             "gini": gini_vals,
+#             "asym": asym_vals,
+#             "smooth": smooth_vals,
+#             "conc": conc_vals,
+#             "tmass": tm_vals,
+#             "mw": mw_vals,
+#             "aw": aw_vals,
+#             "clump": clump_vals,
+#             "LCO": LCO_vals
+#         }
+
+#     except Exception as e:
+#         # return a serializable error payload instead of crashing the worker
+#         tb = traceback.format_exc()
+#         return {"error": True, "exc_str": str(e), "traceback": tb}
 
 
 # ------------------ Metric Functions ------------------
@@ -605,11 +718,23 @@ def process_file(args, images_too_small, isolate=None):
         images_mc = generate_random_images(image, error_map, n_iter=N_MC)
 
         # ---- PARALLEL MC PROCESSING HERE ----
-        cpu = multiprocessing.cpu_count()
-        chunk_size = N_MC // cpu
-        chunks = [images_mc[i:i+chunk_size] for i in range(0, N_MC, chunk_size)]
+        dtype = image.dtype  # e.g. np.float64
+        shape = image.shape
 
-        metric_kwargs = dict(
+        shm_img = shared_memory.SharedMemory(create=True, size=image.nbytes)
+        shm_err = shared_memory.SharedMemory(create=True, size=error_map.nbytes)
+        # write into shared memory
+        shm_array_img = np.ndarray(shape, dtype=dtype, buffer=shm_img.buf)
+        shm_array_err = np.ndarray(shape, dtype=dtype, buffer=shm_err.buf)
+        shm_array_img[:] = image[:]       # copy once
+        shm_array_err[:] = error_map[:]   # copy once
+
+        cpu = min( max(1, multiprocessing.cpu_count()-1), 8 )  # e.g., reserve one core
+        iters_per_worker = [N_MC // cpu] * cpu
+        for i in range(N_MC % cpu):
+            iters_per_worker[i] += 1
+
+        metric_kwargs_small = dict(
             name=name,
             co32=co32,
             pixel_area_pc2=pixel_area_pc2,
@@ -621,21 +746,61 @@ def process_file(args, images_too_small, isolate=None):
         )
 
         with ProcessPoolExecutor(max_workers=cpu) as ex:
-            results = list(ex.map(
-                process_mc_chunk,
-                chunks,
-                [mask] * len(chunks),
-                [metric_kwargs] * len(chunks),
-                [isolate] * len(chunks)
-            ))
+            futures = []
+            for w, n_iter_chunk in enumerate(iters_per_worker):
+                seed = np.random.SeedSequence().entropy + w
+                futures.append(ex.submit(
+                    process_mc_chunk_shm,
+                    n_iter_chunk,
+                    shm_img.name,
+                    shm_err.name,
+                    shape,
+                    str(dtype),
+                    mask,
+                    metric_kwargs_small,
+                    isolate,
+                    seed
+                ))
+            results = [f.result() for f in futures]
 
-        # after collection, inspect for errors:
-        for i, r in enumerate(results):
-            if isinstance(r, dict) and r.get("error"):
-                print("Worker", i, "raised an exception:")
-                print(r.get("traceback"))
-                # optionally also raise to stop execution
-                raise RuntimeError(f"Worker {i} failed: {r.get('exc_str')}")
+        # When done, unlink the shared memory
+        shm_img.close()
+        shm_img.unlink()
+        shm_err.close()
+        shm_err.unlink()
+
+
+        # cpu = multiprocessing.cpu_count()
+        # chunk_size = N_MC // cpu
+        # chunks = [images_mc[i:i+chunk_size] for i in range(0, N_MC, chunk_size)]
+
+        # metric_kwargs = dict(
+        #     name=name,
+        #     co32=co32,
+        #     pixel_area_pc2=pixel_area_pc2,
+        #     R_21=R_21,
+        #     R_31=R_31,
+        #     alpha_CO=alpha_CO,
+        #     pc_per_arcsec=pc_per_arcsec,
+        #     pixel_scale_arcsec=pixel_scale_arcsec
+        # )
+
+    #     with ProcessPoolExecutor(max_workers=cpu) as ex:
+    #         results = list(ex.map(
+    #             process_mc_chunk_shm,
+    #             chunks,
+    #             [mask] * len(chunks),
+    #             [metric_kwargs] * len(chunks),
+    #             [isolate] * len(chunks)
+    #         ))
+
+    #     # after collection, inspect for errors:
+    #     for i, r in enumerate(results):
+    #         if isinstance(r, dict) and r.get("error"):
+    #             print("Worker", i, "raised an exception:")
+    #             print(r.get("traceback"))
+    #             # optionally also raise to stop execution
+    #             raise RuntimeError(f"Worker {i} failed: {r.get('exc_str')}")
 
         def merge_global(metric_name):
             """Concatenate raw MC values across chunks and compute global stats."""
