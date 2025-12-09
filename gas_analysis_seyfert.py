@@ -14,9 +14,6 @@ import matplotlib.pyplot as plt
 from astropy.visualization import simple_norm
 from astropy.visualization.wcsaxes import add_scalebar
 from astropy.visualization.wcsaxes import add_beam
-from astropy.stats import sigma_clipped_stats
-
-from astropy.wcs.utils import proj_plane_pixel_scales
 from astropy.nddata import NDData
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
@@ -27,7 +24,8 @@ from astroquery.exceptions import RemoteServiceError
 import requests
 import time
 from multiprocessing import shared_memory
-from concurrent.futures import ProcessPoolExecutor
+from matplotlib.patches import Ellipse
+
 
 np.seterr(all='ignore')
 co32 = False
@@ -427,7 +425,7 @@ def exp_profile(r, Sigma0, rs):
 
 # ----------------- Moment map plotting ------------------
 
-def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, norm_type='linear'): 
+def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, aperture=None, norm_type='linear'): 
     # Initialise plot
     plt.rcParams.update({'font.size': 35})
     fig = plt.figure(figsize=(18 , 18),constrained_layout=True)
@@ -453,6 +451,23 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     im=plt.imshow(image.data,origin='lower',norm=norm,cmap='RdBu_r')
     im.axes.get_xaxis().set_visible(False)
     im.axes.get_yaxis().set_visible(False)
+
+    if aperture is not None:
+        # Regions EllipsePixelRegion parameters:
+        cx = aperture.center.x
+        cy = aperture.center.y
+        width = aperture.width     # = 2*a in pixels
+        height = aperture.height   # = 2*b in pixels
+        angle_deg = aperture.angle.to_value("deg")
+
+        ellipse_patch = Ellipse(
+            (cx, cy), width=width, height=height,
+            angle=angle_deg,
+            edgecolor='lime',       # visible bright color
+            facecolor='none',
+            linewidth=3,
+        )
+        ax.add_patch(ellipse_patch)
 
     if rebin is not None:
         plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
@@ -705,9 +720,13 @@ def process_file(args, images_too_small, isolate=None):
         print(f"Flux in aperature = {ratio} of total. R_90 (kpc): ", round(R_90,2))
         mask = flux_mask_90 | mask
 
+        aperture_to_plot = flux_aperture_90
+    else:
+        aperture_to_plot = None
+
 
     if isolate == None or 'plot' in isolate:
-        plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, PHANGS_mask)
+        plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, PHANGS_mask, aperture=aperture_to_plot)
 
     if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']):
 
