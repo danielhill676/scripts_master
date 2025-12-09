@@ -10,6 +10,10 @@ from matplotlib.transforms import Bbox
 import difflib
 import re
 import os
+from astroquery.ipac.ned import Ned
+from astroquery.exceptions import RemoteServiceError
+import requests
+import time
 
 stats_table = pd.DataFrame()
 
@@ -1237,73 +1241,73 @@ phangs = pd.DataFrame([
 
 wis_properties = {
     "FRL49": {
-        "Type": "E★", "Dist": 85.7, "log_MH2": 8.68, "log_SigmaH2_1kpc": 2.91,
+        "Type": "E★", "D [Mpc]": 85.7, "log_MH2": 8.68, "log_SigmaH2_1kpc": 2.91,
         "log_M": 10.30, "sigma": None, "ReKs": 0.78, "log_SFR": 9.31,
         "log_mu": 0.19, "Beam_arcsec": 77.2, "Beam_pc": None, 
         "Mass_Ref": "Lelli+ subm.", "Data_Ref": "Lelli+subm."
     },
     "MRK567": {
-        "Type": "S", "Dist": 140.6, "log_MH2": 8.79, "log_SigmaH2_1kpc": 3.28,
+        "Type": "S", "D [Mpc]": 140.6, "log_MH2": 8.79, "log_SigmaH2_1kpc": 3.28,
         "log_M": 11.26, "sigma": None, "ReKs": 1.30, "log_SFR": 9.24,
         "log_mu": 0.14, "Beam_arcsec": 93.4, "Beam_pc": None, 
         "Mass_Ref": "C17", "Data_Ref": None
     },
     "NGC0383": {
-        "Type": "E", "Dist": 66.6, "log_MH2": 9.18, "log_SigmaH2_1kpc": 2.66,
+        "Type": "E", "D [Mpc]": 66.6, "log_MH2": 9.18, "log_SigmaH2_1kpc": 2.66,
         "log_M": 11.82, "sigma": 239, "ReKs": 0.00, "log_SFR": 9.92,
         "log_mu": 0.13, "Beam_arcsec": 42.8, "Beam_pc": None, 
         "Mass_Ref": "MASSIVE", "Data_Ref": "North et al. (2019)"
     },
     "NGC0449": {
-        "Type": "S", "Dist": 66.3, "log_MH2": 9.50, "log_SigmaH2_1kpc": 2.24,
+        "Type": "S", "D [Mpc]": 66.3, "log_MH2": 9.50, "log_SigmaH2_1kpc": 2.24,
         "log_M": 10.07, "sigma": 250, "ReKs": 1.19, "log_SFR": 8.60,
         "log_mu": 0.66, "Beam_arcsec": 211.2, "Beam_pc": None, 
         "Mass_Ref": "z0MGS", "Data_Ref": None
     },
     "NGC0524": {
-        "Type": "E", "Dist": 23.3, "log_MH2": 7.95, "log_SigmaH2_1kpc": 1.41,
+        "Type": "E", "D [Mpc]": 23.3, "log_MH2": 7.95, "log_SigmaH2_1kpc": 1.41,
         "log_M": 11.40, "sigma": 220, "ReKs": -0.56, "log_SFR": 9.75,
         "log_mu": 0.32, "Beam_arcsec": 36.7, "Beam_pc": None, 
         "Mass_Ref": "z0MGS", "Data_Ref": "Smith et al. (2019)"
     },
     "NGC0612": {
-        "Type": "E", "Dist": 130.4, "log_MH2": 10.30, "log_SigmaH2_1kpc": 1.73,
+        "Type": "E", "D [Mpc]": 130.4, "log_MH2": 10.30, "log_SigmaH2_1kpc": 1.73,
         "log_M": 11.76, "sigma": None, "ReKs": 0.85, "log_SFR": 9.13,
         "log_mu": 0.19, "Beam_arcsec": 122.2, "Beam_pc": None, 
         "Mass_Ref": "MKs", "Data_Ref": "Ruffa+ in prep"
     },
     "NGC0708": {
-        "Type": "E", "Dist": 58.3, "log_MH2": 8.48, "log_SigmaH2_1kpc": 2.04,
+        "Type": "E", "D [Mpc]": 58.3, "log_MH2": 8.48, "log_SigmaH2_1kpc": 2.04,
         "log_M": 11.75, "sigma": 230, "ReKs": -0.29, "log_SFR": 9.30,
         "log_mu": 0.09, "Beam_arcsec": 24.1, "Beam_pc": None, 
         "Mass_Ref": "MASSIVE", "Data_Ref": "North et al. (2021)"
     },
     "NGC1387": {
-        "Type": "E", "Dist": 19.9, "log_MH2": 8.33, "log_SigmaH2_1kpc": 2.04,
+        "Type": "E", "D [Mpc]": 19.9, "log_MH2": 8.33, "log_SigmaH2_1kpc": 2.04,
         "log_M": 10.67, "sigma": 87, "ReKs": -0.68, "log_SFR": 9.51,
         "log_mu": 0.42, "Beam_arcsec": 40.3, "Beam_pc": None, 
         "Mass_Ref": "z0MGS", "Data_Ref": "Boyce+ in prep"
     },
     "NGC1574": {
-        "Type": "E", "Dist": 19.3, "log_MH2": 7.64, "log_SigmaH2_1kpc": 2.02,
+        "Type": "E", "D [Mpc]": 19.3, "log_MH2": 7.64, "log_SigmaH2_1kpc": 2.02,
         "log_M": 10.79, "sigma": 180, "ReKs": -0.91, "log_SFR": 9.41,
         "log_mu": 0.17, "Beam_arcsec": 15.4, "Beam_pc": None, 
         "Mass_Ref": "z0MGS", "Data_Ref": "Ruffa+ in prep"
     },
     "NGC3169": {
-        "Type": "S", "Dist": 18.7, "log_MH2": 9.53, "log_SigmaH2_1kpc": 2.29,
+        "Type": "S", "D [Mpc]": 18.7, "log_MH2": 9.53, "log_SigmaH2_1kpc": 2.29,
         "log_M": 10.84, "sigma": 165, "ReKs": 0.29, "log_SFR": 8.26,
         "log_mu": 0.60, "Beam_arcsec": 54.0, "Beam_pc": None, 
         "Mass_Ref": "z0MGS", "Data_Ref": None
     },
     "NGC3368": {
-        "Type": "S", "Dist": 18.0, "log_MH2": 9.03, "log_SigmaH2_1kpc": 2.46,
+        "Type": "S", "D [Mpc]": 18.0, "log_MH2": 9.03, "log_SigmaH2_1kpc": 2.46,
         "log_M": 10.67, "sigma": 102, "ReKs": -0.29, "log_SFR": 8.87,
         "log_mu": 0.20, "Beam_arcsec": 17.9, "Beam_pc": None, 
         "Mass_Ref": "z0MGS", "Data_Ref": None
     },
     "NGC3607": {
-        "Type": "E", "Dist": 22.2, "log_MH2": 8.42, "log_SigmaH2_1kpc": 1.86,
+        "Type": "E", "D [Mpc]": 22.2, "log_MH2": 8.42, "log_SigmaH2_1kpc": 1.86,
         "log_M": 11.34, "sigma": 207, "ReKs": -0.54, "log_SFR": 9.80,
         "log_mu": 0.55, "Beam_arcsec": 59.0, "Beam_pc": None, 
         "Mass_Ref": "A3D", "Data_Ref": None
@@ -1402,6 +1406,46 @@ phangs_properties = [
     {"name":"NGC 7743","logMstar":10.36,"r25":7.7,"Re":2.9,"la":1.9,"logSFR":-0.67,"logLCO":7.50,"Corr":2.65,"logMstarHI":8.50,"is_limit":False},
     {"name":"NGC 7793","logMstar":9.36,"r25":5.5,"Re":1.9,"la":1.1,"logSFR":-0.57,"logLCO":7.23,"Corr":1.34,"logMstarHI":8.70,"is_limit":False}
 ]
+
+for idx, name in wis_properties["Name"].items():
+    name_str = str(name).strip()
+    max_retries = 3
+    H_flux = H_flux_err = H_mag = H_mag_err = H_units = None
+
+    for attempt in range(max_retries):
+        try:
+            # Query the photometry table
+            phot_table = Ned.get_table(name_str, table="photometry")
+            if len(phot_table) > 0:
+                # Select H-band rows (filter by Band)
+                h_band_rows = phot_table[phot_table["Band"] == "H"]
+                if len(h_band_rows) > 0:
+                    # Pick the first entry or median/average as you prefer
+                    row = h_band_rows[0]
+                    H_flux = row.get("Flux", None)
+                    H_flux_err = row.get("Flux_err", None)
+                    H_mag = row.get("Magnitude", None)
+                    H_mag_err = row.get("Magnitude_err", None)
+                    H_units = row.get("Flux_unit", None)
+            break
+
+        except (requests.exceptions.ConnectionError,
+                RemoteServiceError,
+                requests.exceptions.ReadTimeout) as e:
+            print(f"⚠️ NED query failed for {name_str} (attempt {attempt+1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                print("Retrying in 5 seconds...")
+                time.sleep(5)
+            else:
+                print("❌ All NED attempts failed.")
+
+    # Save to your DataFrame
+    wis_properties.loc[idx, "H_flux"] = H_flux
+    wis_properties.loc[idx, "H_flux_err"] = H_flux_err
+    wis_properties.loc[idx, "H_mag"] = H_mag
+    wis_properties.loc[idx, "H_mag_err"] = H_mag_err
+    wis_properties.loc[idx, "H_units"] = H_units
+
 
 
 
