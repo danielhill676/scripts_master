@@ -20,6 +20,7 @@ from astropy.wcs.utils import proj_plane_pixel_scales
 from astropy.nddata import NDData
 from astropy.wcs import WCS
 from astropy.coordinates import SkyCoord
+from regions import EllipsePixelRegion, PixCoord
 import astropy.units as u
 from astroquery.ipac.ned import Ned
 from astroquery.exceptions import RemoteServiceError
@@ -331,7 +332,7 @@ def exp_profile(r, Sigma0, rs):
 
 # ----------------- Moment map plotting ------------------
 
-def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, norm_type='linear'):
+def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, flux_mask, norm_type='linear'): 
     # Initialise plot
     plt.rcParams.update({'font.size': 35})
     fig = plt.figure(figsize=(18 , 18),constrained_layout=True)
@@ -380,7 +381,7 @@ def safe_process(args):
         return ("__ERROR__", name, str(e), tb)
 
 def process_file(args, images_too_small, isolate=None):
-    mom0_file, emom0_file, subdir, output_dir, co32, rebin, PHANGS_mask, R_kpc = args
+    mom0_file, emom0_file, subdir, output_dir, co32, rebin, PHANGS_mask, R_kpc, flux_mask = args
     file = mom0_file
     error_map_file = emom0_file
 
@@ -422,6 +423,9 @@ def process_file(args, images_too_small, isolate=None):
     pixel_area_pc2 = (pixel_scale_arcsec * pc_per_arcsec)**2
     R_21, R_31, alpha_CO = 0.7, 0.31, 4.35
     R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
+
+    I = llamatab[llamatab['id'] == name]['Inclination (deg)'][0]
+    PA = llamatab[llamatab['id'] == name]['PA'][0]
 
     ny, nx = image_untrimmed.shape
         # --- Convert RA/DEC galaxy center → pixel coordinates ---
@@ -476,13 +480,6 @@ def process_file(args, images_too_small, isolate=None):
     x_end = min(target_size, nx_full)
     y_end = min(target_size, ny_full)
 
-    target_region = image_untrimmed[:y_end, :x_end]
-
-    if np.isnan(target_region).any():
-        print(f"WARNING: Image for {name} contains NaN values within the "
-            f"{target_size}×{target_size} pixel target region.")
-        images_too_small.append(name)
-
     # Compute slice boundaries centered on RA/DEC
     x1, x2 = cx - R_pixel, cx + R_pixel
     y1, y2 = cy - R_pixel, cy + R_pixel
@@ -510,6 +507,7 @@ def process_file(args, images_too_small, isolate=None):
     target_image  = image
     target_mask   = mask
     target_emap   = error_map
+    
 
     # 1. Identify NaNs in the image region
     nan_pixels = np.isnan(target_image)
@@ -557,6 +555,64 @@ def process_file(args, images_too_small, isolate=None):
     wcs_trimmed.wcs.crpix[1] -= y1
 
     image_nd = NDData(data=image, wcs=wcs_trimmed)
+
+
+    def make_projected_region_mask(
+        shape, R_kpc
+    ):
+        """
+        Create a boolean mask for a circular region of radius R_kpc in the galaxy
+        plane, projected onto the sky as an ellipse.
+
+        Returns
+        -------
+        mask : 2D boolean array
+            True inside the projected ellipse
+        aperture : EllipticalAperture
+            Photutils aperture object defining the ellipse
+        """
+        R_pc = R_kpc * 1000.0
+        R_arcsec = R_pc / pc_per_arcsec
+        R_pix = R_arcsec / pixel_scale_arcsec
+        R_multip = 10
+
+        # ---- Apply inclination: b = a cos(i)
+        I_rad = np.deg2rad(I)
+        a = R_pix * R_multip
+        b = R_pix * R_multip * np.cos(I_rad)
+
+        # ---- Convert astronomical PA → photutils angle
+        # Photutils θ is CCW from +x (east)
+        # Astronomical PA is measured east of north
+        #
+        # Therefore:
+        theta = np.deg2rad(90.0 - PA)
+        angle = theta * u.rad
+
+        # ---- Build elliptical aperture
+        center = PixCoord(x=cx, y=cy)
+        aperture = EllipsePixelRegion(center=center, width=2*a, height=2*b, angle=angle)
+
+        # ---- Convert to mask image
+        yy, xx = np.mgrid[0:shape[0], 0:shape[1]]
+        coords = PixCoord(xx, yy)
+        mask = aperture.contains(coords)
+
+        return mask, aperture, R_kpc*1.42
+
+    if flux_mask == True:
+        total_flux = np.nansum(image[~mask])
+        f = 1.0
+        ratio = 1.0
+        while ratio > 0.9:
+            flux_mask_90 , flux_aperture_90, R_90  = make_projected_region_mask(image.shape, R_kpc*f)
+            flux_90 = np.nansum(image[flux_mask_90 & ~mask])
+            ratio = flux_90 / total_flux if total_flux > 0 else 0.0
+            f -= 0.001
+        
+        print(f"Flux in aperature = {ratio} of total. R_90 (kpc): ", round(R_90,2))
+        mask = flux_mask_90 | mask
+
 
     if isolate == None or 'plot' in isolate:
         plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, PHANGS_mask)
@@ -719,7 +775,7 @@ def process_file(args, images_too_small, isolate=None):
 
 # ------------------ Parallel Directory Processing ------------------
 
-def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, mask='broad', R_kpc=1,isolate=None):
+def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, mask='broad', R_kpc=1, flux_mask=False, isolate=None):
     print(f"Processing directory: {outer_dir} (CO32={co32}, rebin={rebin}, mask={mask}, R_kpc={R_kpc}), isolate={isolate})")
     valid_names = set(llamatab['id'])
     subdirs = [d for d in os.listdir(outer_dir)
@@ -746,7 +802,7 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
         group = "inactive" if type_val=="i" else "AGN"
         os.makedirs(output_dir, exist_ok=True)
         if os.path.exists(mom0_file) and os.path.exists(emom0_file):
-            args_list.append((mom0_file, emom0_file, subdir, output_dir, co32,rebin,mask,R_kpc))
+            args_list.append((mom0_file, emom0_file, subdir, output_dir, co32,rebin,mask,R_kpc,flux_mask))
             meta_info.append((name, group, output_dir))
         else:
             print(f"Skipping {name}: required files not found")
@@ -946,7 +1002,7 @@ if __name__ == '__main__':
     # CO(2-1)
     outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
     print("Starting CO(2-1) analysis...")
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='broad',R_kpc=1.5)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True)
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5)
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5)
 
@@ -961,7 +1017,7 @@ if __name__ == '__main__':
     co32 = True
     outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
     print("Starting CO(3-2) analysis...")
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
