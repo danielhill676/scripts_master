@@ -99,30 +99,30 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     # Handle all filename logic
     if rebin is not None and mask is not None:
         AGN_path = f"{base_AGN}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
-        inactive_path = f"{base_inactive}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}pc.csv"
+        inactive_path = f"{base_inactive}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
 
-    elif rebin is None and mask is not None:
+    else:
         AGN_path = f"{base_AGN}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
         inactive_path = f"{base_inactive}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
 
-    elif mask is None:
-        # NEW RULE:
-        # If mask=None but gas_analysis_summary_broad.csv exists → use that
-        broad_AGN = f"{base_AGN}/gas_analysis_summary_broad.csv"
-        broad_inactive = f"{base_inactive}/gas_analysis_summary_broad.csv"
+    # elif mask is None:
+    #     # NEW RULE:
+    #     # If mask=None but gas_analysis_summary_broad.csv exists → use that
+    #     broad_AGN = f"{base_AGN}/gas_analysis_summary_broad.csv"
+    #     broad_inactive = f"{base_inactive}/gas_analysis_summary_broad.csv"
 
-        if os.path.exists(broad_AGN) and os.path.exists(broad_inactive):
-            AGN_path = broad_AGN
-            inactive_path = broad_inactive
-            print("Using broad CSV because mask=None and broad files exist.")
-        else:
-            AGN_path = default_AGN
-            inactive_path = default_inactive
+    #     if os.path.exists(broad_AGN) and os.path.exists(broad_inactive):
+    #         AGN_path = broad_AGN
+    #         inactive_path = broad_inactive
+    #         print("Using broad CSV because mask=None and broad files exist.")
+    #     else:
+    #         AGN_path = default_AGN
+    #         inactive_path = default_inactive
 
-    else:
-        # Fallback protection
-        AGN_path = default_AGN
-        inactive_path = default_inactive
+    # else:
+    #     # Fallback protection
+    #     AGN_path = default_AGN
+    #     inactive_path = default_inactive
 
     # ---- Final fallback checks ----
     if not os.path.exists(AGN_path):
@@ -208,26 +208,49 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
         merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
 
-     # --- Exclude names here ---
+    # --- Exclude names here ---
     if exclude_names is not None:
         exclude_norm = [n.strip().upper() for n in exclude_names]
 
+        # These are already DataFrames → filter with boolean masks
         merged_AGN_clean = merged_AGN_clean[
             ~merged_AGN_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
         ]
         merged_inactive_clean = merged_inactive_clean[
             ~merged_inactive_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
         ]
-        agn_bol = agn_bol[~agn_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)]
-        inactive_bol = inactive_bol[~inactive_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)]
+        agn_bol = agn_bol[
+            ~agn_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
+        ]
+        inactive_bol = inactive_bol[
+            ~inactive_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
+        ]
+
+        # GB21, WIS, PHANGS, SIM: detect if list or DataFrame
         if use_gb21:
-            GB21 = [row for row in GB21 if str(row["Name_clean"]).strip().upper() not in exclude_norm]
+            if isinstance(GB21, pd.DataFrame):
+                GB21 = GB21[~GB21["Name"].str.strip().str.upper().isin(exclude_norm)]
+            else:  # list of dicts
+                GB21 = [row for row in GB21 if str(row["Name"]).strip().upper() not in exclude_norm]
+
         if use_wis:
-            wis = [row for row in wis if str(row["Name_clean"]).strip().upper() not in exclude_norm]
+            if isinstance(wis, pd.DataFrame):
+                wis = wis[~wis["Name"].str.strip().str.upper().isin(exclude_norm)]
+            else:
+                wis = [row for row in wis if str(row["Name"]).strip().upper() not in exclude_norm]
+
         if use_phangs:
-            phangs = [row for row in phangs if str(row["Name_clean"]).strip().upper() not in exclude_norm]
+            if isinstance(phangs, pd.DataFrame):
+                phangs = phangs[~phangs["Name"].str.strip().str.upper().isin(exclude_norm)]
+            else:
+                phangs = [row for row in phangs if str(row["Name"]).strip().upper() not in exclude_norm]
+
         if use_sim:
-            sim = [row for row in sim if str(row["Name_clean"]).strip().upper() not in exclude_norm]
+            if isinstance(sim, pd.DataFrame):
+                sim = sim[~sim["Name"].str.strip().str.upper().isin(exclude_norm)]
+            else:
+                sim = [row for row in sim if str(row["Name"]).strip().str.upper() not in exclude_norm]
+
     
     merged_AGN_clean = merged_AGN_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
     merged_inactive_clean = merged_inactive_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
@@ -245,14 +268,14 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         wis_df = pd.DataFrame(wis)
         wis_df['Name'] = normalize_name(wis_df['Name'])
         wis_df['Name'] = wis_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
-        df_wis = pd.DataFrame(wis_properties)
+        df_wis = pd.DataFrame(wis_properties).T.reset_index()
+        df_wis = df_wis.rename(columns={'index': 'Name'})
         df_wis['Name'] = normalize_name(df_wis['Name'])
         df_wis['Name'] = df_wis['Name'].str.replace(" ", "", regex=False)   # remove all spaces
         wis_df = pd.merge(wis_df, df_wis, left_on='Name', right_on='Name',how='left')
         wis_df[x_column] = pd.to_numeric(wis_df[x_column], errors='coerce')
         wis_df[y_column] = pd.to_numeric(wis_df[y_column], errors='coerce')
         wis_clean = wis_df.dropna(subset=[x_column, y_column])
-        print(wis_clean)
         x_wis = wis_clean[x_column]
         y_wis = wis_clean[y_column]
         names_wis = wis_clean["Name"].values
@@ -393,8 +416,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             "rebin": rebin,
             "mask": mask
         }
-
-        stats_table = pd.concat([stats_table, pd.DataFrame([new_row])], ignore_index=True)
+        
+        if stats_table.empty:
+            stats_table = pd.DataFrame(columns=new_row.keys())
+        stats_table.loc[len(stats_table)] = new_row
 
 
             # Axis limits
@@ -516,7 +541,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkgreen', zorder=10)
 
         if soloplot is None and use_wis:
-            print(x_wis, y_wis)
             ax_scatter.scatter(
             x_wis, y_wis,
             marker='^', color='purple', label='WIS', s=36, alpha=0.8, edgecolors='none'
@@ -643,10 +667,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             parts.append('_comb')
         if rebin is not None:
             parts.append(f'_{rebin}pc')
-        if mask is not None:
-            parts.append(f'_{mask}')
         suffix = ''.join(parts)
-        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}{x_column}_vs_{y_column}.png'
+        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}_{x_column}_vs_{y_column}.png'
         plt.savefig(output_path)
         print(f"Saved plot to: {output_path}")
 
@@ -888,7 +910,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             leg.set_zorder(30)
             ax_bar.set_title(f'{y_column} vs {x_column}')
             suffix = f"_{soloplot}" if soloplot else ""
-            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}{x_column}_vs_{y_column}.png'
+            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}_{x_column}_vs_{y_column}.png'
             plt.savefig(output_path)
             print(f"Saved plot to: {output_path}")
 
@@ -1407,45 +1429,6 @@ phangs_properties = [
     {"name":"NGC 7793","logMstar":9.36,"r25":5.5,"Re":1.9,"la":1.1,"logSFR":-0.57,"logLCO":7.23,"Corr":1.34,"logMstarHI":8.70,"is_limit":False}
 ]
 
-for idx, name in wis_properties["Name"].items():
-    name_str = str(name).strip()
-    max_retries = 3
-    H_flux = H_flux_err = H_mag = H_mag_err = H_units = None
-
-    for attempt in range(max_retries):
-        try:
-            # Query the photometry table
-            phot_table = Ned.get_table(name_str, table="photometry")
-            if len(phot_table) > 0:
-                # Select H-band rows (filter by Band)
-                h_band_rows = phot_table[phot_table["Band"] == "H"]
-                if len(h_band_rows) > 0:
-                    # Pick the first entry or median/average as you prefer
-                    row = h_band_rows[0]
-                    H_flux = row.get("Flux", None)
-                    H_flux_err = row.get("Flux_err", None)
-                    H_mag = row.get("Magnitude", None)
-                    H_mag_err = row.get("Magnitude_err", None)
-                    H_units = row.get("Flux_unit", None)
-            break
-
-        except (requests.exceptions.ConnectionError,
-                RemoteServiceError,
-                requests.exceptions.ReadTimeout) as e:
-            print(f"⚠️ NED query failed for {name_str} (attempt {attempt+1}/{max_retries}): {e}")
-            if attempt < max_retries - 1:
-                print("Retrying in 5 seconds...")
-                time.sleep(5)
-            else:
-                print("❌ All NED attempts failed.")
-
-    # Save to your DataFrame
-    wis_properties.loc[idx, "H_flux"] = H_flux
-    wis_properties.loc[idx, "H_flux_err"] = H_flux_err
-    wis_properties.loc[idx, "H_mag"] = H_mag
-    wis_properties.loc[idx, "H_mag_err"] = H_mag_err
-    wis_properties.loc[idx, "H_units"] = H_units
-
 
 
 
@@ -1454,99 +1437,100 @@ for idx, name in wis_properties["Name"].items():
 
 
 masks = ['broad', 'strict']
-radii = [1, 3, 0.3]
+radii = [1, 1.5, 0.3]
 
 for mask in masks:
     for R_kpc in radii:
         print(f"Running plots for mask={mask}, R_kpc={R_kpc}")
 
-    ############# CAS with stellar mass #############
+        ############# CAS with stellar mass #############
 
-    plot_llama_property('log LH (L⊙)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LH (L⊙)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LH (L⊙)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LH (L⊙)','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LH (L⊙)','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+        plot_llama_property('log LH (L⊙)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LH (L⊙)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LH (L⊙)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LH (L⊙)','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LH (L⊙)','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
 
-    ############# CAS with Hubble Stage #############
+        ############# CAS with Hubble Stage #############
 
-    plot_llama_property('Hubble Stage', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Hubble Stage', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Hubble Stage', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Hubble Stage', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Hubble Stage','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+        plot_llama_property('Hubble Stage', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Hubble Stage', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Hubble Stage', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Hubble Stage', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Hubble Stage','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
 
-    ############# CAS with X-ray luminosity #############
+        ############# CAS with X-ray luminosity #############
 
-    plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
-
-
-    plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+        plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
 
 
-    plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True)
+        plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
 
-    ############## CAS with eachother #############
 
-    plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
-    plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,use_gb21=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
 
-    ############## CAS with concentration #############
+        ############## CAS with eachother #############
 
-    plot_llama_property('Gini', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs, False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Asymmetry', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Smoothness', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('clumping_factor', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGCC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+        plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
 
-    ############### CAS with resolution #############
+        ############## CAS with concentration #############
 
-    plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Resolution (pc)', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/data/c3040163/llama/alma/gas_analysis_results/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',exclude_names=['NGCC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Resolution (pc)', 'Resolution (pc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False)
+        plot_llama_property('Gini', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs, False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Asymmetry', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Smoothness', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('clumping_factor', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGCC1375','NGC1315','NGC2775','NGC4260'])
 
-    ############### CAS with Gas mass #############
+        ############### CAS with resolution #############
 
-    plot_llama_property('total_mass (M_sun)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 1365'])
-    plot_llama_property('total_mass (M_sun)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('total_mass (M_sun)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('total_mass (M_sun)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1365'])
-    plot_llama_property('total_mass (M_sun)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Resolution (pc)', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/data/c3040163/llama/alma/gas_analysis_results/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',exclude_names=['NGCC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Resolution (pc)', 'Resolution (pc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc)
 
-    ############### Clumping factor plot #############
+        ############### CAS with Gas mass #############
 
-    plot_llama_property('area_weighted_sd','mass_weighted_sd',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,logx=True,logy=True,background_image='/data/c3040163/llama/alma/gas_analysis_results/Leroy2013_plots/Sigma.png',manual_limits=[0.5,5000,0.5,5000], truescale=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('total_mass (M_sun)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])#,exclude_names=['NGC 1365'])
+        plot_llama_property('total_mass (M_sun)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('total_mass (M_sun)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('total_mass (M_sun)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1365'])
+        plot_llama_property('total_mass (M_sun)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
 
-    ############### CAS with Bar #############
+        ############### Clumping factor plot #############
 
-    plot_llama_property('Bar', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Bar', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Bar', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Bar', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Bar','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('area_weighted_sd','mass_weighted_sd',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,logx=True,logy=True,background_image='/data/c3040163/llama/alma/gas_analysis_results/Leroy2013_plots/Sigma.png',manual_limits=[0.5,5000,0.5,5000], truescale=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
 
-    ############### CAS WISDOM, PHANGS coplot   #############
+        ############### CAS with Bar #############
 
-    plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
-    plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Bar', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Bar', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Bar', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Bar', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
+        plot_llama_property('Bar','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375','NGC1315','NGC2775','NGC4260'])
 
-############## galaxy properties WISDOM, PHANGS coplot #############
+        ############### CAS WISDOM, PHANGS coplot   #############
+
+        if R_kpc == 1.5:
+            plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375'])
+            plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375'])
+            plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC1375'])
+
+    ############## galaxy properties WISDOM, PHANGS coplot #############
 
 # nothing considered useful yet
 

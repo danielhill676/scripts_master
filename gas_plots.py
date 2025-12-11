@@ -13,6 +13,7 @@ from astroquery.ipac.ned import Ned
 from astroquery.exceptions import RemoteServiceError
 import requests
 import time
+from IPython.display import display
 
 
 def strip_units(colname: str) -> str:
@@ -1070,8 +1071,11 @@ phangs_properties = [
 ]
 
 
-for idx, name in wis_properties["Name"].items():
-    name_str = str(name).strip()
+###### update wisdom table ######
+
+wis_properties = pd.DataFrame.from_dict(wis_properties, orient='index')
+# Create new columns for NED photometry
+for name_str in wis_properties.index:
     max_retries = 3
     H_flux = H_flux_err = H_mag = H_mag_err = H_units = None
 
@@ -1081,15 +1085,17 @@ for idx, name in wis_properties["Name"].items():
             phot_table = Ned.get_table(name_str, table="photometry")
             if len(phot_table) > 0:
                 # Select H-band rows (filter by Band)
-                h_band_rows = phot_table[phot_table["Band"] == "H"]
+                h_band_rows = phot_table[np.isin(phot_table["Observed Passband"], ["H", "H (2MASS/CTIO)"])]
                 if len(h_band_rows) > 0:
-                    # Pick the first entry or median/average as you prefer
-                    row = h_band_rows[0]
-                    H_flux = row.get("Flux", None)
-                    H_flux_err = row.get("Flux_err", None)
-                    H_mag = row.get("Magnitude", None)
-                    H_mag_err = row.get("Magnitude_err", None)
-                    H_units = row.get("Flux_unit", None)
+                    flux_values = h_band_rows["Flux Density"].filled(np.nan)  # for MaskedColumn, convert masked → np.nan
+                    flux_values = flux_values.astype(float)  # ensure numeric
+
+                    # Convert uncertainty column to array
+                    flux_err_values = h_band_rows["Upper limit of uncertainty"].filled(np.nan).astype(float)
+
+                    # Compute mean of available (finite) values
+                    H_fd = np.nanmean(flux_values)
+                    H_fd_err = np.nanmean(flux_err_values) # in Jy
             break
 
         except (requests.exceptions.ConnectionError,
@@ -1103,11 +1109,68 @@ for idx, name in wis_properties["Name"].items():
                 print("❌ All NED attempts failed.")
 
     # Save to your DataFrame
-    wis_properties.loc[idx, "H_flux"] = H_flux
-    wis_properties.loc[idx, "H_flux_err"] = H_flux_err
-    wis_properties.loc[idx, "H_mag"] = H_mag
-    wis_properties.loc[idx, "H_mag_err"] = H_mag_err
-    wis_properties.loc[idx, "H_units"] = H_units
+    wis_properties.loc[name_str, "H_fd"] = H_fd
+    wis_properties.loc[name_str, "H_fd_err"] = H_fd_err
+
+
+#### update phangs table ######
+
+if isinstance(phangs_properties, list):
+    phangs_properties = pd.DataFrame(phangs_properties)
+
+# --- Ensure index contains galaxy names ---
+if "name" in phangs_properties.columns:
+    phangs_properties = phangs_properties.set_index("name")
+
+# --- Add columns for NED photometry ---
+for name_str in phangs_properties.index:
+    
+    max_retries = 3
+    H_fd = H_fd_err = None
+
+    for attempt in range(max_retries):
+        try:
+            # Query photometry table
+            phot_table = Ned.get_table(name_str, table="photometry")
+
+            if len(phot_table) > 0:
+
+                # Select H-band rows
+                h_band_rows = phot_table[
+                    np.isin(
+                        phot_table["Observed Passband"],
+                        ["H", "H (2MASS/CTIO)"]
+                    )
+                ]
+
+                if len(h_band_rows) > 0:
+
+                    # Extract flux densities → convert masked to NaN
+                    flux_values = h_band_rows["Flux Density"].filled(np.nan).astype(float)
+                    flux_err_values = h_band_rows["Upper limit of uncertainty"].filled(np.nan).astype(float)
+
+                    # Mean values ignoring NaNs
+                    H_fd = np.nanmean(flux_values)
+                    H_fd_err = np.nanmean(flux_err_values)
+
+            break  # Successful query → exit retry loop
+
+        except (requests.exceptions.ConnectionError,
+                RemoteServiceError,
+                requests.exceptions.ReadTimeout) as e:
+
+            print(f"⚠️ NED query failed for {name_str} (attempt {attempt+1}/{max_retries}): {e}")
+
+            if attempt < max_retries - 1:
+                print("Retrying in 5 seconds...")
+                time.sleep(5)
+            else:
+                print("❌ All NED attempts failed.")
+
+    # --- Save values to DataFrame ---
+    phangs_properties.loc[name_str, "H_fd"] = H_fd
+    phangs_properties.loc[name_str, "H_fd_err"] = H_fd_err
+
 
 
 

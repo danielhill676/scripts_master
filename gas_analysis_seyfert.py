@@ -37,16 +37,6 @@ def generate_random_images(image, error_map, n_iter=1000, seed=None):
     rng = np.random.default_rng(seed)
     return rng.normal(loc=image, scale=error_map, size=(n_iter, *image.shape))
 
-# def monte_carlo_metric(func, images, mask, **kwargs):
-#     values = []
-#     for img in images:
-#         try:
-#             val = func(img, mask, **kwargs)
-#         except Exception:
-#             val = np.nan
-#         values.append(val)
-#     values = np.array(values)
-#     return np.nanmedian(values), np.nanstd(values)
 
 def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dtype_str, mask, metric_kwargs, isolate=None, seed=None):
     """
@@ -167,142 +157,6 @@ def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dt
         "clump": clump_vals,
         "LCO": LCO_vals,
     }
-
-# def process_mc_chunk(chunk, mask, metric_kwargs, isolate=None):
-#     """
-#     Compute metrics per-MC-image. Always returns a dict with either
-#     metric lists OR an 'error' key containing the exception info.
-#     """
-#     try:
-#         # normalize isolate into set
-#         if isolate is None:
-#             isolate_set = None
-#         elif isinstance(isolate, str):
-#             isolate_set = {isolate}
-#         else:
-#             isolate_set = set(isolate)
-
-#         gini_vals = []
-#         asym_vals = []
-#         smooth_vals = []
-#         conc_vals = []
-#         tm_vals = []
-#         mw_vals = []
-#         aw_vals = []
-#         clump_vals = []
-#         LCO_vals = []
-
-#         for img in chunk:
-#             # compute each metric with per-metric try/except
-#             if (isolate_set is None) or ('gini' in isolate_set):
-#                 try:
-#                     g = gini_single(img, mask)
-#                 except Exception:
-#                     g = np.nan
-#                 gini_vals.append(g)
-
-#             if (isolate_set is None) or ('asym' in isolate_set):
-#                 try:
-#                     a = asymmetry_single(img, mask)
-#                 except Exception:
-#                     a = np.nan
-#                 asym_vals.append(a)
-
-#             if (isolate_set is None) or ('smooth' in isolate_set):
-#                 try:
-#                     s = smoothness_single(img, mask,
-#                                           pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
-#                                           pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"])
-#                 except Exception:
-#                     s = np.nan
-#                 smooth_vals.append(s)
-
-#             if (isolate_set is None) or ('conc' in isolate_set):
-#                 try:
-#                     c = concentration_single(img, mask,
-#                                              pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
-#                                              pc_per_arcsec=metric_kwargs["pc_per_arcsec"])
-#                 except Exception:
-#                     c = np.nan
-#                 conc_vals.append(c)
-
-#             if (isolate_set is None) or ('tmass' in isolate_set):
-#                 try:
-#                     tm = total_mass_single(img, mask,
-#                                            metric_kwargs["pixel_area_pc2"],
-#                                            metric_kwargs["R_21"], metric_kwargs["R_31"],
-#                                            metric_kwargs["alpha_CO"],
-#                                            metric_kwargs["name"],
-#                                            co32=metric_kwargs["co32"])
-#                 except Exception:
-#                     tm = np.nan
-#                 tm_vals.append(tm)
-
-#             if (isolate_set is None) or ('mw' in isolate_set):
-#                 try:
-#                     mw = mass_weighted_sd_single(img, mask,
-#                                                  metric_kwargs["pixel_area_pc2"],
-#                                                  metric_kwargs["R_21"], metric_kwargs["R_31"],
-#                                                  metric_kwargs["alpha_CO"],
-#                                                  metric_kwargs["name"],
-#                                                  co32=metric_kwargs["co32"])
-#                 except Exception:
-#                     mw = np.nan
-#                 mw_vals.append(mw)
-
-#             if (isolate_set is None) or ('aw' in isolate_set):
-#                 try:
-#                     aw = area_weighted_sd_single(img, mask,
-#                                                  metric_kwargs["pixel_area_pc2"],
-#                                                  metric_kwargs["R_21"], metric_kwargs["R_31"],
-#                                                  metric_kwargs["alpha_CO"],
-#                                                  metric_kwargs["name"],
-#                                                  co32=metric_kwargs["co32"])
-#                 except Exception:
-#                     aw = np.nan
-#                 aw_vals.append(aw)
-
-#             if (isolate_set is None) or ('clump' in isolate_set):
-#                 try:
-#                     cl = clumping_factor_single(img, mask,
-#                                                 metric_kwargs["pixel_area_pc2"],
-#                                                 metric_kwargs["R_21"], metric_kwargs["R_31"],
-#                                                 metric_kwargs["alpha_CO"],
-#                                                 metric_kwargs["name"],
-#                                                 co32=metric_kwargs["co32"])
-#                 except Exception:
-#                     cl = np.nan
-#                 clump_vals.append(cl)
-
-#             # new LCO metric
-#             if (isolate_set is None) or ('LCO' in isolate_set):
-#                 try:
-#                     LCO = LCO_single(img, mask,
-#                                      metric_kwargs["pixel_area_pc2"],
-#                                      metric_kwargs["R_21"], metric_kwargs["R_31"],
-#                                      metric_kwargs["alpha_CO"],
-#                                      metric_kwargs["name"],
-#                                      co32=metric_kwargs["co32"])
-#                 except Exception:
-#                     LCO = np.nan
-#                 LCO_vals.append(LCO)
-
-#         return {
-#             "gini": gini_vals,
-#             "asym": asym_vals,
-#             "smooth": smooth_vals,
-#             "conc": conc_vals,
-#             "tmass": tm_vals,
-#             "mw": mw_vals,
-#             "aw": aw_vals,
-#             "clump": clump_vals,
-#             "LCO": LCO_vals
-#         }
-
-#     except Exception as e:
-#         # return a serializable error payload instead of crashing the worker
-#         tb = traceback.format_exc()
-#         return {"error": True, "exc_str": str(e), "traceback": tb}
 
 
 # ------------------ Metric Functions ------------------
@@ -647,13 +501,6 @@ def process_file(args, images_too_small, isolate=None):
     image[:] = target_image
     mask[:] = target_mask
     error_map[:] = target_emap
-
-    # print(f"\n--- MASK DEBUG for {name} ---")
-    # print("image finite pixels:", np.sum(np.isfinite(image)))
-    # print("mask false (kept):", np.sum(~mask))
-    # print("mask true (masked out):", np.sum(mask))
-    # print("fraction kept:", np.sum(~mask) / image.size)
-    # print("--- END ---\n")
 
 
     # Update WCS for cutout
@@ -1173,7 +1020,7 @@ if __name__ == '__main__':
     # CO(2-1)
     outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
     print("Starting CO(2-1) analysis...")
-    #process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True)
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5)
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5)
 
