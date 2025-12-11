@@ -44,21 +44,21 @@ def ms_frame_from_phase(phase0):
         return 'icrs'
 
 # ---------------- user params ----------------
-name = 'NGC4254'
+name = 'NGC3351'
 row = llamatab[llamatab['id'] == name]
 if len(row) == 0:
     raise RuntimeError(f"No entry '{name}' found in llama table")
 
 D_Mpc = float(row['D [Mpc]'][0])
 
-input_ms = 'calibrated_final.ms'
+input_ms = 'trimmed_calibrated_final.ms'
 output_ms = 'trimmed_' + input_ms
 
 # ensure these are plain floats
 target_ra = float(row['RA (deg)'][0])    # deg (catalog assumed J2000/FK5)
 target_dec = float(row['DEC (deg)'][0])  # deg
 
-max_sep_kpc = 3.0
+max_sep_kpc = 1.0
 max_sep_arcsec = (max_sep_kpc / D_Mpc) * 206.265  # arcsec
 
 # ---------------- open MS ----------------

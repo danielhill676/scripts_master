@@ -164,7 +164,7 @@ REGTYPE     auto
 #WFUNC       2
 LINEAR      {LINEAR}
 #SIDE        B
-FLAGERRORS  true
+FLAGERRORS  false
 BADOUT      true
 NORMALCUBE  true
 DISTANCE    {D_Mpc}

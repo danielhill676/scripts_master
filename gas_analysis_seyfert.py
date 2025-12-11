@@ -502,6 +502,8 @@ def process_file(args, images_too_small, isolate=None):
     mask[:] = target_mask
     error_map[:] = target_emap
 
+    emission_pixels = np.count_nonzero(np.abs(image) > 1e-10)
+
 
     # Update WCS for cutout
     wcs_trimmed = wcs_full.deepcopy()
@@ -633,39 +635,6 @@ def process_file(args, images_too_small, isolate=None):
         shm_err.close()
         shm_err.unlink()
 
-
-        # cpu = multiprocessing.cpu_count()
-        # chunk_size = N_MC // cpu
-        # chunks = [images_mc[i:i+chunk_size] for i in range(0, N_MC, chunk_size)]
-
-        # metric_kwargs = dict(
-        #     name=name,
-        #     co32=co32,
-        #     pixel_area_pc2=pixel_area_pc2,
-        #     R_21=R_21,
-        #     R_31=R_31,
-        #     alpha_CO=alpha_CO,
-        #     pc_per_arcsec=pc_per_arcsec,
-        #     pixel_scale_arcsec=pixel_scale_arcsec
-        # )
-
-    #     with ProcessPoolExecutor(max_workers=cpu) as ex:
-    #         results = list(ex.map(
-    #             process_mc_chunk_shm,
-    #             chunks,
-    #             [mask] * len(chunks),
-    #             [metric_kwargs] * len(chunks),
-    #             [isolate] * len(chunks)
-    #         ))
-
-    #     # after collection, inspect for errors:
-    #     for i, r in enumerate(results):
-    #         if isinstance(r, dict) and r.get("error"):
-    #             print("Worker", i, "raised an exception:")
-    #             print(r.get("traceback"))
-    #             # optionally also raise to stop execution
-    #             raise RuntimeError(f"Worker {i} failed: {r.get('exc_str')}")
-
         def merge_global(metric_name):
             """Concatenate raw MC values across chunks and compute global stats."""
             
@@ -788,7 +757,8 @@ def process_file(args, images_too_small, isolate=None):
         "total_mass (M_sun)": round(total_mass, 2), "total_mass_err (M_sun)": round(total_mass_err, 2),
         "L'CO (K km_s pc2)": round(LCO, 3), "L'CO_err (K km_s pc2)": round(LCO_err, 3),
         "mass_weighted_sd": round(mw_sd, 1), "mass_weighted_sd_err": round(mw_sd_err, 1),
-        "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1)
+        "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1),
+        "emission_pixels": emission_pixels
     }
 
 # ------------------ Parallel Directory Processing ------------------
