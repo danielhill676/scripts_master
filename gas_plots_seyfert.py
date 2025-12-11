@@ -14,6 +14,7 @@ from astroquery.ipac.ned import Ned
 from astroquery.exceptions import RemoteServiceError
 import requests
 import time
+from IPython.display import display
 
 stats_table = pd.DataFrame()
 
@@ -192,8 +193,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     # --- Exclude names here ---
     if exclude_names is not None:
         exclude_norm = [n.strip().upper() for n in exclude_names]
-        print('exclude',exclude_norm)
-
 
         # These are already DataFrames → filter with boolean masks
         merged_AGN_clean = merged_AGN_clean[
@@ -210,7 +209,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         inactive_bol = inactive_bol[
             ~inactive_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
         ]
-        print(merged_inactive_clean["Name_clean"])
 
         # GB21, WIS, PHANGS, SIM: detect if list or DataFrame
         if use_gb21:
@@ -240,8 +238,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     
     merged_AGN_clean = merged_AGN_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
     merged_inactive_clean = merged_inactive_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
-
-    print(merged_inactive_clean["Name_clean"])
 
     if use_gb21:
         GB21_df = pd.DataFrame(GB21)
@@ -302,8 +298,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     names_inactive = merged_inactive_clean["Name_clean"].values
     xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
     yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
-
-    print(x_inactive,y_inactive,names_inactive)
 
     if soloplot == 'AGN':
         if x_agn.empty or y_agn.empty:
@@ -511,7 +505,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='darkred', zorder=10)
 
         if soloplot in (None, 'inactive'):
-            print(x_inactive,y_inactive,names_inactive)
             ax_scatter.errorbar(
                 x_inactive, y_inactive,
                 xerr=xerr_inactive, yerr=yerr_inactive,
@@ -1077,7 +1070,7 @@ inactive_data = [
 agn_Rosario2018 = pd.DataFrame([
     {"Name": "ESO 021-G004", "log L′ CO": "8.083", "log LGAL": "43.45", "log LAGN": "42.30", "log LX": "42.19", "log NH": "23.8", "log LK,AGN": ""},
     {"Name": "ESO 137-G034", "log L′ CO": "7.820", "log LGAL": "43.68", "log LAGN": "43.23", "log LX": "42.34", "log NH": "24.3", "log LK,AGN": ""},
-    {"Name": "MCG-05-23-016", "log L′ CO": "",      "log LGAL": "41.28", "log LAGN": "43.70", "log LX": "43.16", "log NH": "22.2", "log LK,AGN": "43.00"},
+    {"Name": "MCG-05-23-016", "log L′ CO": "7.445",      "log LGAL": "41.28", "log LAGN": "43.70", "log LX": "43.16", "log NH": "22.2", "log LK,AGN": "43.00"},
     {"Name": "MCG-06-30-015", "log L′ CO": "7.109", "log LGAL": "42.74", "log LAGN": "43.27", "log LX": "42.56", "log NH": "20.9", "log LK,AGN": "42.35"},
     {"Name": "NGC 1365",      "log L′ CO": "8.782", "log LGAL": "44.82", "log LAGN": "43.05", "log LX": "42.31", "log NH": "22.2", "log LK,AGN": "42.63"},
     {"Name": "NGC 2110",      "log L′ CO": "7.603", "log LGAL": "43.64", "log LAGN": "43.20", "log LX": "42.65", "log NH": "22.9", "log LK,AGN": "42.69"},
@@ -1097,25 +1090,27 @@ agn_Rosario2018 = pd.DataFrame([
 
 inactive_Rosario2018 = pd.DataFrame([
     {"Name": "ESO 093-G003", "log L′ CO": "8.233", "log LGAL": "43.91", "log LAGN": "40.8"},
-    {"Name": "ESO 208-G021", "log L′ CO": "",      "log LGAL": "41.93", "log LAGN": "41.3"},
+    {"Name": "ESO 208-G021", "log L′ CO": "6.34",      "log LGAL": "41.93", "log LAGN": "41.3"},
     {"Name": "IC 4653",      "log L′ CO": "7.642", "log LGAL": "43.15", "log LAGN": "41.7"},
     {"Name": "NGC 1079",     "log L′ CO": "6.610", "log LGAL": "42.51", "log LAGN": "39.6"},
     {"Name": "NGC 1947",     "log L′ CO": "7.888", "log LGAL": "42.72", "log LAGN": "39.5"},
-    {"Name": "NGC 2775",     "log L′ CO": "",      "log LGAL": "43.32", "log LAGN": "40.6"},
+    {"Name": "NGC 2775",     "log L′ CO": "6.520",      "log LGAL": "43.32", "log LAGN": "40.6"},
     {"Name": "NGC 3175",     "log L′ CO": "8.040", "log LGAL": "43.68", "log LAGN": "40.0"},
     {"Name": "NGC 3351",     "log L′ CO": "7.911", "log LGAL": "43.55", "log LAGN": "39.4"},
     {"Name": "NGC 3717",     "log L′ CO": "8.489", "log LGAL": "43.96", "log LAGN": "40.7"},
     {"Name": "NGC 3749",     "log L′ CO": "8.691", "log LGAL": "43.86", "log LAGN": "40.7"},
     {"Name": "NGC 4224",     "log L′ CO": "8.086", "log LGAL": "42.93", "log LAGN": "42.0"},
     {"Name": "NGC 4254",     "log L′ CO": "8.134", "log LGAL": "44.84", "log LAGN": "40.5"},
-    {"Name": "NGC 4260",     "log L′ CO": "",      "log LGAL": "42.35", "log LAGN": "40.8"},
+    {"Name": "NGC 4260",     "log L′ CO": "7.258",      "log LGAL": "42.35", "log LAGN": "40.8"},
     {"Name": "NGC 5037",     "log L′ CO": "8.328", "log LGAL": "43.06", "log LAGN": "40.1"},
-    {"Name": "NGC 5845",     "log L′ CO": "",      "log LGAL": "41.69", "log LAGN": "40.9"},
+    {"Name": "NGC 5845",     "log L′ CO": "6.999",      "log LGAL": "41.69", "log LAGN": "40.9"},
     {"Name": "NGC 5921",     "log L′ CO": "7.960", "log LGAL": "43.40", "log LAGN": "40.7"},
     {"Name": "NGC 718",      "log L′ CO": "7.262", "log LGAL": "42.66", "log LAGN": "38.8"},
     {"Name": "NGC 7727",     "log L′ CO": "7.449", "log LGAL": "42.56", "log LAGN": "41.2"},
     {"Name": "NGC 1375",     "log L′ CO": "NaN", "log LGAL": "NaN", "log LAGN": "NaN"}
 ])
+
+
 
 
 GB21_density = pd.DataFrame([
@@ -1421,6 +1416,12 @@ phangs_properties = [
 ]
 
 
+wis_H_phot = Table.read('/data/c3040163/llama/wisdom_2mass_Hphotometry.fits', format='fits')
+phangs_H_phot = Table.read('/data/c3040163/llama/phangs_2mass_Hphotometry.fits', format='fits')
+display(wis_H_phot)
+display(phangs_H_phot)
+
+
 
 
  #   """posible x_column: 'Distance (Mpc)', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
@@ -1514,12 +1515,22 @@ for mask in masks:
         plot_llama_property('Bar', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
         plot_llama_property('Bar','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
 
+        ############## L'CO comparison with Ros18 #####################
+
+        plot_llama_property('log L′ CO','L\'CO (K km_s pc2)',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=None)
+
+
     ############### CAS WISDOM, PHANGS coplot   #############
 
     if R_kpc == 1.5:
         plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
         plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
         plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
+
+
+
+
+
 
     ############## galaxy properties WISDOM, PHANGS coplot #############
 
