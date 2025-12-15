@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
 from matplotlib import gridspec
-#from IPython.display import display
 import math
 from scipy.stats import ks_2samp
 from matplotlib.transforms import Bbox
@@ -64,7 +63,7 @@ def is_categorical(series):
         return True
     return False
 
-def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, GB21, wis, phangs, sim, use_gb21=False, soloplot=None, exclude_names=None, logx=False, logy=False,
+def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, GB21, wis, sim, phangs, use_gb21=False, soloplot=None, exclude_names=None, logx=False, logy=False,
                         background_image=None, manual_limits=None, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,rebin=None,mask=None,R_kpc=1):
     """possible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
@@ -267,9 +266,13 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         
 
         wis_df = pd.merge(wis_df, df_wis, left_on='Name', right_on='Name',how='left')
-        D_cm = wis_df["Distance (Mpc)"] * 3.0856776e24
-        L = 4 * np.pi * D_cm**2 * wis_df["H flux"]
-        wis_df["log LH (L⊙)"] = np.log10(L / 3.828e23)
+        D_cm = pd.to_numeric(wis_df["Distance (Mpc)"], errors="coerce") * 3.0856776e24
+        H_flux = pd.to_numeric(wis_df["H flux"], errors="coerce") if "H flux" in wis_df.columns else pd.Series(np.nan, index=wis_df.index)
+        L = 4 * np.pi * D_cm**2 * H_flux
+        # only take log10 where L is positive, otherwise set NaN
+        with np.errstate(invalid="ignore", divide="ignore"):
+            wis_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
+
         wis_df[x_column] = pd.to_numeric(wis_df[x_column], errors='coerce')
         wis_df[y_column] = pd.to_numeric(wis_df[y_column], errors='coerce')
         wis_clean = wis_df.dropna(subset=[x_column, y_column])
@@ -282,29 +285,47 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
         df_phangs = pd.DataFrame(phangs_properties)
         df_phangs2 = pd.DataFrame(phangs_properties2).T.reset_index()
-        df_phangs2 = df_wis.rename(columns={'index': 'Name'})
+        df_phangs2 = df_phangs2.rename(columns={'index': 'Name'})
         df_phangs['name'] = normalize_name(df_phangs['name'])
         df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)   # remove all spaces
         df_phangs2['name'] = normalize_name(df_phangs['name'])
         df_phangs2['name'] = df_phangs['name'].str.replace(" ", "", regex=False)   # remove all spaces
         phangs_H_phot_df = phangs_H_phot.to_pandas()
         phangs_H_phot_df['ID'] = normalize_name(phangs_H_phot_df['ID'])
+        phangs_H_phot_df['ID'] = phangs_H_phot_df['ID'].str.replace(" ", "", regex=False)
+        # merge phangs H-photometry into df_phangs using normalized keys
         df_phangs = df_phangs.merge(
-    phangs_H_phot_df,
-    left_on="name",
-    right_on="ID",
-    how="left"
-)
-        df_phangs = df_phangs.merge(
-    df_phangs2,
-    left_on="name",
-    right_on="Name",
-    how="left"
+            phangs_H_phot_df,
+            left_on="name",
+            right_on="ID",
+            how="left"
         )
-        phangs_df = pd.merge(phangs_df, df_phangs, left_on='Name', right_on='name',how='left')
-        D_cm = phangs_df["Distance (Mpc)"] * 3.0856776e24
-        L = 4 * np.pi * D_cm**2 * phangs_df["H flux"]
-        phangs_df["log LH (L⊙)"] = np.log10(L / 3.828e23)
+        # ensure df_phangs2 was created/renamed correctly and normalize its Name column
+        df_phangs2 = df_phangs2.rename(columns={'index': 'Name'})
+        df_phangs2['Name'] = normalize_name(df_phangs2['Name'])
+        df_phangs2['Name'] = df_phangs2['Name'].str.replace(" ", "", regex=False)
+
+        # also normalize df_phangs 'name' (remove spaces already done above but keep for safety)
+        df_phangs['name'] = normalize_name(df_phangs['name'])
+        df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)
+        # merge additional properties from df_phangs2
+        df_phangs = df_phangs.merge(
+            df_phangs2,
+            left_on="name",
+            right_on="Name",
+            how="left"
+        )
+        # Ensure phangs_df 'Name' is in the same normalized form as df_phangs['Name'] before final merge
+        phangs_df['Name'] = normalize_name(phangs_df['Name'])
+        phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)
+
+        phangs_df = pd.merge(phangs_df, df_phangs, left_on='Name', right_on='Name', how='left')
+        D_cm = pd.to_numeric(phangs_df["Distance (Mpc)"], errors="coerce") * 3.0856776e24
+        H_flux = pd.to_numeric(phangs_df["H flux"], errors="coerce") if "H flux" in phangs_df.columns else pd.Series(np.nan, index=phangs_df.index)
+        L = 4 * np.pi * D_cm**2 * H_flux
+                # only take log10 where L is positive, otherwise set NaN
+        with np.errstate(invalid="ignore", divide="ignore"):
+            phangs_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
         phangs_df[x_column] = pd.to_numeric(phangs_df[x_column], errors='coerce')
         phangs_df[y_column] = pd.to_numeric(phangs_df[y_column], errors='coerce')
         phangs_clean = phangs_df.dropna(subset=[x_column, y_column])
@@ -1622,12 +1643,12 @@ for mask in masks:
 
     ############### CAS WISDOM, PHANGS coplot   #############
 
-    if R_kpc == 1.5:
-        # plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
-        # plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
-        # plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
+        if R_kpc == 1.5:
+            plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
+            plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
+            plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
 
-        plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
+            plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
 
 
 
