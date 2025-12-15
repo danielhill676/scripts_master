@@ -454,7 +454,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             "spearman_sim": rho_sim,
             "spearman_sim_p": p_sim,
             "rebin": rebin,
-            "mask": mask
+            "mask": mask,
+            "R_kpc": R_kpc
         }
         
         if stats_table.empty:
