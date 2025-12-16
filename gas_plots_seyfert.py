@@ -560,6 +560,22 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if not comb_llama:
                 for x, y, name in zip(x_agn, y_agn, names_agn):
                     ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='darkred', zorder=10)
+            elif comb_llama and use_phangs and use_wis:
+                names_phangs_wis = names_phangs + names_wis
+                shared_names_agn = [x if x in names_phangs_wis else None for x in names_agn]
+                for x, y, name in zip(x_agn, y_agn, shared_names_agn):
+                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+            elif comb_llama and use_phangs and not use_wis:
+                shared_names_agn = [x if x in names_wis else None for x in names_agn]
+                for x, y, name in zip(x_agn, y_agn, shared_names_agn):
+                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+            elif comb_llama and use_wis and not use_phangs:
+                shared_names_agn = [x if x in names_phangs else None for x in names_agn]
+                for x, y, name in zip(x_agn, y_agn, shared_names_agn):
+                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+                
+
+
 
         if soloplot in (None, 'inactive'):
             ax_scatter.errorbar(
@@ -571,6 +587,19 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if not comb_llama:
                 for x, y, name in zip(x_inactive, y_inactive, names_inactive):
                     ax_scatter.text(float(x), float(y), name, fontsize=7, color='navy', zorder=10)
+            elif comb_llama and use_phangs and use_wis:
+                names_phangs_wis = names_phangs + names_wis
+                shared_names_inactive = [x if x in names_phangs_wis else None for x in names_inactive]
+                for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
+                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+            elif comb_llama and use_phangs and not use_wis:
+                shared_names_inactive = [x if x in names_wis else None for x in names_inactive]
+                for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
+                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+            elif comb_llama and use_wis and not use_phangs:
+                shared_names_inactive = [x if x in names_phangs else None for x in names_inactive]
+                for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
+                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
         
         if soloplot is None and use_gb21:
             ax_scatter.scatter(
@@ -589,6 +618,13 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if not comb_llama:
                 for x, y, name in zip(x_wis, y_wis, names_wis):
                     ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
+            elif comb_llama:
+                names_llama = names_agn + names_inactive
+                shared_names_wis = [x if x in names_llama else None for x in names_wis]
+                for x, y, name in zip(x_wis, y_wis, shared_names_wis):
+                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
+
+
 
         if soloplot is None and use_phangs:
             ax_scatter.scatter(
@@ -598,6 +634,11 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if not comb_llama:
                 for x, y, name in zip(x_phangs, y_phangs, names_phangs):
                     ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkorange', zorder=10)
+            elif comb_llama:
+                names_llama = names_agn + names_inactive
+                shared_names_phangs = [x if x in names_llama else None for x in names_phangs]
+                for x, y, name in zip(x_phangs, y_phangs, shared_names_phangs):
+                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkorange', zorder=10)
 
         if soloplot is None and use_sim:
             ax_scatter.scatter(
@@ -606,6 +647,11 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             )
             if not comb_llama:
                 for x, y, name in zip(x_sim, y_sim, names_sim):
+                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='saddlebrown', zorder=10)
+            elif comb_llama:
+                names_llama = names_agn + names_inactive
+                shared_names_sim = [x if x in names_llama else None for x in names_sim]
+                for x, y, name in zip(x_sim, y_sim, shared_names_sim):
                     ax_scatter.text(float(x), float(y), name, fontsize=7, color='saddlebrown', zorder=10)
 
         # apply scale and limits
