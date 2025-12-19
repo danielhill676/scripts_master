@@ -775,27 +775,39 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
     for name in subdirs:
         subdir = os.path.join(outer_dir, name)
         if rebin is not None and not co32:
+            if name in ["NGC4388","NGC6814","NGC5728"]:
+                continue
             if os.path.exists(os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_mom0.fits")):
                 mom0_file = os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_mom0.fits")
                 emom0_file = os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_emom0.fits")
             else:
+                if name in ["NGC4388","NGC6814","NGC5728"]:
+                    continue
                 print(f'native resolution for {name} is lower than {rebin} pc, using native res files')
                 mom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_mom0.fits")
                 emom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_emom0.fits")
 
         elif rebin is not None and co32:
+            if name not in ["NGC4388","NGC6814","NGC5728"]:
+                continue
             if os.path.exists(os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_mom0.fits")):
                 mom0_file = os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_mom0.fits")
                 emom0_file = os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_emom0.fits")
             else:
+                if name not in ["NGC4388","NGC6814","NGC5728"]:
+                    continue
                 print(f'native resolution for {name} is lower than {rebin} pc, using native res files')
                 mom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_mom0.fits")
                 emom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_emom0.fits")
             
         elif not rebin and not co32:
+            if name in ["NGC4388","NGC6814","NGC5728"]:
+                continue
             mom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_mom0.fits")
             emom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_emom0.fits")
         else:
+            if name not in ["NGC4388","NGC6814","NGC5728"]:
+                continue
             mom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_mom0.fits")
             emom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_emom0.fits")
 
@@ -806,6 +818,13 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
         if os.path.exists(mom0_file) and os.path.exists(emom0_file):
             args_list.append((mom0_file, emom0_file, subdir, output_dir, co32,rebin,mask,R_kpc,flux_mask))
             meta_info.append((name, group, output_dir))
+            ############### Copy moment0 files to central location ###############
+            mom0_filename = os.path.basename(mom0_file)
+            emom0_filename = os.path.basename(emom0_file)
+            os.system(f'mkdir -p /data/c3040163/llama/alma/pipeline_m0/{name}/')
+            os.system(f'cp {mom0_file} /data/c3040163/llama/alma/pipeline_m0/{name}/{mom0_filename}')
+            os.system(f'cp {emom0_file} /data/c3040163/llama/alma/pipeline_m0/{name}/{emom0_filename}')
+            #######################################################################
         else:
             print(f"Skipping {name}: required files not found")
 
@@ -1005,14 +1024,14 @@ if __name__ == '__main__':
     outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
     print("Starting CO(2-1) analysis...")
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
 
     # CO(3-2)
@@ -1020,11 +1039,11 @@ if __name__ == '__main__':
     outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
     print("Starting CO(3-2) analysis...")
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
