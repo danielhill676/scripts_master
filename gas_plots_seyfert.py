@@ -74,7 +74,7 @@ def normalize_name(col):
     )
 
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, GB21, wis, sim, phangs, use_gb21=False, soloplot=None, exclude_names=None, logx=False, logy=False,
-                        background_image=None, manual_limits=None, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,rebin=None,mask=None,R_kpc=1,compare=False):
+                        background_image=None, manual_limits=None, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False):
     """possible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -556,6 +556,22 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
         yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
 
+        names_llama = list(names_agn) + list(names_inactive)
+        if use_phangs:
+            shared_names_phangs = np.intersect1d(names_phangs, names_llama)
+            if not plotshared:
+                mask_keep = ~np.isin(names_phangs, names_llama)
+                x_phangs = x_phangs[mask_keep]
+                y_phangs = y_phangs[mask_keep]
+
+
+        if use_wis:
+            shared_names_wis = np.intersect1d(names_wis, names_llama)
+            if not plotshared:
+                mask_keep = ~np.isin(names_wis, names_llama)
+                x_wis = x_wis[mask_keep]
+                y_wis = y_wis[mask_keep]
+
         if soloplot == 'AGN':
             if x_agn.empty or y_agn.empty:
                 print("No valid AGN data to plot.")
@@ -819,9 +835,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 if not comb_llama:
                     for x, y, name in zip(x_wis, y_wis, names_wis):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
-                elif comb_llama:
+                elif comb_llama and plotshared:
                     names_llama = list(names_agn) + list(names_inactive)
-                    shared_names_wis = [x if x in names_llama else None for x in names_wis]
                     for x, y, name in zip(x_wis, y_wis, shared_names_wis):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
 
@@ -835,9 +850,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 if not comb_llama:
                     for x, y, name in zip(x_phangs, y_phangs, names_phangs):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkorange', zorder=10)
-                elif comb_llama:
-                    names_llama = list(names_agn) + list(names_inactive)
-                    shared_names_phangs = [x if x in names_llama else None for x in names_phangs]
+                elif comb_llama and plotshared:
                     for x, y, name in zip(x_phangs, y_phangs, shared_names_phangs):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkorange', zorder=10)
 
@@ -850,7 +863,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     for x, y, name in zip(x_sim, y_sim, names_sim):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='saddlebrown', zorder=10)
                 elif comb_llama:
-                    names_llama = list(names_agn) + list(names_inactive)
+                    
                     shared_names_sim = [x if x in names_llama else None for x in names_sim]
                     for x, y, name in zip(x_sim, y_sim, shared_names_sim):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='saddlebrown', zorder=10)
