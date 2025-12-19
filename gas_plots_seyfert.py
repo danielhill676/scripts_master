@@ -173,7 +173,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             df_combined['id'] = df_combined['id'].fillna(df_combined['Name_clean'].map(manual_map))
 
             # Add derived LX column
-            inactive_bol['log LAGN'] = pd.to_numeric(inactive_bol['log LAGN'], errors='coerce')
+            inactive_bol = inactive_bol.copy()
+            inactive_bol.loc[:, 'log LAGN'] = pd.to_numeric(inactive_bol['log LAGN'], errors='coerce')
             inactive_bol['log LX'] = inactive_bol['log LAGN'].apply(
                 lambda log_LAGN: math.log10((12.76 * (1 + (log_LAGN - math.log10(3.82e33)) / 12.15)**18.78) * 3.82e33)
             )
@@ -214,8 +215,18 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     ~inactive_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
                 ]
 
-            merged_AGN_clean = merged_AGN_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
-            merged_inactive_clean = merged_inactive_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
+            merged_AGN_clean = (
+                merged_AGN_clean
+                    .replace([np.inf, -np.inf], np.nan)
+                    .infer_objects(copy=False)
+                    .dropna(subset=[x_column, y_column])
+            )
+            merged_inactive_clean = (
+                merged_inactive_clean
+                    .replace([np.inf, -np.inf], np.nan)
+                    .infer_objects(copy=False)
+                    .dropna(subset=[x_column, y_column])
+            )
 
             x_agn = merged_AGN_clean[x_column]
             y_agn = merged_AGN_clean[y_column]
@@ -280,794 +291,598 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         return
 
 ###################### end of comparison block ##########################
+    if not compare:
 
-    # Handle all filename logic
-    if rebin is not None and mask is not None:
-        AGN_path = f"{base_AGN}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
-        inactive_path = f"{base_inactive}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
+        # Handle all filename logic
+        if rebin is not None and mask is not None:
+            AGN_path = f"{base_AGN}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
+            inactive_path = f"{base_inactive}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
 
-    else:
-        AGN_path = f"{base_AGN}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
-        inactive_path = f"{base_inactive}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
-
-    # ---- Final fallback checks ----
-    if not os.path.exists(AGN_path):
-        print(f"WARNING: {AGN_path} not found → using default {default_AGN}")
-        AGN_path = default_AGN
-
-    if not os.path.exists(inactive_path):
-        print(f"WARNING: {inactive_path} not found → using default {default_inactive}")
-        inactive_path = default_inactive
-
-    # ---- Load files ----
-    fit_data_AGN = pd.read_csv(AGN_path)
-    fit_data_inactive = pd.read_csv(inactive_path)
-
-    df_combined['Name_clean'] = normalize_name(df_combined['Name'])
-    llamatab['name_clean'] = normalize_name(llamatab['name'])
-    agn_bol['Name_clean'] = normalize_name(agn_bol['Name'])
-    inactive_bol['Name_clean'] = normalize_name(inactive_bol['Name'])
-    fit_data_AGN['Galaxy_clean'] = normalize_name(fit_data_AGN['Galaxy'])
-    fit_data_inactive['Galaxy_clean'] = normalize_name(fit_data_inactive['Galaxy'])
-
-    # --- Map name → id ---
-    name_to_id = dict(zip(llamatab['name_clean'], llamatab['id']))
-    df_combined['id'] = df_combined['Name_clean'].map(name_to_id)
-
-    # --- Manual overrides for special cases ---
-    manual_map = {
-        "NGC 5128 (CEN A)": "NGC5128",
-        "MCG-06-30-015": "MCG630",   # adjust ID if needed
-        "NGC 1375": "NGC1375"
-    }
-    df_combined['id'] = df_combined['id'].fillna(df_combined['Name_clean'].map(manual_map))
-
-    # Add derived LX column
-    inactive_bol['log LAGN'] = pd.to_numeric(inactive_bol['log LAGN'], errors='coerce')
-    inactive_bol['log LX'] = inactive_bol['log LAGN'].apply(
-        lambda log_LAGN: math.log10((12.76 * (1 + (log_LAGN - math.log10(3.82e33)) / 12.15)**18.78) * 3.82e33)
-    )
-
-    # Merge with fit data
-    merged_AGN = pd.merge(df_combined, fit_data_AGN, left_on='id', right_on='Galaxy_clean',how='right')
-    merged_AGN = pd.merge(merged_AGN, agn_bol, left_on='Name_clean', right_on='Name_clean',how='left')
-    merged_inactive = pd.merge(df_combined, fit_data_inactive, left_on='id', right_on='Galaxy_clean',how='right')
-    merged_inactive = pd.merge(merged_inactive, inactive_bol, left_on='Name_clean', right_on='Name_clean',how='left')
-
-    for df in [merged_AGN, merged_inactive]:
-        if "Bar" in df.columns:
-            df["Bar"] = df["Bar"].astype(str).str.strip().replace("", np.nan)
-            df["Bar"] = df["Bar"].astype("category")
-
-            # Determine if axes are categorical
-    is_x_categorical = is_categorical(merged_AGN[x_column].dropna())
-    is_y_categorical = is_categorical(merged_AGN[y_column].dropna())
-    if is_x_categorical:
-        print(f"Detected categorical x-axis: {x_column}")
-    if is_y_categorical:
-        print(f"Detected categorical y-axis: {y_column}")
-
-    if not is_x_categorical and not is_y_categorical:
-
-        # Clean AGN data
-        merged_AGN[x_column] = pd.to_numeric(merged_AGN[x_column], errors='coerce')
-        merged_AGN[y_column] = pd.to_numeric(merged_AGN[y_column], errors='coerce')
-        merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
-
-        # Clean inactive data
-        merged_inactive[x_column] = pd.to_numeric(merged_inactive[x_column], errors='coerce')
-        merged_inactive[y_column] = pd.to_numeric(merged_inactive[y_column], errors='coerce')
-        merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
-
-    else:
-        merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
-        merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
-
-    # --- Exclude names here ---
-    if exclude_names is not None:
-        exclude_norm = [n.strip().upper() for n in exclude_names]
-
-        # These are already DataFrames → filter with boolean masks
-        merged_AGN_clean = merged_AGN_clean[
-            ~merged_AGN_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
-        ]
-
-
-        merged_inactive_clean = merged_inactive_clean[
-            ~merged_inactive_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
-        ]
-        agn_bol = agn_bol[
-            ~agn_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
-        ]
-        inactive_bol = inactive_bol[
-            ~inactive_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
-        ]
-
-        # GB21, WIS, PHANGS, SIM: detect if list or DataFrame
-        if use_gb21:
-            if isinstance(GB21, pd.DataFrame):
-                GB21 = GB21[~GB21["Name"].str.strip().str.upper().isin(exclude_norm)]
-            else:  # list of dicts
-                GB21 = [row for row in GB21 if str(row["Name"]).strip().upper() not in exclude_norm]
-
-        if use_wis:
-            if isinstance(wis, pd.DataFrame):
-                wis = wis[~wis["Name"].str.strip().str.upper().isin(exclude_norm)]
-            else:
-                wis = [row for row in wis if str(row["Name"]).strip().upper() not in exclude_norm]
-
-        if use_phangs:
-            if isinstance(phangs, pd.DataFrame):
-                phangs = phangs[~phangs["Name"].str.strip().str.upper().isin(exclude_norm)]
-            else:
-                phangs = [row for row in phangs if str(row["Name"]).strip().upper() not in exclude_norm]
-
-        if use_sim:
-            if isinstance(sim, pd.DataFrame):
-                sim = sim[~sim["Name"].str.strip().str.upper().isin(exclude_norm)]
-            else:
-                sim = [row for row in sim if str(row["Name"]).strip().str.upper() not in exclude_norm]
-
-    
-    merged_AGN_clean = merged_AGN_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
-    merged_inactive_clean = merged_inactive_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
-
-    if use_gb21:
-        GB21_df = pd.DataFrame(GB21)
-        GB21_df[x_column] = pd.to_numeric(GB21_df[x_column], errors='coerce')
-        GB21_df[y_column] = pd.to_numeric(GB21_df[y_column], errors='coerce')
-        GB21_clean = GB21_df.dropna(subset=[x_column, y_column])
-        x_gb21 = GB21_clean[x_column]
-        y_gb21 = GB21_clean[y_column]
-        names_gb21 = GB21_clean["Name"].values
-    if use_wis:
-        wis_df = pd.DataFrame(wis)
-        wis_df['Name'] = normalize_name(wis_df['Name'])
-        wis_df['Name'] = wis_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
-        df_wis = wis_properties
-        df_wis['Name'] = df_wis.index
-        df_wis['Name'] = normalize_name(df_wis['Name'])
-        df_wis['Name'] = df_wis['Name'].str.replace(" ", "", regex=False)   # remove all spaces
-        wis_H_phot_df = wis_H_phot.to_pandas()
-        wis_H_phot_df['ID'] = normalize_name(wis_H_phot_df['ID'])
-        df_wis = df_wis.merge(
-    wis_H_phot_df,
-    left_on="Name",
-    right_on="ID",
-    how="left"
-)
-        
-
-        wis_df = pd.merge(wis_df, df_wis, left_on='Name', right_on='Name',how='left')
-        D_cm = pd.to_numeric(wis_df["Distance (Mpc)"], errors="coerce") * 3.0856776e24
-        H_flux = pd.to_numeric(wis_df["H flux"], errors="coerce") if "H flux" in wis_df.columns else pd.Series(np.nan, index=wis_df.index)
-        L = 4 * np.pi * D_cm**2 * H_flux
-        # only take log10 where L is positive, otherwise set NaN
-        with np.errstate(invalid="ignore", divide="ignore"):
-            wis_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
-
-        wis_df[x_column] = pd.to_numeric(wis_df[x_column], errors='coerce')
-        wis_df[y_column] = pd.to_numeric(wis_df[y_column], errors='coerce')
-        wis_clean = wis_df.dropna(subset=[x_column, y_column])
-        x_wis = wis_clean[x_column]
-        y_wis = wis_clean[y_column]
-        names_wis = wis_clean["Name"].values
-    if use_phangs:
-        phangs_df = pd.DataFrame(phangs)
-        phangs_df['Name'] = normalize_name(phangs_df['Name'])
-        phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
-        df_phangs = pd.DataFrame(phangs_properties)
-        df_phangs2 = pd.DataFrame(phangs_properties2).T.reset_index()
-        df_phangs2 = df_phangs2.rename(columns={'index': 'Name'})
-        df_phangs = df_phangs.reset_index()  # moves index to column 'name'
-        if 'name' in df_phangs.columns[df_phangs.columns.duplicated()]:
-            df_phangs = df_phangs.loc[:, ~df_phangs.columns.duplicated()]
-        df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)   # remove all spaces
-        df_phangs2['name'] = normalize_name(df_phangs['name'])
-        df_phangs2['name'] = df_phangs['name'].str.replace(" ", "", regex=False)   # remove all spaces
-        phangs_H_phot_df = phangs_H_phot.to_pandas()
-        phangs_H_phot_df['ID'] = normalize_name(phangs_H_phot_df['ID'])
-        phangs_H_phot_df['ID'] = phangs_H_phot_df['ID'].str.replace(" ", "", regex=False)
-        # merge phangs H-photometry into df_phangs using normalized keys
-        df_phangs = df_phangs.merge(
-            phangs_H_phot_df,
-            left_on="name",
-            right_on="ID",
-            how="left"
-        )
-        # ensure df_phangs2 was created/renamed correctly and normalize its Name column
-        df_phangs2 = df_phangs2.rename(columns={'index': 'Name'})
-        df_phangs2['Name'] = normalize_name(df_phangs2['Name'])
-        df_phangs2['Name'] = df_phangs2['Name'].str.replace(" ", "", regex=False)
-
-        # also normalize df_phangs 'name' (remove spaces already done above but keep for safety)
-        df_phangs['name'] = normalize_name(df_phangs['name'])
-        df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)
-        # merge additional properties from df_phangs2
-        df_phangs = df_phangs.merge(
-            df_phangs2,
-            left_on="name",
-            right_on="Name",
-            how="left"
-        )
-        # Ensure phangs_df 'Name' is in the same normalized form as df_phangs['Name'] before final merge
-        phangs_df['Name'] = normalize_name(phangs_df['Name'])
-        phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)
-
-        phangs_df = pd.merge(phangs_df, df_phangs, left_on='Name', right_on='Name', how='left')
-        D_cm = pd.to_numeric(phangs_df["Distance (Mpc)"], errors="coerce") * 3.0856776e24
-        H_flux = pd.to_numeric(phangs_df["H flux"], errors="coerce") if "H flux" in phangs_df.columns else pd.Series(np.nan, index=phangs_df.index)
-        L = 4 * np.pi * D_cm**2 * H_flux
-                # only take log10 where L is positive, otherwise set NaN
-        with np.errstate(invalid="ignore", divide="ignore"):
-            phangs_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
-        phangs_df[x_column] = pd.to_numeric(phangs_df[x_column], errors='coerce')
-        phangs_df[y_column] = pd.to_numeric(phangs_df[y_column], errors='coerce')
-        phangs_clean = phangs_df.dropna(subset=[x_column, y_column])
-        x_phangs = phangs_clean[x_column]
-        y_phangs = phangs_clean[y_column]
-        names_phangs = phangs_clean["Name"].values
-    if use_sim:
-        sim_df = pd.DataFrame(sim)
-        sim_df[x_column] = pd.to_numeric(sim_df[x_column], errors='coerce')
-        sim_df[y_column] = pd.to_numeric(sim_df[y_column], errors='coerce')
-        sim_clean = sim_df.dropna(subset=[x_column, y_column])
-        x_sim = sim_clean[x_column]
-        y_sim = sim_clean[y_column]
-        names_sim = sim_clean["Name"].values
-
-    # Extract values
-    x_agn = merged_AGN_clean[x_column]
-    y_agn = merged_AGN_clean[y_column]
-    names_agn = merged_AGN_clean["Name_clean"].str.replace(" ", "", regex=False).values
-    xerr_agn = get_errorbars(merged_AGN_clean, x_column)
-    yerr_agn = get_errorbars(merged_AGN_clean, y_column)
-
-    x_inactive = merged_inactive_clean[x_column]
-    y_inactive = merged_inactive_clean[y_column]
-
-    names_inactive = merged_inactive_clean["Name_clean"].str.replace(" ", "", regex=False).values
-    xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
-    yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
-
-    if soloplot == 'AGN':
-        if x_agn.empty or y_agn.empty:
-            print("No valid AGN data to plot.")
-            return
-    elif soloplot == 'inactive':
-        if x_inactive.empty or y_inactive.empty:
-            print("No valid inactive data to plot.")
-            return
-    else:
-        if x_agn.empty and x_inactive.empty and (not use_gb21 or x_gb21.empty) and (not use_wis or x_wis.empty) and (not use_phangs or x_phangs.empty) and (not use_sim or x_sim.empty):
-            print("No valid X data to plot.")
-            return
-        if y_agn.empty and y_inactive.empty and (not use_gb21 or y_gb21.empty) and (not use_wis or y_wis.empty) and (not use_phangs or y_phangs.empty) and (not use_sim or y_sim.empty):
-            print("No valid Y data to plot.")
-            return
-
-    # Set up figure
-
-    if not is_x_categorical and not is_y_categorical:
-
-        figsize = 8
-        if truescale == True:
-            if manual_limits is not None:
-                xratio = (manual_limits[1] - manual_limits[0]) / (manual_limits[3] - manual_limits[2]) * 1.3
-                yratio = (manual_limits[3] - manual_limits[2]) / (manual_limits[1] - manual_limits[0])
-                fig = plt.figure(figsize=(figsize * xratio, figsize * yratio))
         else:
-            fig = plt.figure(figsize=((figsize*1.1)*1.3, figsize*0.92))
-        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
-        ax_scatter = fig.add_subplot(gs[0])
-        ax_scatter.set_facecolor('none')
+            AGN_path = f"{base_AGN}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
+            inactive_path = f"{base_inactive}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
 
-        from scipy.stats import spearmanr
+        # ---- Final fallback checks ----
+        if not os.path.exists(AGN_path):
+            print(f"WARNING: {AGN_path} not found → using default {default_AGN}")
+            AGN_path = default_AGN
 
-        # ---- Append statistics to global stats table ----
-        global stats_table
+        if not os.path.exists(inactive_path):
+            print(f"WARNING: {inactive_path} not found → using default {default_inactive}")
+            inactive_path = default_inactive
 
-        if soloplot is None: 
-            statistic, p_value = ks_2samp(y_inactive, y_agn) 
+        # ---- Load files ----
+        fit_data_AGN = pd.read_csv(AGN_path)
+        fit_data_inactive = pd.read_csv(inactive_path)
 
-        # Helper: return (rho, p) or (None, None)
-        def safe_spearman(x, y, enabled):
-            if not enabled:
-                return None, None
-            if x is None or y is None or len(x) < 3 or len(y) < 3:
-                return None, None
-            rho, p = spearmanr(x, y, nan_policy='omit')
-            return float(rho), float(p)
+        df_combined['Name_clean'] = normalize_name(df_combined['Name'])
+        llamatab['name_clean'] = normalize_name(llamatab['name'])
+        agn_bol['Name_clean'] = normalize_name(agn_bol['Name'])
+        inactive_bol['Name_clean'] = normalize_name(inactive_bol['Name'])
+        fit_data_AGN['Galaxy_clean'] = normalize_name(fit_data_AGN['Galaxy'])
+        fit_data_inactive['Galaxy_clean'] = normalize_name(fit_data_inactive['Galaxy'])
 
-        # Compute spearman values for each group
-        rho_agn, p_agn = safe_spearman(x_agn, y_agn, True)
-        rho_inact, p_inact = safe_spearman(x_inactive, y_inactive, True)
+        # --- Map name → id ---
+        name_to_id = dict(zip(llamatab['name_clean'], llamatab['id']))
+        df_combined['id'] = df_combined['Name_clean'].map(name_to_id)
 
-        rho_comb, p_comb = safe_spearman(
-            pd.concat([x_agn, x_inactive]), 
-            pd.concat([y_agn, y_inactive]), 
-            True
-        )
-        if use_gb21:
-            rho_gb21, p_gb21 = safe_spearman(x_gb21, y_gb21, use_gb21)
-        else:
-            rho_gb21, p_gb21 = None, None
-        if use_wis:
-            rho_wis, p_wis = safe_spearman(x_wis, y_wis, use_wis)
-        else:
-            rho_wis, p_wis = None, None
-        if use_phangs:
-            rho_phangs, p_phangs = safe_spearman(x_phangs, y_phangs, use_phangs)
-        else:
-            rho_phangs, p_phangs = None, None
-        if use_sim:
-            rho_sim, p_sim = safe_spearman(x_sim, y_sim, use_sim)
-        else:
-            rho_sim, p_sim = None, None
-
-        # KS value (already computed earlier)
-        ks_stat = statistic if soloplot is None else None
-        ks_p = p_value if soloplot is None else None
-
-        new_row = {
-            "x_column": x_column,
-            "y_column": y_column,
-            "ks_stat": ks_stat,
-            "ks_p": ks_p,
-            "spearman_agn": rho_agn,
-            "spearman_agn_p": p_agn,
-            "spearman_inactive": rho_inact,
-            "spearman_inactive_p": p_inact,
-            "spearman_llama_comb": rho_comb,
-            "spearman_llama_comb_p": p_comb,
-            "spearman_gb21": rho_gb21,
-            "spearman_gb21_p": p_gb21,
-            "spearman_wis": rho_wis,
-            "spearman_wis_p": p_wis,
-            "spearman_phangs": rho_phangs,
-            "spearman_phangs_p": p_phangs,
-            "spearman_sim": rho_sim,
-            "spearman_sim_p": p_sim,
-            "rebin": rebin,
-            "mask": mask,
-            "R_kpc": R_kpc
+        # --- Manual overrides for special cases ---
+        manual_map = {
+            "NGC 5128 (CEN A)": "NGC5128",
+            "MCG-06-30-015": "MCG630",   # adjust ID if needed
+            "NGC 1375": "NGC1375"
         }
-        
-        if stats_table.empty:
-            stats_table = pd.DataFrame(columns=new_row.keys())
-        stats_table.loc[len(stats_table)] = new_row
+        df_combined['id'] = df_combined['id'].fillna(df_combined['Name_clean'].map(manual_map))
 
+        # Add derived LX column
+        inactive_bol = inactive_bol.copy()
+        inactive_bol.loc[:, 'log LAGN'] = pd.to_numeric(inactive_bol['log LAGN'], errors='coerce')
+        inactive_bol['log LX'] = inactive_bol['log LAGN'].apply(
+            lambda log_LAGN: math.log10((12.76 * (1 + (log_LAGN - math.log10(3.82e33)) / 12.15)**18.78) * 3.82e33)
+        )
 
-            # Axis limits
-        data_x = []
-        data_y = []
-        if soloplot in (None, 'AGN'):
-            data_x.append(x_agn)
-            data_y.append(y_agn)
-        if soloplot in (None, 'inactive'):
-            data_x.append(x_inactive)
-            data_y.append(y_inactive)
-        if soloplot is None and use_gb21:
-            data_x.append(x_gb21)
-            data_y.append(y_gb21)
-        if soloplot is None and use_wis:
-            data_x.append(x_wis)
-            data_y.append(y_wis)
-        if soloplot is None and use_phangs:
-            data_x.append(x_phangs)
-            data_y.append(y_phangs)
-        if soloplot is None and use_sim:
-            data_x.append(x_sim)
-            data_y.append(y_sim)
+        # Merge with fit data
+        merged_AGN = pd.merge(df_combined, fit_data_AGN, left_on='id', right_on='Galaxy_clean',how='right')
+        merged_AGN = pd.merge(merged_AGN, agn_bol, left_on='Name_clean', right_on='Name_clean',how='left')
+        merged_inactive = pd.merge(df_combined, fit_data_inactive, left_on='id', right_on='Galaxy_clean',how='right')
+        merged_inactive = pd.merge(merged_inactive, inactive_bol, left_on='Name_clean', right_on='Name_clean',how='left')
 
-        all_x = pd.concat(data_x)
-        all_y = pd.concat(data_y)
+        for df in [merged_AGN, merged_inactive]:
+            if "Bar" in df.columns:
+                df["Bar"] = df["Bar"].astype(str).str.strip().replace("", np.nan)
+                df["Bar"] = df["Bar"].astype("category")
 
-
-        # set limits:
-
-        if manual_limits is not None:
-            xlower, xupper, ylower, yupper = manual_limits
-            xlower, xupper, ylower, yupper = float(xlower), float(xupper), float(ylower), float(yupper)
-        else:
-            xspan = all_x.max() - all_x.min()
-            yspan = all_y.max() - all_y.min()
-            pad_x = (0.05 * xspan) if xspan > 0 else 0.1
-            pad_y = (0.05 * yspan) if yspan > 0 else 0.05
-            xlower = all_x.min() - pad_x
-            xupper = all_x.max() + pad_x
-            ylower = all_y.min() - pad_y
-            yupper = all_y.max() + pad_y
-
-        if logx:
-            # prefer the manual lower if positive, otherwise pick 0.9 * min positive data
-            if xlower <= 0:
-                positives = all_x[all_x > 0]
-                if positives.empty:
-                    raise ValueError("Cannot use log x-axis: no positive x values available")
-                xlower = float(positives.min()) * 0.9
-                print("Adjusted x lower bound for log scale to", xlower)
-        if logy:
-            if ylower <= 0:
-                positives = all_y[all_y > 0]
-                if positives.empty:
-                    raise ValueError("Cannot use log y-axis: no positive y values available")
-                ylower = float(positives.min()) * 0.9
-                print("Adjusted y lower bound for log scale to", ylower)
-
-            # Background image:
-
-        if background_image is not None:
-            try:
-                img = plt.imread(background_image)
-                ax_img = fig.add_axes(ax_scatter.get_position(), zorder=-1)
-                extent = [xlower, xupper, ylower, yupper]
-                ax_img.imshow(img, extent=extent,
-                origin='upper', alpha=1.0, aspect='auto', interpolation='none')
-                ax_img.axis('off')
-
-            except Exception as e:
-                # avoid referencing ax_scatter before it's defined in other flows
-                print(f"Could not load background image: {e}")
-
-        colour_AGN = 'red'
-        colour_inactive = 'blue'
-        label_AGN = 'LLAMA AGN'
-        label_inactive = 'LLAMA Inactive'
-        marker_AGN = 's'
-        marker_inactive = 'v'
-        if comb_llama:
-            colour_AGN = 'black'
-            colour_inactive = 'black'
-            label_AGN = 'LLAMA Galaxies'
-            label_inactive = None
-            marker_AGN = 'o'
-            marker_inactive = 'o'
-
-        # Plot scatter points
-        if soloplot in (None, 'AGN'):
-            ax_scatter.errorbar(
-                x_agn, y_agn,
-                xerr=xerr_agn, yerr=yerr_agn,
-                fmt=marker_AGN, color=colour_AGN, label=label_AGN, markersize=6,
-                capsize=2, elinewidth=1, alpha=0.8
-            )
-            if not comb_llama:
-                for x, y, name in zip(x_agn, y_agn, names_agn):
-                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='darkred', zorder=10)
-            elif comb_llama and use_phangs and use_wis:
-                names_phangs_wis = list(names_phangs) + list(names_wis)
-                shared_names_agn = [x if x in names_phangs_wis else None for x in names_agn]
-                for x, y, name in zip(x_agn, y_agn, shared_names_agn):
-                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
-            elif comb_llama and use_phangs and not use_wis:
-                shared_names_agn = [x if x in names_wis else None for x in names_agn]
-                for x, y, name in zip(x_agn, y_agn, shared_names_agn):
-                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
-            elif comb_llama and use_wis and not use_phangs:
-                shared_names_agn = [x if x in names_phangs else None for x in names_agn]
-                for x, y, name in zip(x_agn, y_agn, shared_names_agn):
-                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
-                
-
-
-
-        if soloplot in (None, 'inactive'):
-            ax_scatter.errorbar(
-                x_inactive, y_inactive,
-                xerr=xerr_inactive, yerr=yerr_inactive,
-                fmt=marker_inactive, color=colour_inactive, label=label_inactive, markersize=6,
-                capsize=2, elinewidth=1, alpha=0.8
-            )
-            if not comb_llama:
-                for x, y, name in zip(x_inactive, y_inactive, names_inactive):
-                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='navy', zorder=10)
-            elif comb_llama and use_phangs and use_wis:
-                names_phangs_wis = list(names_phangs) + list(names_wis)
-                shared_names_inactive = [x if x in names_phangs_wis else None for x in names_inactive]
-                for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
-                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
-            elif comb_llama and use_phangs and not use_wis:
-                shared_names_inactive = [x if x in names_wis else None for x in names_inactive]
-                for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
-                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
-            elif comb_llama and use_wis and not use_phangs:
-                shared_names_inactive = [x if x in names_phangs else None for x in names_inactive]
-                for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
-                    ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
-        
-        if soloplot is None and use_gb21:
-            ax_scatter.scatter(
-            x_gb21, y_gb21,
-            marker='o', color='green', label='GB21', s=36, alpha=0.8, edgecolors='none'
-            )
-            if not comb_llama:
-                for x, y, name in zip(x_gb21, y_gb21, names_gb21):
-                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkgreen', zorder=10)
-
-        if soloplot is None and use_wis:
-            ax_scatter.scatter(
-            x_wis, y_wis,
-            marker='^', color='purple', label='WIS', s=36, alpha=0.8, edgecolors='none'
-            )
-            if not comb_llama:
-                for x, y, name in zip(x_wis, y_wis, names_wis):
-                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
-            elif comb_llama:
-                names_llama = list(names_agn) + list(names_inactive)
-                shared_names_wis = [x if x in names_llama else None for x in names_wis]
-                for x, y, name in zip(x_wis, y_wis, shared_names_wis):
-                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
-
-
-
-        if soloplot is None and use_phangs:
-            ax_scatter.scatter(
-            x_phangs, y_phangs,
-            marker='D', color='orange', label='PHANGS', s=36, alpha=0.8, edgecolors='none'
-            )
-            if not comb_llama:
-                for x, y, name in zip(x_phangs, y_phangs, names_phangs):
-                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkorange', zorder=10)
-            elif comb_llama:
-                names_llama = list(names_agn) + list(names_inactive)
-                shared_names_phangs = [x if x in names_llama else None for x in names_phangs]
-                for x, y, name in zip(x_phangs, y_phangs, shared_names_phangs):
-                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkorange', zorder=10)
-
-        if soloplot is None and use_sim:
-            ax_scatter.scatter(
-            x_sim, y_sim,
-            marker='X', color='brown', label='Simulations', s=36, alpha=0.8, edgecolors='none'
-            )
-            if not comb_llama:
-                for x, y, name in zip(x_sim, y_sim, names_sim):
-                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='saddlebrown', zorder=10)
-            elif comb_llama:
-                names_llama = list(names_agn) + list(names_inactive)
-                shared_names_sim = [x if x in names_llama else None for x in names_sim]
-                for x, y, name in zip(x_sim, y_sim, shared_names_sim):
-                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='saddlebrown', zorder=10)
-
-        # apply scale and limits
-        if logx:
-            ax_scatter.set_xscale("log")
-        if logy:
-            ax_scatter.set_yscale("log")
-
-        ax_scatter.set_xlim(xlower, xupper)
-        ax_scatter.set_ylim(ylower, yupper)
-
-        # Histogram bin edges
-
-        y_for_bins = all_y[(all_y >= ylower) & (all_y <= yupper)]
-        if y_for_bins.empty:
-            y_for_bins = all_y
-        bin_edges = np.histogram_bin_edges(y_for_bins, bins=7)
-
-        # Scatter labels
-        ax_scatter.set_xlabel(x_column)
-        ax_scatter.set_ylabel(y_column)
-        ax_scatter.grid(True)
-        leg = ax_scatter.legend(loc=legend_loc)
-        leg.set_zorder(30)
-        ax_scatter.set_title(f'{y_column} vs {x_column}')
-
-    # Histogram subplot
-        ax_hist = fig.add_subplot(gs[1], sharey=ax_scatter)
-
-        if soloplot in (None, 'AGN') and not comb_llama:
-            ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
-                        color='red', alpha=0.4, label='AGN')
-            median_agn = np.median(y_agn)
-            ax_hist.axhline(median_agn, color='red', linestyle='--')
-            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn, 
-                        f"{median_agn:.2f}", color='red', fontsize=8, va='center')
-
-        if soloplot in (None, 'inactive') and not comb_llama:
-            ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
-                        color='blue', alpha=0.4, label='Inactive')
-            median_inactive = np.median(y_inactive)
-            ax_hist.axhline(median_inactive, color='blue', linestyle='--')
-            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive, 
-                        f"{median_inactive:.2f}", color='blue', fontsize=8, va='center')
-            
-        if comb_llama:
-            combined_y = pd.concat([y_agn, y_inactive])
-            ax_hist.hist(combined_y, bins=bin_edges, orientation='horizontal', 
-                        color='black', alpha=0.4, label='LLAMA Galaxies')
-            median_combined = np.median(combined_y)
-            ax_hist.axhline(median_combined, color='black', linestyle='--')
-            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_combined, 
-                        f"{median_combined:.2f}", color='black', fontsize=8, va='center')
-
-        if soloplot is None and use_gb21:
-            ax_hist.hist(y_gb21, bins=bin_edges, orientation='horizontal', 
-                        color='green', alpha=0.4, label='GB21')
-            median_gb21 = np.median(y_gb21)
-            ax_hist.axhline(median_gb21, color='green', linestyle='--')
-            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_gb21, 
-                        f"{median_gb21:.2f}", color='green', fontsize=8, va='center')
-
-        if use_wis:
-            ax_hist.hist(y_wis, bins=bin_edges, orientation='horizontal', 
-                        color='purple', alpha=0.4, label='WIS')
-            median_wis = np.median(y_wis)
-            ax_hist.axhline(median_wis, color='purple', linestyle='--')
-            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_wis, 
-                        f"{median_wis:.2f}", color='purple', fontsize=8, va='center')
-        if use_phangs:
-            ax_hist.hist(y_phangs, bins=bin_edges, orientation='horizontal', 
-                        color='orange', alpha=0.4, label='PHANGS')
-            median_phangs = np.median(y_phangs)
-            ax_hist.axhline(median_phangs, color='orange', linestyle='--')
-            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_phangs, 
-                        f"{median_phangs:.2f}", color='orange', fontsize=8, va='center')
-        if use_sim:
-            ax_hist.hist(y_sim, bins=bin_edges, orientation='horizontal', 
-                        color='brown', alpha=0.4, label='Simulations')
-            median_sim = np.median(y_sim)
-            ax_hist.axhline(median_sim, color='brown', linestyle='--')
-            ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_sim, 
-                        f"{median_sim:.2f}", color='brown', fontsize=8, va='center')
-
-        ax_hist.axis('off')
-
-        # Save
-        parts = []
-        if soloplot:
-            parts.append(f"_{soloplot}")
-        if use_gb21:
-            parts.append('_gb21')
-        if use_wis:
-            parts.append('_wis')
-        if use_phangs:
-            parts.append('_phangs')
-        if use_sim:
-            parts.append('_sim')
-        if comb_llama:
-            parts.append('_comb')
-        if rebin is not None:
-            parts.append(f'_{rebin}pc')
-        suffix = ''.join(parts)
-        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}_{x_column}_vs_{y_column}.png'
-        plt.savefig(output_path)
-        print(f"Saved plot to: {output_path}")
-        plt.close(fig)
-
-        diffs = []
-        valid_pairs = 0
-
-        for _, row in df_pairs.iterrows():
-            agn_name = row["Active Galaxy"].strip()
-            inactive_name = row["Inactive Galaxy"].strip()
-
-            agn_val = merged_AGN.loc[merged_AGN["Name_clean"] == agn_name, y_column]
-            inactive_val = merged_inactive.loc[merged_inactive["Name_clean"] == inactive_name, y_column]
-
-            if not agn_val.empty and not inactive_val.empty:
-                diff = float(agn_val.values[0]) - float(inactive_val.values[0])
-                if diff == diff:  # Check for NaN
-                    diffs.append(diff)
-                    valid_pairs += 1
-
-        diffs = np.array(diffs)
-        diffs = diffs[np.isfinite(diffs)]
-
-        fig, ax = plt.subplots(figsize=(8, 5))
-        ax.hist(diffs, bins=10, color="grey", alpha=0.4, edgecolor="black")
-        ax.axvline(np.median(diffs), color="red", linestyle="--", label=f"Median = {np.median(diffs):.2f}")
-        ax.axvline(np.percentile(diffs,25), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,25):.2f}")
-        ax.axvline(np.percentile(diffs,75), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,75):.2f}")
-        ax.axvline(0, color="black", linestyle="solid")  # reference line
-
-        ax.set_xlabel(f"Δ {y_column} (AGN - Inactive)")
-        ax.set_ylabel("Number of pairs")
-        ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
-        ax.legend()
-
-        output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/pair_diffs/{mask}_{R_kpc}kpc/{y_column}_pair_differences.png'
-        plt.savefig(output_path)
-        print(f"Saved matched-pairs plot to: {output_path}")
-        plt.close(fig)
-
-
-    elif is_x_categorical or is_y_categorical:
-        figsize = 8
-        if truescale == True:
-            if manual_limits is not None:
-                xratio = (manual_limits[1] - manual_limits[0]) / (manual_limits[3] - manual_limits[2]) * 1.3
-                yratio = (manual_limits[3] - manual_limits[2]) / (manual_limits[1] - manual_limits[0])
-                fig = plt.figure(figsize=(figsize * xratio, figsize * yratio))
-        else:
-            fig = plt.figure(figsize=((figsize*1.1)*1.3, figsize*0.92))
-        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
-        ax_bar = fig.add_subplot(gs[0])
-        ax_bar.set_facecolor('none')
-                    # Axis limits
-        data_x = []
-        data_y = []
-        if soloplot in (None, 'AGN'):
-            data_x.append(x_agn)
-            data_y.append(y_agn)
-        if soloplot in (None, 'inactive'):
-            data_x.append(x_inactive)
-            data_y.append(y_inactive)
-        if soloplot is None and use_gb21:
-            data_x.append(x_gb21)
-            data_y.append(y_gb21)
-        if soloplot is None and use_wis:
-            data_x.append(x_wis)
-            data_y.append(y_wis)
-        if soloplot is None and use_phangs:
-            data_x.append(x_phangs)
-            data_y.append(y_phangs)
-        if soloplot is None and use_sim:
-            data_x.append(x_sim)
-            data_y.append(y_sim)
-
-        all_x = pd.concat(data_x)
-        all_y = pd.concat(data_y)
-
+                # Determine if axes are categorical
+        is_x_categorical = is_categorical(merged_AGN[x_column].dropna())
+        is_y_categorical = is_categorical(merged_AGN[y_column].dropna())
         if is_x_categorical:
-            cat_order = sorted(set(x_agn.dropna()) | set(x_inactive.dropna()))
-            agn_median = []
-            inactive_median = []
-            agn_std = []
-            inactive_std = []
+            print(f"Detected categorical x-axis: {x_column}")
+        if is_y_categorical:
+            print(f"Detected categorical y-axis: {y_column}")
 
-            for cat in cat_order:
-                agn_vals = merged_AGN_clean.loc[merged_AGN_clean[x_column] == cat, y_column].dropna()
-                inact_vals = merged_inactive_clean.loc[merged_inactive_clean[x_column] == cat, y_column].dropna()
+        if not is_x_categorical and not is_y_categorical:
 
-                if len(agn_vals) > 0:
-                    agn_median.append(np.nanmedian(agn_vals))
-                    agn_std.append(np.nanstd(agn_vals))
+            # Clean AGN data
+            merged_AGN[x_column] = pd.to_numeric(merged_AGN[x_column], errors='coerce')
+            merged_AGN[y_column] = pd.to_numeric(merged_AGN[y_column], errors='coerce')
+            merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
+
+            # Clean inactive data
+            merged_inactive[x_column] = pd.to_numeric(merged_inactive[x_column], errors='coerce')
+            merged_inactive[y_column] = pd.to_numeric(merged_inactive[y_column], errors='coerce')
+            merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
+
+        else:
+            merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
+            merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
+
+        # --- Exclude names here ---
+        if exclude_names is not None:
+            exclude_norm = [n.strip().upper() for n in exclude_names]
+
+            # These are already DataFrames → filter with boolean masks
+            merged_AGN_clean = merged_AGN_clean[
+                ~merged_AGN_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
+            ]
+
+
+            merged_inactive_clean = merged_inactive_clean[
+                ~merged_inactive_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
+            ]
+            agn_bol = agn_bol[
+                ~agn_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
+            ]
+            inactive_bol = inactive_bol[
+                ~inactive_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
+            ]
+
+            # GB21, WIS, PHANGS, SIM: detect if list or DataFrame
+            if use_gb21:
+                if isinstance(GB21, pd.DataFrame):
+                    GB21 = GB21[~GB21["Name"].str.strip().str.upper().isin(exclude_norm)]
+                else:  # list of dicts
+                    GB21 = [row for row in GB21 if str(row["Name"]).strip().upper() not in exclude_norm]
+
+            if use_wis:
+                if isinstance(wis, pd.DataFrame):
+                    wis = wis[~wis["Name"].str.strip().str.upper().isin(exclude_norm)]
                 else:
-                    agn_median.append(np.nan)
-                    agn_std.append(np.nan)
+                    wis = [row for row in wis if str(row["Name"]).strip().upper() not in exclude_norm]
 
-                if len(inact_vals) > 0:
-                    inactive_median.append(np.nanmedian(inact_vals))
-                    inactive_std.append(np.nanstd(inact_vals))
+            if use_phangs:
+                if isinstance(phangs, pd.DataFrame):
+                    phangs = phangs[~phangs["Name"].str.strip().str.upper().isin(exclude_norm)]
                 else:
-                    inactive_median.append(np.nan)
-                    inactive_std.append(np.nan)
+                    phangs = [row for row in phangs if str(row["Name"]).strip().upper() not in exclude_norm]
 
-            x = np.arange(len(cat_order))
-            width = 0.35
+            if use_sim:
+                if isinstance(sim, pd.DataFrame):
+                    sim = sim[~sim["Name"].str.strip().str.upper().isin(exclude_norm)]
+                else:
+                    sim = [row for row in sim if str(row["Name"]).strip().str.upper() not in exclude_norm]
 
-            ax_bar.bar(x - width/2, agn_median, width, yerr=agn_std, label="AGN", color="red", alpha=0.7, capsize=4)
-            ax_bar.bar(x + width/2, inactive_median, width, yerr=inactive_std, label="Inactive", color="blue", alpha=0.7, capsize=4)
-            ax_bar.set_xticks(x)
-            ax_bar.set_xticklabels(cat_order, rotation=45, ha="right")
-            ax_bar.set_xlabel(x_column)
-            ax_bar.set_ylabel(y_column)
-            ax_bar.grid(True)
-            leg = ax_bar.legend(loc=legend_loc)
-            leg.set_zorder(30)
-            ax_bar.set_title(f'{y_column} vs {x_column}')
+        
+        merged_AGN_clean = merged_AGN_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
+        merged_inactive_clean = merged_inactive_clean.replace([np.inf, -np.inf], np.nan).dropna(subset=[x_column, y_column])
+
+        if use_gb21:
+            GB21_df = pd.DataFrame(GB21)
+            GB21_df[x_column] = pd.to_numeric(GB21_df[x_column], errors='coerce')
+            GB21_df[y_column] = pd.to_numeric(GB21_df[y_column], errors='coerce')
+            GB21_clean = GB21_df.dropna(subset=[x_column, y_column])
+            x_gb21 = GB21_clean[x_column]
+            y_gb21 = GB21_clean[y_column]
+            names_gb21 = GB21_clean["Name"].values
+        if use_wis:
+            wis_df = pd.DataFrame(wis)
+            wis_df['Name'] = normalize_name(wis_df['Name'])
+            wis_df['Name'] = wis_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
+            df_wis = wis_properties
+            df_wis['Name'] = df_wis.index
+            df_wis['Name'] = normalize_name(df_wis['Name'])
+            df_wis['Name'] = df_wis['Name'].str.replace(" ", "", regex=False)   # remove all spaces
+            wis_H_phot_df = wis_H_phot.to_pandas()
+            wis_H_phot_df['ID'] = normalize_name(wis_H_phot_df['ID'])
+            df_wis = df_wis.merge(
+        wis_H_phot_df,
+        left_on="Name",
+        right_on="ID",
+        how="left"
+    )
+            
+
+            wis_df = pd.merge(wis_df, df_wis, left_on='Name', right_on='Name',how='left')
+            D_cm = pd.to_numeric(wis_df["Distance (Mpc)"], errors="coerce") * 3.0856776e24
+            H_flux = pd.to_numeric(wis_df["H flux"], errors="coerce") if "H flux" in wis_df.columns else pd.Series(np.nan, index=wis_df.index)
+            L = 4 * np.pi * D_cm**2 * (H_flux/0.21)*1.662 
+            # only take log10 where L is positive, otherwise set NaN
+            with np.errstate(invalid="ignore", divide="ignore"):
+                wis_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
+
+            wis_df[x_column] = pd.to_numeric(wis_df[x_column], errors='coerce')
+            wis_df[y_column] = pd.to_numeric(wis_df[y_column], errors='coerce')
+            wis_clean = wis_df.dropna(subset=[x_column, y_column])
+            x_wis = wis_clean[x_column]
+            y_wis = wis_clean[y_column]
+            names_wis = wis_clean["Name"].values
+        if use_phangs:
+            phangs_df = pd.DataFrame(phangs)
+            phangs_df['Name'] = normalize_name(phangs_df['Name'])
+            phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
+            df_phangs = pd.DataFrame(phangs_properties)
+            df_phangs2 = pd.DataFrame(phangs_properties2).T.reset_index()
+            df_phangs2 = df_phangs2.rename(columns={'index': 'Name'})
+            df_phangs = df_phangs.reset_index()  # moves index to column 'name'
+            if 'name' in df_phangs.columns[df_phangs.columns.duplicated()]:
+                df_phangs = df_phangs.loc[:, ~df_phangs.columns.duplicated()]
+            df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)   # remove all spaces
+            df_phangs2['name'] = normalize_name(df_phangs['name'])
+            df_phangs2['name'] = df_phangs['name'].str.replace(" ", "", regex=False)   # remove all spaces
+            phangs_H_phot_df = phangs_H_phot.to_pandas()
+            phangs_H_phot_df['ID'] = normalize_name(phangs_H_phot_df['ID'])
+            phangs_H_phot_df['ID'] = phangs_H_phot_df['ID'].str.replace(" ", "", regex=False)
+            # merge phangs H-photometry into df_phangs using normalized keys
+            df_phangs = df_phangs.merge(
+                phangs_H_phot_df,
+                left_on="name",
+                right_on="ID",
+                how="left"
+            )
+            # ensure df_phangs2 was created/renamed correctly and normalize its Name column
+            df_phangs2 = df_phangs2.rename(columns={'index': 'Name'})
+            df_phangs2['Name'] = normalize_name(df_phangs2['Name'])
+            df_phangs2['Name'] = df_phangs2['Name'].str.replace(" ", "", regex=False)
+
+            # also normalize df_phangs 'name' (remove spaces already done above but keep for safety)
+            df_phangs['name'] = normalize_name(df_phangs['name'])
+            df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)
+            # merge additional properties from df_phangs2
+            df_phangs = df_phangs.merge(
+                df_phangs2,
+                left_on="name",
+                right_on="Name",
+                how="left"
+            )
+            # Ensure phangs_df 'Name' is in the same normalized form as df_phangs['Name'] before final merge
+            phangs_df['Name'] = normalize_name(phangs_df['Name'])
+            phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)
+
+            phangs_df = pd.merge(phangs_df, df_phangs, left_on='Name', right_on='Name', how='left')
+
+            D_cm = pd.to_numeric(phangs_df["Distance (Mpc)"], errors="coerce") * 3.0856776e24
+            H_flux = pd.to_numeric(phangs_df["H flux"], errors="coerce") if "H flux" in phangs_df.columns else pd.Series(np.nan, index=phangs_df.index)
+            
+            row = phangs_df.loc[phangs_df['Name'] == 'NGC1365', 'H flux']
+
+            if not row.empty:
+                print(row.iloc[0])
+
+            L = 4 * np.pi * D_cm**2 * (H_flux/0.21)*1.662 # convert from L H (multiplied by bandwidth) to lambdafnu H
+                    # only take log10 where L is positive, otherwise set NaN
+            with np.errstate(invalid="ignore", divide="ignore"):
+                phangs_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
+            
+            row = phangs_df.loc[phangs_df['Name'] == 'NGC1365', 'log LH (L⊙)']
+
+            if not row.empty:
+                print(row.iloc[0])
+
+            phangs_df[x_column] = pd.to_numeric(phangs_df[x_column], errors='coerce')
+            phangs_df[y_column] = pd.to_numeric(phangs_df[y_column], errors='coerce')
+            phangs_clean = phangs_df.dropna(subset=[x_column, y_column])
+            x_phangs = phangs_clean[x_column]
+            y_phangs = phangs_clean[y_column]
+            names_phangs = phangs_clean["Name"].values
+        if use_sim:
+            sim_df = pd.DataFrame(sim)
+            sim_df[x_column] = pd.to_numeric(sim_df[x_column], errors='coerce')
+            sim_df[y_column] = pd.to_numeric(sim_df[y_column], errors='coerce')
+            sim_clean = sim_df.dropna(subset=[x_column, y_column])
+            x_sim = sim_clean[x_column]
+            y_sim = sim_clean[y_column]
+            names_sim = sim_clean["Name"].values
+
+        # Extract values
+        x_agn = merged_AGN_clean[x_column]
+        y_agn = merged_AGN_clean[y_column]
+        names_agn = merged_AGN_clean["Name_clean"].str.replace(" ", "", regex=False).values
+        xerr_agn = get_errorbars(merged_AGN_clean, x_column)
+        yerr_agn = get_errorbars(merged_AGN_clean, y_column)
+
+        x_inactive = merged_inactive_clean[x_column]
+        y_inactive = merged_inactive_clean[y_column]
+
+        names_inactive = merged_inactive_clean["Name_clean"].str.replace(" ", "", regex=False).values
+        xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
+        yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
+
+        if soloplot == 'AGN':
+            if x_agn.empty or y_agn.empty:
+                print("No valid AGN data to plot.")
+                return
+        elif soloplot == 'inactive':
+            if x_inactive.empty or y_inactive.empty:
+                print("No valid inactive data to plot.")
+                return
+        else:
+            if x_agn.empty and x_inactive.empty and (not use_gb21 or x_gb21.empty) and (not use_wis or x_wis.empty) and (not use_phangs or x_phangs.empty) and (not use_sim or x_sim.empty):
+                print("No valid X data to plot.")
+                return
+            if y_agn.empty and y_inactive.empty and (not use_gb21 or y_gb21.empty) and (not use_wis or y_wis.empty) and (not use_phangs or y_phangs.empty) and (not use_sim or y_sim.empty):
+                print("No valid Y data to plot.")
+                return
+
+        # Set up figure
+
+        if not is_x_categorical and not is_y_categorical:
+
+            figsize = 8
+            if truescale == True:
+                if manual_limits is not None:
+                    xratio = (manual_limits[1] - manual_limits[0]) / (manual_limits[3] - manual_limits[2]) * 1.3
+                    yratio = (manual_limits[3] - manual_limits[2]) / (manual_limits[1] - manual_limits[0])
+                    fig = plt.figure(figsize=(figsize * xratio, figsize * yratio))
+            else:
+                fig = plt.figure(figsize=((figsize*1.1)*1.3, figsize*0.92))
+            gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
+            ax_scatter = fig.add_subplot(gs[0])
+            ax_scatter.set_facecolor('none')
+
+            from scipy.stats import spearmanr
+
+            # ---- Append statistics to global stats table ----
+            global stats_table
+
+            if soloplot is None: 
+                statistic, p_value = ks_2samp(y_inactive, y_agn) 
+
+            # Helper: return (rho, p) or (None, None)
+            def safe_spearman(x, y, enabled):
+                if not enabled:
+                    return None, None
+                if x is None or y is None or len(x) < 3 or len(y) < 3:
+                    return None, None
+                rho, p = spearmanr(x, y, nan_policy='omit')
+                return float(rho), float(p)
+
+            # Compute spearman values for each group
+            rho_agn, p_agn = safe_spearman(x_agn, y_agn, True)
+            rho_inact, p_inact = safe_spearman(x_inactive, y_inactive, True)
+
+            rho_comb, p_comb = safe_spearman(
+                pd.concat([x_agn, x_inactive]), 
+                pd.concat([y_agn, y_inactive]), 
+                True
+            )
+            if use_gb21:
+                rho_gb21, p_gb21 = safe_spearman(x_gb21, y_gb21, use_gb21)
+            else:
+                rho_gb21, p_gb21 = None, None
+            if use_wis:
+                rho_wis, p_wis = safe_spearman(x_wis, y_wis, use_wis)
+            else:
+                rho_wis, p_wis = None, None
+            if use_phangs:
+                rho_phangs, p_phangs = safe_spearman(x_phangs, y_phangs, use_phangs)
+            else:
+                rho_phangs, p_phangs = None, None
+            if use_sim:
+                rho_sim, p_sim = safe_spearman(x_sim, y_sim, use_sim)
+            else:
+                rho_sim, p_sim = None, None
+
+            # KS value (already computed earlier)
+            ks_stat = statistic if soloplot is None else None
+            ks_p = p_value if soloplot is None else None
+
+            new_row = {
+                "x_column": x_column,
+                "y_column": y_column,
+                "ks_stat": ks_stat,
+                "ks_p": ks_p,
+                "spearman_agn": rho_agn,
+                "spearman_agn_p": p_agn,
+                "spearman_inactive": rho_inact,
+                "spearman_inactive_p": p_inact,
+                "spearman_llama_comb": rho_comb,
+                "spearman_llama_comb_p": p_comb,
+                "spearman_gb21": rho_gb21,
+                "spearman_gb21_p": p_gb21,
+                "spearman_wis": rho_wis,
+                "spearman_wis_p": p_wis,
+                "spearman_phangs": rho_phangs,
+                "spearman_phangs_p": p_phangs,
+                "spearman_sim": rho_sim,
+                "spearman_sim_p": p_sim,
+                "rebin": rebin,
+                "mask": mask,
+                "R_kpc": R_kpc
+            }
+            
+            if stats_table.empty:
+                stats_table = pd.DataFrame(columns=new_row.keys())
+            stats_table.loc[len(stats_table)] = new_row
+
+
+                # Axis limits
+            data_x = []
+            data_y = []
+            if soloplot in (None, 'AGN'):
+                data_x.append(x_agn)
+                data_y.append(y_agn)
+            if soloplot in (None, 'inactive'):
+                data_x.append(x_inactive)
+                data_y.append(y_inactive)
+            if soloplot is None and use_gb21:
+                data_x.append(x_gb21)
+                data_y.append(y_gb21)
+            if soloplot is None and use_wis:
+                data_x.append(x_wis)
+                data_y.append(y_wis)
+            if soloplot is None and use_phangs:
+                data_x.append(x_phangs)
+                data_y.append(y_phangs)
+            if soloplot is None and use_sim:
+                data_x.append(x_sim)
+                data_y.append(y_sim)
+
+            all_x = pd.concat(data_x)
+            all_y = pd.concat(data_y)
+
+
+            # set limits:
 
             if manual_limits is not None:
                 xlower, xupper, ylower, yupper = manual_limits
                 xlower, xupper, ylower, yupper = float(xlower), float(xupper), float(ylower), float(yupper)
             else:
+                xspan = all_x.max() - all_x.min()
                 yspan = all_y.max() - all_y.min()
+                pad_x = (0.05 * xspan) if xspan > 0 else 0.1
                 pad_y = (0.05 * yspan) if yspan > 0 else 0.05
+                xlower = all_x.min() - pad_x
+                xupper = all_x.max() + pad_x
                 ylower = all_y.min() - pad_y
                 yupper = all_y.max() + pad_y
 
-                    # Histogram bin edges
+            if logx:
+                # prefer the manual lower if positive, otherwise pick 0.9 * min positive data
+                if xlower <= 0:
+                    positives = all_x[all_x > 0]
+                    if positives.empty:
+                        raise ValueError("Cannot use log x-axis: no positive x values available")
+                    xlower = float(positives.min()) * 0.9
+                    print("Adjusted x lower bound for log scale to", xlower)
+            if logy:
+                if ylower <= 0:
+                    positives = all_y[all_y > 0]
+                    if positives.empty:
+                        raise ValueError("Cannot use log y-axis: no positive y values available")
+                    ylower = float(positives.min()) * 0.9
+                    print("Adjusted y lower bound for log scale to", ylower)
+
+                # Background image:
+
+            if background_image is not None:
+                try:
+                    img = plt.imread(background_image)
+                    ax_img = fig.add_axes(ax_scatter.get_position(), zorder=-1)
+                    extent = [xlower, xupper, ylower, yupper]
+                    ax_img.imshow(img, extent=extent,
+                    origin='upper', alpha=1.0, aspect='auto', interpolation='none')
+                    ax_img.axis('off')
+
+                except Exception as e:
+                    # avoid referencing ax_scatter before it's defined in other flows
+                    print(f"Could not load background image: {e}")
+
+            colour_AGN = 'red'
+            colour_inactive = 'blue'
+            label_AGN = 'LLAMA AGN'
+            label_inactive = 'LLAMA Inactive'
+            marker_AGN = 's'
+            marker_inactive = 'v'
+            if comb_llama:
+                colour_AGN = 'black'
+                colour_inactive = 'black'
+                label_AGN = 'LLAMA Galaxies'
+                label_inactive = None
+                marker_AGN = 'o'
+                marker_inactive = 'o'
+
+            # Plot scatter points
+            if soloplot in (None, 'AGN'):
+                ax_scatter.errorbar(
+                    x_agn, y_agn,
+                    xerr=xerr_agn, yerr=yerr_agn,
+                    fmt=marker_AGN, color=colour_AGN, label=label_AGN, markersize=6,
+                    capsize=2, elinewidth=1, alpha=0.8
+                )
+                if not comb_llama:
+                    for x, y, name in zip(x_agn, y_agn, names_agn):
+                        ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='darkred', zorder=10)
+                elif comb_llama and use_phangs and use_wis:
+                    names_phangs_wis = list(names_phangs) + list(names_wis)
+                    shared_names_agn = [x if x in names_phangs_wis else None for x in names_agn]
+                    for x, y, name in zip(x_agn, y_agn, shared_names_agn):
+                        ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+                elif comb_llama and use_phangs and not use_wis:
+                    shared_names_agn = [x if x in names_wis else None for x in names_agn]
+                    for x, y, name in zip(x_agn, y_agn, shared_names_agn):
+                        ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+                elif comb_llama and use_wis and not use_phangs:
+                    shared_names_agn = [x if x in names_phangs else None for x in names_agn]
+                    for x, y, name in zip(x_agn, y_agn, shared_names_agn):
+                        ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+                    
+
+
+
+            if soloplot in (None, 'inactive'):
+                ax_scatter.errorbar(
+                    x_inactive, y_inactive,
+                    xerr=xerr_inactive, yerr=yerr_inactive,
+                    fmt=marker_inactive, color=colour_inactive, label=label_inactive, markersize=6,
+                    capsize=2, elinewidth=1, alpha=0.8
+                )
+                if not comb_llama:
+                    for x, y, name in zip(x_inactive, y_inactive, names_inactive):
+                        ax_scatter.text(float(x), float(y), name, fontsize=7, color='navy', zorder=10)
+                elif comb_llama and use_phangs and use_wis:
+                    names_phangs_wis = list(names_phangs) + list(names_wis)
+                    shared_names_inactive = [x if x in names_phangs_wis else None for x in names_inactive]
+                    for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
+                        ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+                elif comb_llama and use_phangs and not use_wis:
+                    shared_names_inactive = [x if x in names_wis else None for x in names_inactive]
+                    for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
+                        ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+                elif comb_llama and use_wis and not use_phangs:
+                    shared_names_inactive = [x if x in names_phangs else None for x in names_inactive]
+                    for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
+                        ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+            
+            if soloplot is None and use_gb21:
+                ax_scatter.scatter(
+                x_gb21, y_gb21,
+                marker='o', color='green', label='GB21', s=36, alpha=0.8, edgecolors='none'
+                )
+                if not comb_llama:
+                    for x, y, name in zip(x_gb21, y_gb21, names_gb21):
+                        ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkgreen', zorder=10)
+
+            if soloplot is None and use_wis:
+                ax_scatter.scatter(
+                x_wis, y_wis,
+                marker='^', color='purple', label='WIS', s=36, alpha=0.8, edgecolors='none'
+                )
+                if not comb_llama:
+                    for x, y, name in zip(x_wis, y_wis, names_wis):
+                        ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
+                elif comb_llama:
+                    names_llama = list(names_agn) + list(names_inactive)
+                    shared_names_wis = [x if x in names_llama else None for x in names_wis]
+                    for x, y, name in zip(x_wis, y_wis, shared_names_wis):
+                        ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
+
+
+
+            if soloplot is None and use_phangs:
+                ax_scatter.scatter(
+                x_phangs, y_phangs,
+                marker='D', color='orange', label='PHANGS', s=36, alpha=0.8, edgecolors='none'
+                )
+                if not comb_llama:
+                    for x, y, name in zip(x_phangs, y_phangs, names_phangs):
+                        ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkorange', zorder=10)
+                elif comb_llama:
+                    names_llama = list(names_agn) + list(names_inactive)
+                    shared_names_phangs = [x if x in names_llama else None for x in names_phangs]
+                    for x, y, name in zip(x_phangs, y_phangs, shared_names_phangs):
+                        ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkorange', zorder=10)
+
+            if soloplot is None and use_sim:
+                ax_scatter.scatter(
+                x_sim, y_sim,
+                marker='X', color='brown', label='Simulations', s=36, alpha=0.8, edgecolors='none'
+                )
+                if not comb_llama:
+                    for x, y, name in zip(x_sim, y_sim, names_sim):
+                        ax_scatter.text(float(x), float(y), name, fontsize=7, color='saddlebrown', zorder=10)
+                elif comb_llama:
+                    names_llama = list(names_agn) + list(names_inactive)
+                    shared_names_sim = [x if x in names_llama else None for x in names_sim]
+                    for x, y, name in zip(x_sim, y_sim, shared_names_sim):
+                        ax_scatter.text(float(x), float(y), name, fontsize=7, color='saddlebrown', zorder=10)
+
+            # apply scale and limits
+            if logx:
+                ax_scatter.set_xscale("log")
+            if logy:
+                ax_scatter.set_yscale("log")
+
+            ax_scatter.set_xlim(xlower, xupper)
+            ax_scatter.set_ylim(ylower, yupper)
+
+            # Histogram bin edges
 
             y_for_bins = all_y[(all_y >= ylower) & (all_y <= yupper)]
             if y_for_bins.empty:
                 y_for_bins = all_y
             bin_edges = np.histogram_bin_edges(y_for_bins, bins=7)
 
-            # Histogram subplot
-            ax_hist = fig.add_subplot(gs[1], sharey=ax_bar)
+            # Scatter labels
+            ax_scatter.set_xlabel(x_column)
+            ax_scatter.set_ylabel(y_column)
+            ax_scatter.grid(True)
+            leg = ax_scatter.legend(loc=legend_loc)
+            leg.set_zorder(30)
+            ax_scatter.set_title(f'{y_column} vs {x_column}')
 
-            if soloplot in (None, 'AGN'):
+        # Histogram subplot
+            ax_hist = fig.add_subplot(gs[1], sharey=ax_scatter)
+
+            if soloplot in (None, 'AGN') and not comb_llama:
                 ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
                             color='red', alpha=0.4, label='AGN')
                 median_agn = np.median(y_agn)
@@ -1075,13 +890,22 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn, 
                             f"{median_agn:.2f}", color='red', fontsize=8, va='center')
 
-            if soloplot in (None, 'inactive'):
+            if soloplot in (None, 'inactive') and not comb_llama:
                 ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
                             color='blue', alpha=0.4, label='Inactive')
                 median_inactive = np.median(y_inactive)
                 ax_hist.axhline(median_inactive, color='blue', linestyle='--')
                 ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive, 
                             f"{median_inactive:.2f}", color='blue', fontsize=8, va='center')
+                
+            if comb_llama:
+                combined_y = pd.concat([y_agn, y_inactive])
+                ax_hist.hist(combined_y, bins=bin_edges, orientation='horizontal', 
+                            color='black', alpha=0.4, label='LLAMA Galaxies')
+                median_combined = np.median(combined_y)
+                ax_hist.axhline(median_combined, color='black', linestyle='--')
+                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_combined, 
+                            f"{median_combined:.2f}", color='black', fontsize=8, va='center')
 
             if soloplot is None and use_gb21:
                 ax_hist.hist(y_gb21, bins=bin_edges, orientation='horizontal', 
@@ -1090,22 +914,22 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ax_hist.axhline(median_gb21, color='green', linestyle='--')
                 ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_gb21, 
                             f"{median_gb21:.2f}", color='green', fontsize=8, va='center')
-            
-            if soloplot is None and use_wis:
+
+            if use_wis:
                 ax_hist.hist(y_wis, bins=bin_edges, orientation='horizontal', 
                             color='purple', alpha=0.4, label='WIS')
                 median_wis = np.median(y_wis)
                 ax_hist.axhline(median_wis, color='purple', linestyle='--')
                 ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_wis, 
                             f"{median_wis:.2f}", color='purple', fontsize=8, va='center')
-            if soloplot is None and use_phangs:
+            if use_phangs:
                 ax_hist.hist(y_phangs, bins=bin_edges, orientation='horizontal', 
                             color='orange', alpha=0.4, label='PHANGS')
                 median_phangs = np.median(y_phangs)
                 ax_hist.axhline(median_phangs, color='orange', linestyle='--')
                 ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_phangs, 
                             f"{median_phangs:.2f}", color='orange', fontsize=8, va='center')
-            if soloplot is None and use_sim:
+            if use_sim:
                 ax_hist.hist(y_sim, bins=bin_edges, orientation='horizontal', 
                             color='brown', alpha=0.4, label='Simulations')
                 median_sim = np.median(y_sim)
@@ -1115,7 +939,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             ax_hist.axis('off')
 
-                    # Save
+            # Save
             parts = []
             if soloplot:
                 parts.append(f"_{soloplot}")
@@ -1129,56 +953,258 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 parts.append('_sim')
             if comb_llama:
                 parts.append('_comb')
+            if rebin is not None:
+                parts.append(f'_{rebin}pc')
             suffix = ''.join(parts)
-            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}{x_column}_vs_{y_column}.png'
-            plt.savefig(output_path)
-            print(f"Saved plot to: {output_path}")
-            plt.close(fig)  
-
-
-        elif is_y_categorical:
-            cat_order = sorted(set(y_agn.dropna()) | set(y_inactive.dropna()))
-            agn_median = []
-            inactive_median = []
-            agn_std = []
-            inactive_std = []
-
-            for cat in cat_order:
-                agn_vals = merged_AGN_clean.loc[merged_AGN_clean[y_column] == cat, x_column].dropna()
-                inact_vals = merged_inactive_clean.loc[merged_inactive_clean[y_column] == cat, x_column].dropna()
-
-                if len(agn_vals) > 0:
-                    agn_median.append(np.nanmedian(agn_vals))
-                    agn_std.append(np.nanstd(agn_vals))
-                else:
-                    agn_median.append(np.nan)
-                    agn_std.append(np.nan)
-
-                if len(inact_vals) > 0:
-                    inactive_median.append(np.nanmedian(inact_vals))
-                    inactive_std.append(np.nanstd(inact_vals))
-                else:
-                    inactive_median.append(np.nan)
-                    inactive_std.append(np.nan)
-
-            y = np.arange(len(cat_order))
-            height = 0.35
-
-            ax_bar.barh(y - height/2, agn_median, height, xerr=agn_std, label="AGN", color="red", alpha=0.7, capsize=4)
-            ax_bar.barh(y + height/2, inactive_median, height, xerr=inactive_std, label="Inactive", color="blue", alpha=0.7, capsize=4)
-            ax_bar.set_yticks(y)
-            ax_bar.set_yticklabels(cat_order)
-            ax_bar.set_xlabel(x_column)
-            ax_bar.set_ylabel(y_column)
-            ax_bar.grid(True)
-            leg = ax_bar.legend(loc=legend_loc)
-            leg.set_zorder(30)
-            ax_bar.set_title(f'{y_column} vs {x_column}')
-            suffix = f"_{soloplot}" if soloplot else ""
             output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}_{x_column}_vs_{y_column}.png'
             plt.savefig(output_path)
             print(f"Saved plot to: {output_path}")
             plt.close(fig)
+
+            diffs = []
+            valid_pairs = 0
+
+            for _, row in df_pairs.iterrows():
+                agn_name = row["Active Galaxy"].strip()
+                inactive_name = row["Inactive Galaxy"].strip()
+
+                agn_val = merged_AGN.loc[merged_AGN["Name_clean"] == agn_name, y_column]
+                inactive_val = merged_inactive.loc[merged_inactive["Name_clean"] == inactive_name, y_column]
+
+                if not agn_val.empty and not inactive_val.empty:
+                    diff = float(agn_val.values[0]) - float(inactive_val.values[0])
+                    if diff == diff:  # Check for NaN
+                        diffs.append(diff)
+                        valid_pairs += 1
+
+            diffs = np.array(diffs)
+            diffs = diffs[np.isfinite(diffs)]
+
+            fig, ax = plt.subplots(figsize=(8, 5))
+            ax.hist(diffs, bins=10, color="grey", alpha=0.4, edgecolor="black")
+            ax.axvline(np.median(diffs), color="red", linestyle="--", label=f"Median = {np.median(diffs):.2f}")
+            ax.axvline(np.percentile(diffs,25), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,25):.2f}")
+            ax.axvline(np.percentile(diffs,75), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,75):.2f}")
+            ax.axvline(0, color="black", linestyle="solid")  # reference line
+
+            ax.set_xlabel(f"Δ {y_column} (AGN - Inactive)")
+            ax.set_ylabel("Number of pairs")
+            ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
+            ax.legend()
+
+            output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/pair_diffs/{mask}_{R_kpc}kpc/{y_column}_pair_differences.png'
+            plt.savefig(output_path)
+            print(f"Saved matched-pairs plot to: {output_path}")
+            plt.close(fig)
+
+
+        elif is_x_categorical or is_y_categorical:
+            figsize = 8
+            if truescale == True:
+                if manual_limits is not None:
+                    xratio = (manual_limits[1] - manual_limits[0]) / (manual_limits[3] - manual_limits[2]) * 1.3
+                    yratio = (manual_limits[3] - manual_limits[2]) / (manual_limits[1] - manual_limits[0])
+                    fig = plt.figure(figsize=(figsize * xratio, figsize * yratio))
+            else:
+                fig = plt.figure(figsize=((figsize*1.1)*1.3, figsize*0.92))
+            gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
+            ax_bar = fig.add_subplot(gs[0])
+            ax_bar.set_facecolor('none')
+                        # Axis limits
+            data_x = []
+            data_y = []
+            if soloplot in (None, 'AGN'):
+                data_x.append(x_agn)
+                data_y.append(y_agn)
+            if soloplot in (None, 'inactive'):
+                data_x.append(x_inactive)
+                data_y.append(y_inactive)
+            if soloplot is None and use_gb21:
+                data_x.append(x_gb21)
+                data_y.append(y_gb21)
+            if soloplot is None and use_wis:
+                data_x.append(x_wis)
+                data_y.append(y_wis)
+            if soloplot is None and use_phangs:
+                data_x.append(x_phangs)
+                data_y.append(y_phangs)
+            if soloplot is None and use_sim:
+                data_x.append(x_sim)
+                data_y.append(y_sim)
+
+            all_x = pd.concat(data_x)
+            all_y = pd.concat(data_y)
+
+            if is_x_categorical:
+                cat_order = sorted(set(x_agn.dropna()) | set(x_inactive.dropna()))
+                agn_median = []
+                inactive_median = []
+                agn_std = []
+                inactive_std = []
+
+                for cat in cat_order:
+                    agn_vals = merged_AGN_clean.loc[merged_AGN_clean[x_column] == cat, y_column].dropna()
+                    inact_vals = merged_inactive_clean.loc[merged_inactive_clean[x_column] == cat, y_column].dropna()
+
+                    if len(agn_vals) > 0:
+                        agn_median.append(np.nanmedian(agn_vals))
+                        agn_std.append(np.nanstd(agn_vals))
+                    else:
+                        agn_median.append(np.nan)
+                        agn_std.append(np.nan)
+
+                    if len(inact_vals) > 0:
+                        inactive_median.append(np.nanmedian(inact_vals))
+                        inactive_std.append(np.nanstd(inact_vals))
+                    else:
+                        inactive_median.append(np.nan)
+                        inactive_std.append(np.nan)
+
+                x = np.arange(len(cat_order))
+                width = 0.35
+
+                ax_bar.bar(x - width/2, agn_median, width, yerr=agn_std, label="AGN", color="red", alpha=0.7, capsize=4)
+                ax_bar.bar(x + width/2, inactive_median, width, yerr=inactive_std, label="Inactive", color="blue", alpha=0.7, capsize=4)
+                ax_bar.set_xticks(x)
+                ax_bar.set_xticklabels(cat_order, rotation=45, ha="right")
+                ax_bar.set_xlabel(x_column)
+                ax_bar.set_ylabel(y_column)
+                ax_bar.grid(True)
+                leg = ax_bar.legend(loc=legend_loc)
+                leg.set_zorder(30)
+                ax_bar.set_title(f'{y_column} vs {x_column}')
+
+                if manual_limits is not None:
+                    xlower, xupper, ylower, yupper = manual_limits
+                    xlower, xupper, ylower, yupper = float(xlower), float(xupper), float(ylower), float(yupper)
+                else:
+                    yspan = all_y.max() - all_y.min()
+                    pad_y = (0.05 * yspan) if yspan > 0 else 0.05
+                    ylower = all_y.min() - pad_y
+                    yupper = all_y.max() + pad_y
+
+                        # Histogram bin edges
+
+                y_for_bins = all_y[(all_y >= ylower) & (all_y <= yupper)]
+                if y_for_bins.empty:
+                    y_for_bins = all_y
+                bin_edges = np.histogram_bin_edges(y_for_bins, bins=7)
+
+                # Histogram subplot
+                ax_hist = fig.add_subplot(gs[1], sharey=ax_bar)
+
+                if soloplot in (None, 'AGN'):
+                    ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
+                                color='red', alpha=0.4, label='AGN')
+                    median_agn = np.median(y_agn)
+                    ax_hist.axhline(median_agn, color='red', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn, 
+                                f"{median_agn:.2f}", color='red', fontsize=8, va='center')
+
+                if soloplot in (None, 'inactive'):
+                    ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
+                                color='blue', alpha=0.4, label='Inactive')
+                    median_inactive = np.median(y_inactive)
+                    ax_hist.axhline(median_inactive, color='blue', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive, 
+                                f"{median_inactive:.2f}", color='blue', fontsize=8, va='center')
+
+                if soloplot is None and use_gb21:
+                    ax_hist.hist(y_gb21, bins=bin_edges, orientation='horizontal', 
+                                color='green', alpha=0.4, label='GB21')
+                    median_gb21 = np.median(y_gb21)
+                    ax_hist.axhline(median_gb21, color='green', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_gb21, 
+                                f"{median_gb21:.2f}", color='green', fontsize=8, va='center')
+                
+                if soloplot is None and use_wis:
+                    ax_hist.hist(y_wis, bins=bin_edges, orientation='horizontal', 
+                                color='purple', alpha=0.4, label='WIS')
+                    median_wis = np.median(y_wis)
+                    ax_hist.axhline(median_wis, color='purple', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_wis, 
+                                f"{median_wis:.2f}", color='purple', fontsize=8, va='center')
+                if soloplot is None and use_phangs:
+                    ax_hist.hist(y_phangs, bins=bin_edges, orientation='horizontal', 
+                                color='orange', alpha=0.4, label='PHANGS')
+                    median_phangs = np.median(y_phangs)
+                    ax_hist.axhline(median_phangs, color='orange', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_phangs, 
+                                f"{median_phangs:.2f}", color='orange', fontsize=8, va='center')
+                if soloplot is None and use_sim:
+                    ax_hist.hist(y_sim, bins=bin_edges, orientation='horizontal', 
+                                color='brown', alpha=0.4, label='Simulations')
+                    median_sim = np.median(y_sim)
+                    ax_hist.axhline(median_sim, color='brown', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_sim, 
+                                f"{median_sim:.2f}", color='brown', fontsize=8, va='center')
+
+                ax_hist.axis('off')
+
+                        # Save
+                parts = []
+                if soloplot:
+                    parts.append(f"_{soloplot}")
+                if use_gb21:
+                    parts.append('_gb21')
+                if use_wis:
+                    parts.append('_wis')
+                if use_phangs:
+                    parts.append('_phangs')
+                if use_sim:
+                    parts.append('_sim')
+                if comb_llama:
+                    parts.append('_comb')
+                suffix = ''.join(parts)
+                output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}{x_column}_vs_{y_column}.png'
+                plt.savefig(output_path)
+                print(f"Saved plot to: {output_path}")
+                plt.close(fig)  
+
+
+            elif is_y_categorical:
+                cat_order = sorted(set(y_agn.dropna()) | set(y_inactive.dropna()))
+                agn_median = []
+                inactive_median = []
+                agn_std = []
+                inactive_std = []
+
+                for cat in cat_order:
+                    agn_vals = merged_AGN_clean.loc[merged_AGN_clean[y_column] == cat, x_column].dropna()
+                    inact_vals = merged_inactive_clean.loc[merged_inactive_clean[y_column] == cat, x_column].dropna()
+
+                    if len(agn_vals) > 0:
+                        agn_median.append(np.nanmedian(agn_vals))
+                        agn_std.append(np.nanstd(agn_vals))
+                    else:
+                        agn_median.append(np.nan)
+                        agn_std.append(np.nan)
+
+                    if len(inact_vals) > 0:
+                        inactive_median.append(np.nanmedian(inact_vals))
+                        inactive_std.append(np.nanstd(inact_vals))
+                    else:
+                        inactive_median.append(np.nan)
+                        inactive_std.append(np.nan)
+
+                y = np.arange(len(cat_order))
+                height = 0.35
+
+                ax_bar.barh(y - height/2, agn_median, height, xerr=agn_std, label="AGN", color="red", alpha=0.7, capsize=4)
+                ax_bar.barh(y + height/2, inactive_median, height, xerr=inactive_std, label="Inactive", color="blue", alpha=0.7, capsize=4)
+                ax_bar.set_yticks(y)
+                ax_bar.set_yticklabels(cat_order)
+                ax_bar.set_xlabel(x_column)
+                ax_bar.set_ylabel(y_column)
+                ax_bar.grid(True)
+                leg = ax_bar.legend(loc=legend_loc)
+                leg.set_zorder(30)
+                ax_bar.set_title(f'{y_column} vs {x_column}')
+                suffix = f"_{soloplot}" if soloplot else ""
+                output_path = f'/data/c3040163/llama/alma/gas_analysis_results/Plots/{mask}_{R_kpc}kpc/{suffix}_{x_column}_vs_{y_column}.png'
+                plt.savefig(output_path)
+                print(f"Saved plot to: {output_path}")
+                plt.close(fig)
 
     
 
@@ -1769,6 +1795,7 @@ phangs_properties2 = {
 
 wis_H_phot = Table.read('/data/c3040163/llama/wisdom_2mass_Hphotometry.fits', format='fits')
 phangs_H_phot = Table.read('/data/c3040163/llama/phangs_2mass_Hphotometry.fits', format='fits')
+display(phangs_H_phot)
 
 
 def get_hubble_T(name):
@@ -1943,23 +1970,23 @@ for mask in masks:
 
     ############### CAS WISDOM, PHANGS coplot   #############
 
-        # if R_kpc == 1.5:
-        #     plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
-        #     plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
-        #     plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
+        if R_kpc == 1.5:
+            # plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
+            # plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
+            # plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
 
-        #     plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
-        #     plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
-        #     plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
+            # plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
+            # plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
+            plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
 
         ###### compare on same axis ######
 
-plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False, exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True)
-plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True)
-plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True)
-plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True)
-plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True)
-plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True)
+# plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False, exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True)
+# plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True)
+# plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True)
+# plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True)
+# plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True)
+# plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True)
 
 
 

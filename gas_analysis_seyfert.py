@@ -530,7 +530,7 @@ def process_file(args, images_too_small, isolate=None):
         R_pc = R_kpc * 1000.0
         R_arcsec = R_pc / pc_per_arcsec
         R_pix = R_arcsec / pixel_scale_arcsec
-        R_multip = 10
+        R_multip = 1
 
         # ---- Apply inclination: b = a cos(i)
         I_rad = np.deg2rad(I)
@@ -546,7 +546,9 @@ def process_file(args, images_too_small, isolate=None):
         angle = theta * u.rad
 
         # ---- Build elliptical aperture
-        center = PixCoord(x=cx, y=cy)
+        cx_trim = shape[1] // 2
+        cy_trim = shape[0] // 2
+        center = PixCoord(x=cx_trim, y=cy_trim)
         aperture = EllipsePixelRegion(center=center, width=2*a, height=2*b, angle=angle)
 
         # ---- Convert to mask image
@@ -554,14 +556,14 @@ def process_file(args, images_too_small, isolate=None):
         coords = PixCoord(xx, yy)
         mask = aperture.contains(coords)
 
-        return mask, aperture, R_kpc*1.42
+        return mask, aperture, R_kpc
 
     if flux_mask == True:
         total_flux = np.nansum(image[~mask])
         f = 1.0
         ratio = 1.0
         while ratio > 0.9:
-            flux_mask_90 , flux_aperture_90, R_90  = make_projected_region_mask(image.shape, R_kpc*f)
+            flux_mask_90 , flux_aperture_90, R_90  = make_projected_region_mask(image.shape, R_kpc*f*1.42)
             flux_90 = np.nansum(image[flux_mask_90 & ~mask])
             ratio = flux_90 / total_flux if total_flux > 0 else 0.0
             f -= 0.001
