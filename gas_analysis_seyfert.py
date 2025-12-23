@@ -503,6 +503,8 @@ def process_file(args, images_too_small, isolate=None):
     error_map[:] = target_emap
 
     emission_pixels = np.count_nonzero(np.abs(image) > 1e-10)
+    total_pixels = image.size
+    emission_fraction = emission_pixels / total_pixels
 
 
     # Update WCS for cutout
@@ -760,7 +762,8 @@ def process_file(args, images_too_small, isolate=None):
         "L'CO (K km_s pc2)": round(LCO, 3), "L'CO_err (K km_s pc2)": round(LCO_err, 3),
         "mass_weighted_sd": round(mw_sd, 1), "mass_weighted_sd_err": round(mw_sd_err, 1),
         "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1),
-        "emission_pixels": emission_pixels
+        "emission_pixels": emission_pixels,
+        "emission_fraction": emission_fraction
     }
 
 # ------------------ Parallel Directory Processing ------------------
