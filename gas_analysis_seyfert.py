@@ -67,6 +67,8 @@ def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dt
     aw_vals = []
     clump_vals = []
     LCO_vals = []
+    LCO_JCMT_vals = []
+    LCO_APEX_vals = []
 
     for i in range(n_iter_chunk):
         # create one MC realisation locally: image + gaussian noise scaled by errmap
@@ -141,6 +143,29 @@ def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dt
         except Exception:
             LCO_vals.append(np.nan)
 
+        try:
+            LCO_JCMT_vals.append(LCO_single_JCMT(mc_img, mask,
+                                metric_kwargs["pixel_scale_arcsec"],
+                                metric_kwargs["pixel_area_pc2"],
+                                metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                metric_kwargs["alpha_CO"],
+                                metric_kwargs["name"],
+                                co32=metric_kwargs["co32"]))
+        except Exception:
+            LCO_JCMT_vals.append(np.nan)
+
+        try:
+            LCO_APEX_vals.append(LCO_single_APEX(mc_img, mask,
+                                metric_kwargs["pixel_scale_arcsec"],
+                                metric_kwargs["pixel_area_pc2"],
+                                metric_kwargs["R_21"], metric_kwargs["R_31"],
+                                metric_kwargs["alpha_CO"],
+                                metric_kwargs["name"],
+                                co32=metric_kwargs["co32"]))
+        except Exception:
+            LCO_APEX_vals.append(np.nan)
+            
+
     # close shared memory views (do NOT unlink here)
     shm_img.close()
     shm_err.close()
@@ -156,6 +181,8 @@ def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dt
         "aw": aw_vals,
         "clump": clump_vals,
         "LCO": LCO_vals,
+        "LCO_JCMT": LCO_JCMT_vals,
+        "LCO_APEX": LCO_APEX_vals
     }
 
 
@@ -220,9 +247,29 @@ def total_mass_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, c
     map_MH2 = alpha_CO * map_LprimeCO10
     return np.nansum(map_MH2[~mask])
 
-def LCO_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
+def LCO_single(image, mask, pixel_scale_arcsec, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
     map_LprimeCO = image * pixel_area_pc2
     return np.nansum(map_LprimeCO[~mask])
+
+def LCO_single_JCMT(image, mask, pixel_scale_arcsec, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
+    map_LprimeCO = image * pixel_area_pc2
+    y, x = np.indices(image.shape)
+    center = (x.max() / 2, y.max() / 2)
+    r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
+    r_arcsec = r * pixel_scale_arcsec
+    r_JCMT = 20.4 / 2  # JCMT beam radius in arcsec
+    map_LprimeCO_JCMT = map_LprimeCO * (r_arcsec <= r_JCMT)
+    return np.nansum(map_LprimeCO_JCMT[~mask])
+
+def LCO_single_APEX(image, mask, pixel_scale_arcsec, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
+    map_LprimeCO = image * pixel_area_pc2
+    y, x = np.indices(image.shape)
+    center = (x.max() / 2, y.max() / 2)
+    r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
+    r_arcsec = r * pixel_scale_arcsec
+    r_APEX = 27.1 / 2  # APEX beam radius in arcsec
+    map_LprimeCO_APEX = map_LprimeCO * (r_arcsec <= r_APEX)
+    return np.nansum(map_LprimeCO_APEX[~mask])
 
 def mass_weighted_sd_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
     map_LprimeCO = image * pixel_area_pc2
@@ -665,6 +712,8 @@ def process_file(args, images_too_small, isolate=None):
         conc, conc_err = merge_global("conc")
         total_mass, total_mass_err = merge_global("tmass")
         LCO, LCO_err = merge_global("LCO")
+        LCO_JCMT, LCO_JCMT_err = merge_global("LCO_JCMT")
+        LCO_APEX, LCO_APEX_err = merge_global("LCO_APEX")
         mw_sd, mw_sd_err = merge_global("mw")
         aw_sd, aw_sd_err = merge_global("aw")
         clump, clump_err = merge_global("clump")
@@ -676,6 +725,8 @@ def process_file(args, images_too_small, isolate=None):
         conc, conc_err = np.nan, np.nan
         total_mass, total_mass_err = np.nan, np.nan
         LCO, LCO_err = np.nan, np.nan
+        LCO_JCMT, LCO_JCMT_err = np.nan, np.nan
+        LCO_APEX, LCO_APEX_err = np.nan, np.nan
         mw_sd, mw_sd_err = np.nan, np.nan
         aw_sd, aw_sd_err = np.nan, np.nan
         clump, clump_err = np.nan, np.nan
@@ -760,6 +811,8 @@ def process_file(args, images_too_small, isolate=None):
         "pc_per_arcsec": round(pc_per_arcsec, 1),
         "total_mass (M_sun)": round(total_mass, 2), "total_mass_err (M_sun)": round(total_mass_err, 2),
         "L'CO (K km_s pc2)": round(LCO, 3), "L'CO_err (K km_s pc2)": round(LCO_err, 3),
+        "L'CO_JCMT (K km s pc2)": round(LCO_JCMT, 3), "L'CO_JCMT_err (K km s pc2)": round(LCO_JCMT_err, 3),
+        "L'CO_APEX (K km s pc2)": round(LCO_APEX, 3), "L'CO_APEX_err (K km s pc2)": round(LCO_APEX_err, 3),
         "mass_weighted_sd": round(mw_sd, 1), "mass_weighted_sd_err": round(mw_sd_err, 1),
         "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1),
         "emission_pixels": emission_pixels,
