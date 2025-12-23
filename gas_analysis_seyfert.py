@@ -249,10 +249,14 @@ def total_mass_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, c
 
 def LCO_single(image, mask, pixel_scale_arcsec, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
     map_LprimeCO = image * pixel_area_pc2
+    if co32:
+        map_LprimeCO = (map_LprimeCO / R_31) * R_21
     return np.nansum(map_LprimeCO[~mask])
 
 def LCO_single_JCMT(image, mask, pixel_scale_arcsec, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
     map_LprimeCO = image * pixel_area_pc2
+    if co32:
+        map_LprimeCO = (map_LprimeCO / R_31) * R_21
     y, x = np.indices(image.shape)
     center = (x.max() / 2, y.max() / 2)
     r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
@@ -263,6 +267,8 @@ def LCO_single_JCMT(image, mask, pixel_scale_arcsec, pixel_area_pc2, R_21, R_31,
 
 def LCO_single_APEX(image, mask, pixel_scale_arcsec, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
     map_LprimeCO = image * pixel_area_pc2
+    if co32:
+        map_LprimeCO = (map_LprimeCO / R_31) * R_21
     y, x = np.indices(image.shape)
     center = (x.max() / 2, y.max() / 2)
     r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
