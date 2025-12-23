@@ -529,19 +529,78 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             y_sim = sim_clean[y_column]
             names_sim = sim_clean["Name"].values
 
-        # Extract values
-        x_agn = merged_AGN_clean[x_column]
-        y_agn = merged_AGN_clean[y_column]
-        names_agn = merged_AGN_clean["Name_clean"].str.replace(" ", "", regex=False).values
-        xerr_agn = get_errorbars(merged_AGN_clean, x_column)
-        yerr_agn = get_errorbars(merged_AGN_clean, y_column)
+        if x_column != 'log L′ CO':
 
-        x_inactive = merged_inactive_clean[x_column]
-        y_inactive = merged_inactive_clean[y_column]
+            # Extract values
+            x_agn = merged_AGN_clean[x_column]
+            y_agn = merged_AGN_clean[y_column]
+            names_agn = merged_AGN_clean["Name_clean"].str.replace(" ", "", regex=False).values
+            xerr_agn = get_errorbars(merged_AGN_clean, x_column)
+            yerr_agn = get_errorbars(merged_AGN_clean, y_column)
 
-        names_inactive = merged_inactive_clean["Name_clean"].str.replace(" ", "", regex=False).values
-        xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
-        yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
+            x_inactive = merged_inactive_clean[x_column]
+            y_inactive = merged_inactive_clean[y_column]
+
+            names_inactive = merged_inactive_clean["Name_clean"].str.replace(" ", "", regex=False).values
+            xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
+            yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
+
+        if x_column == 'log L′ CO':
+            ### insert code here ####
+            df_ros_obs = pd.DataFrame(Rosario2018_obs)
+            df_ros_obs['Name_clean'] = normalize_name(df_ros_obs['Name']).str.replace(" ", "", regex=False)
+            merged_AGN_clean = merged_AGN_clean.merge(
+                df_ros_obs[['Name_clean', 'Telescope']],
+                left_on='Name_clean',
+                right_on='Name_clean',
+                how='left'
+            )
+            merged_inactive_clean = merged_inactive_clean.merge(
+                df_ros_obs[['Name_clean', 'Telescope']],
+                left_on='Name_clean',
+                right_on='Name_clean',
+                how='left'
+            )
+            telescope_to_col = {
+                    'JCMT': "L'CO_JCMT (K km s pc2)",
+                    'APEX': "L'CO_APEX (K km s pc2)"
+                }
+            telescope_to_errcol = {
+                    'JCMT': "L'CO_JCMT_err (K km s pc2)",
+                    'APEX': "L'CO_APEX_err (K km s pc2)"
+                }
+
+            def select_LCO(row,key):
+                tel = row['Telescope']
+                if tel in key:
+                    return row[key[tel]]
+                return np.nan
+            
+            x_agn = merged_AGN_clean[x_column]
+            y_agn = merged_AGN_clean.apply(
+                lambda row: select_LCO(row, telescope_to_col),
+                axis=1
+            )
+            names_agn = merged_AGN_clean["Name_clean"].str.replace(" ", "", regex=False).values
+            merged_AGN_clean['LCO_err_selected'] = merged_AGN_clean.apply(
+                lambda row: select_LCO(row, telescope_to_errcol),
+                axis=1
+            )
+            xerr_agn = get_errorbars(merged_AGN_clean, x_column)
+            yerr_agn = get_errorbars(merged_AGN_clean, "LCO_err_selected")
+
+            x_inactive = merged_inactive_clean[x_column]
+            y_inactive = merged_inactive_clean.apply(
+                lambda row: select_LCO(row, telescope_to_col),
+                axis=1
+            )
+            names_inactive = merged_inactive_clean["Name_clean"].str.replace(" ", "", regex=False).values
+            merged_inactive_clean['LCO_err_selected'] = merged_inactive_clean.apply(
+                lambda row: select_LCO(row, telescope_to_errcol),
+                axis=1
+            )
+            xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
+            yerr_inactive = get_errorbars(merged_inactive_clean, "LCO_err_selected")
 
         names_llama = list(names_agn) + list(names_inactive)
         if use_phangs:
@@ -1417,6 +1476,154 @@ inactive_Rosario2018 = pd.DataFrame([
     {"Name": "NGC 7727",     "log L′ CO": "7.449", "log LGAL": "42.56", "log LAGN": "41.2"},
     {"Name": "NGC 1375",     "log L′ CO": "NaN", "log LGAL": "NaN", "log LAGN": "NaN"}
 ])
+
+Rosario2018_obs = [
+    # ---------------- AGN ----------------
+    dict(Name="ESO 021-G004", Distance_Mpc=39, AGN_type="2", Telescope="APEX",
+         ICO_Kkms=4.5, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=132, SCO_err=15, SCO_ul=False),
+
+    dict(Name="ESO 137-G034", Distance_Mpc=35, AGN_type="2", Telescope="APEX",
+         ICO_Kkms=3.0, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=89, SCO_err=10, SCO_ul=False),
+
+    dict(Name="MCG-05-23-016", Distance_Mpc=35, AGN_type="1i", Telescope="APEX",
+         ICO_Kkms=1.3, ICO_err=np.nan, ICO_ul=True,
+         SCO_Jykms=38, SCO_err=np.nan, SCO_ul=True),
+
+    dict(Name="MCG-06-30-015", Distance_Mpc=27, AGN_type="1.2", Telescope="APEX",
+         ICO_Kkms=1.0, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=29, SCO_err=5, SCO_ul=False),
+
+    dict(Name="NGC 1365", Distance_Mpc=18, AGN_type="1.8", Telescope="SEST",
+         ICO_Kkms=150.0, ICO_err=10.0, ICO_ul=False,
+         SCO_Jykms=3075, SCO_err=205, SCO_ul=False),
+
+    dict(Name="NGC 2110", Distance_Mpc=34, AGN_type="1i", Telescope="JCMT",
+         ICO_Kkms=3.4, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=57, SCO_err=6, SCO_ul=False),
+
+    dict(Name="NGC 2992", Distance_Mpc=36, AGN_type="1i", Telescope="JCMT",
+         ICO_Kkms=22.4, ICO_err=2.0, ICO_ul=False,
+         SCO_Jykms=377, SCO_err=28, SCO_ul=False),
+
+    dict(Name="NGC 3081", Distance_Mpc=34, AGN_type="1h", Telescope="JCMT",
+         ICO_Kkms=4.8, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=80, SCO_err=17, SCO_ul=False),
+
+    dict(Name="NGC 3783", Distance_Mpc=38, AGN_type="1.5", Telescope="APEX",
+         ICO_Kkms=3.5, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=103, SCO_err=12, SCO_ul=False),
+
+    dict(Name="NGC 4235", Distance_Mpc=37, AGN_type="1.2", Telescope="APEX",
+         ICO_Kkms=2.3, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=68, SCO_err=9, SCO_ul=False),
+
+    dict(Name="NGC 4388", Distance_Mpc=25, AGN_type="1h", Telescope="JCMT",
+         ICO_Kkms=22.3, ICO_err=2.0, ICO_ul=False,
+         SCO_Jykms=374, SCO_err=29, SCO_ul=False),
+
+    dict(Name="NGC 4593", Distance_Mpc=37, AGN_type="1.0", Telescope="JCMT",
+         ICO_Kkms=10.0, ICO_err=2.0, ICO_ul=False,
+         SCO_Jykms=168, SCO_err=28, SCO_ul=False),
+
+    dict(Name="NGC 5506", Distance_Mpc=27, AGN_type="1i", Telescope="JCMT",
+         ICO_Kkms=10.1, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=169, SCO_err=20, SCO_ul=False),
+
+    dict(Name="NGC 5728", Distance_Mpc=39, AGN_type="2", Telescope="JCMT",
+         ICO_Kkms=21.9, ICO_err=2.0, ICO_ul=False,
+         SCO_Jykms=368, SCO_err=41, SCO_ul=False),
+
+    dict(Name="NGC 6814", Distance_Mpc=23, AGN_type="1.5", Telescope="JCMT",
+         ICO_Kkms=5.7, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=96, SCO_err=22, SCO_ul=False),
+
+    dict(Name="NGC 7172", Distance_Mpc=37, AGN_type="1i", Telescope="APEX",
+         ICO_Kkms=18.7, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=548, SCO_err=28, SCO_ul=False),
+
+    dict(Name="NGC 7213", Distance_Mpc=25, AGN_type="1", Telescope="APEX",
+         ICO_Kkms=8.2, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=240, SCO_err=16, SCO_ul=False),
+
+    dict(Name="NGC 7582", Distance_Mpc=22, AGN_type="1i", Telescope="APEX",
+         ICO_Kkms=95.8, ICO_err=3.0, ICO_ul=False,
+         SCO_Jykms=2803, SCO_err=83, SCO_ul=False),
+
+    # ---------------- Inactive ----------------
+    dict(Name="ESO 093-G003", Distance_Mpc=22, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=19.9, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=581, SCO_err=38, SCO_ul=False),
+
+    dict(Name="ESO 208-G021", Distance_Mpc=17, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=0.4, ICO_err=np.nan, ICO_ul=True,
+         SCO_Jykms=12, SCO_err=np.nan, SCO_ul=True),
+
+    dict(Name="IC 4653", Distance_Mpc=26, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=3.6, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=107, SCO_err=9, SCO_ul=False),
+
+    dict(Name="NGC 1079", Distance_Mpc=19, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=0.6, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=19, SCO_err=5, SCO_ul=False),
+
+    dict(Name="NGC 1947", Distance_Mpc=19, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=12.0, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=351, SCO_err=26, SCO_ul=False),
+
+    dict(Name="NGC 2775", Distance_Mpc=21, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=0.4, ICO_err=np.nan, ICO_ul=True,
+         SCO_Jykms=12, SCO_err=np.nan, SCO_ul=True),
+
+    dict(Name="NGC 3175", Distance_Mpc=14, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=31.4, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=918, SCO_err=23, SCO_ul=False),
+
+    dict(Name="NGC 3351", Distance_Mpc=11, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=37.7, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=1104, SCO_err=22, SCO_ul=False),
+
+    dict(Name="NGC 3717", Distance_Mpc=24, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=30.1, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=881, SCO_err=29, SCO_ul=False),
+
+    dict(Name="NGC 3749", Distance_Mpc=42, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=15.7, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=459, SCO_err=34, SCO_ul=False),
+
+    dict(Name="NGC 4224", Distance_Mpc=41, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=4.1, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=120, SCO_err=11, SCO_ul=False),
+
+    dict(Name="NGC 4254", Distance_Mpc=15, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=34.1, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=998, SCO_err=30, SCO_ul=False),
+
+    dict(Name="NGC 4260", Distance_Mpc=31, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=1.1, ICO_err=np.nan, ICO_ul=True,
+         SCO_Jykms=31, SCO_err=np.nan, SCO_ul=True),
+
+    dict(Name="NGC 5037", Distance_Mpc=35, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=9.8, ICO_err=1.0, ICO_ul=False,
+         SCO_Jykms=286, SCO_err=27, SCO_ul=False),
+
+    dict(Name="NGC 5845", Distance_Mpc=25, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=0.9, ICO_err=np.nan, ICO_ul=True,
+         SCO_Jykms=26, SCO_err=np.nan, SCO_ul=True),
+
+    dict(Name="NGC 5921", Distance_Mpc=21, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=11.6, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=340, SCO_err=14, SCO_ul=False),
+
+    dict(Name="NGC 718", Distance_Mpc=23, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=1.9, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=57, SCO_err=4, SCO_ul=False),
+
+    dict(Name="NGC 7727", Distance_Mpc=26, AGN_type=None, Telescope="APEX",
+         ICO_Kkms=2.3, ICO_err=0.0, ICO_ul=False,
+         SCO_Jykms=68, SCO_err=8, SCO_ul=False),
+]
 
 
 
