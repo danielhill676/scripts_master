@@ -141,8 +141,8 @@ FITSFILE    {cube_file}
 NRADII      {NRADII}
 RADSEP      {(2.5*BMAJ):.3f}
 
-XPOS        {Xcen}
-YPOS        {Ycen}
+XPOS        {RA}
+YPOS        {DEC}
 #INC         {inc}
 #PA          {PA}
 
@@ -156,7 +156,7 @@ FREE        VROT VDISP PA INC
 NORM        LOCAL
 MASK        SMOOTH&SEARCH
 FACTOR      1.5 
-BLANKCUT    3 
+BLANKCUT    3.5 
 
 TWOSTAGE    true
 REGTYPE     auto

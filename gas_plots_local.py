@@ -75,7 +75,7 @@ def normalize_name(col):
     )
 
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, GB21, wis, sim, phangs, use_gb21=False, soloplot=None, exclude_names=None, logx=False, logy=False,
-                        background_image=None, manual_limits=None, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False):
+                        background_image=None, manual_limits=None, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False, use_aux=False):
     """possible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -102,9 +102,11 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
     base_AGN = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN"
     base_inactive = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive"
+    base_aux = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/aux"
 
     default_AGN = f"{base_AGN}/gas_analysis_summary.csv"
     default_inactive = f"{base_inactive}/gas_analysis_summary.csv"
+    default_aux = f"{base_aux}/gas_analysis_summary.csv"
 
     ################## comparing different masks/radii ########################
 
@@ -142,14 +144,19 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             # Construct CSV paths
             path_AGN = f"{base_AGN}/gas_analysis_summary_{m}_{r}kpc.csv"
             path_inactive = f"{base_inactive}/gas_analysis_summary_{m}_{r}kpc.csv"
+            path_aux = f"{base_aux}/gas_analysis_summary_{m}_{r}kpc.csv"
 
             if not os.path.exists(path_AGN):
                 path_AGN = default_AGN
             if not os.path.exists(path_inactive):
                 path_inactive = default_inactive
+            if not os.path.exists(path_aux):
+                path_aux = default_aux
 
             fit_data_AGN = pd.read_csv(path_AGN)
             fit_data_inactive = pd.read_csv(path_inactive)
+            if use_aux:
+                fit_data_aux = pd.read_csv(path_aux)
 
             df_combined['Name_clean'] = normalize_name(df_combined['Name'])
             llamatab['name_clean'] = normalize_name(llamatab['name'])
@@ -157,6 +164,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             inactive_bol['Name_clean'] = normalize_name(inactive_bol['Name'])
             fit_data_AGN['Galaxy_clean'] = normalize_name(fit_data_AGN['Galaxy'])
             fit_data_inactive['Galaxy_clean'] = normalize_name(fit_data_inactive['Galaxy'])
+            if use_aux:
+                fit_data_aux['Galaxy_clean'] = normalize_name(fit_data_aux['Galaxy'])
 
                     # --- Map name → id ---
             name_to_id = dict(zip(llamatab['name_clean'], llamatab['id']))
@@ -340,6 +349,13 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         # ---- Load files ----
         fit_data_AGN = pd.read_csv(AGN_path)
         fit_data_inactive = pd.read_csv(inactive_path)
+        if use_aux:
+            aux_path = f"{base_aux}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
+            if not os.path.exists(aux_path):
+                print(f"WARNING: {aux_path} not found")
+                use_aux = False
+            if use_aux:
+                fit_data_aux = pd.read_csv(aux_path)
 
         df_combined['Name_clean'] = normalize_name(df_combined['Name'])
         llamatab['name_clean'] = normalize_name(llamatab['name'])
@@ -347,6 +363,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         inactive_bol['Name_clean'] = normalize_name(inactive_bol['Name'])
         fit_data_AGN['Galaxy_clean'] = normalize_name(fit_data_AGN['Galaxy'])
         fit_data_inactive['Galaxy_clean'] = normalize_name(fit_data_inactive['Galaxy'])
+        if use_aux:
+            fit_data_aux['Galaxy_clean'] = normalize_name(fit_data_aux['Galaxy'])
 
         # --- Map name → id ---
         name_to_id = dict(zip(llamatab['name_clean'], llamatab['id']))
@@ -481,9 +499,30 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 .infer_objects(copy=False)
                 .dropna(subset=[x_column, y_column])
             )
+        
+        if use_aux:
+            fit_data_aux = (
+                fit_data_aux
+                .replace([np.inf, -np.inf], np.nan)
+                .infer_objects(copy=False)
+                .dropna(subset=[x_column, y_column])
+            )
+            fit_data_AGN[x_column] = pd.to_numeric(fit_data_AGN[x_column], errors='coerce')
+            fit_data_AGN[y_column] = pd.to_numeric(fit_data_AGN[y_column], errors='coerce')
+            x_aux = fit_data_aux[x_column]
+            y_aux = fit_data_aux[y_column]
+            names_aux = fit_data_aux["Galaxy"].values
 
         if use_gb21:
             GB21_df = pd.DataFrame(GB21)
+
+            ######## save csv, comment out later ##########
+            out_dir = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples"
+            os.makedirs(out_dir, exist_ok=True)
+            out_path = os.path.join(out_dir, "GB21_df.csv")
+            GB21_df.to_csv(out_path, index=False)
+            ################################################
+
             GB21_df[x_column] = pd.to_numeric(GB21_df[x_column], errors='coerce')
             GB21_df[y_column] = pd.to_numeric(GB21_df[y_column], errors='coerce')
             GB21_clean = GB21_df.dropna(subset=[x_column, y_column])
@@ -516,9 +555,19 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             with np.errstate(invalid="ignore", divide="ignore"):
                 wis_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
 
+           ######## save csv, comment out later ##########
+            
+            out_dir = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples"
+            os.makedirs(out_dir, exist_ok=True)
+            out_path = os.path.join(out_dir, "wis_df.csv")
+            wis_df.to_csv(out_path, index=False)
+
+            ################################################
+
             wis_df[x_column] = pd.to_numeric(wis_df[x_column], errors='coerce')
             wis_df[y_column] = pd.to_numeric(wis_df[y_column], errors='coerce')
             wis_clean = wis_df.dropna(subset=[x_column, y_column])
+            
             x_wis = wis_clean[x_column]
             y_wis = wis_clean[y_column]
             names_wis = wis_clean["Name"].values
@@ -574,14 +623,28 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             with np.errstate(invalid="ignore", divide="ignore"):
                 phangs_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
 
+              ######## save csv, comment out later ##########
+            out_dir = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples"
+            os.makedirs(out_dir, exist_ok=True)
+            out_path = os.path.join(out_dir, "phangs_df.csv")
+            phangs_df.to_csv(out_path, index=False)
+            ################################################
+
             phangs_df[x_column] = pd.to_numeric(phangs_df[x_column], errors='coerce')
             phangs_df[y_column] = pd.to_numeric(phangs_df[y_column], errors='coerce')
             phangs_clean = phangs_df.dropna(subset=[x_column, y_column])
             x_phangs = phangs_clean[x_column]
             y_phangs = phangs_clean[y_column]
             names_phangs = phangs_clean["Name"].values
+
         if use_sim:
             sim_df = pd.DataFrame(sim)
+            #### save csv, comment out later ##########
+            out_dir = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples"
+            os.makedirs(out_dir, exist_ok=True)
+            out_path = os.path.join(out_dir, "sim_df.csv")
+            sim_df.to_csv(out_path, index=False)
+            ################################################
             sim_df[x_column] = pd.to_numeric(sim_df[x_column], errors='coerce')
             sim_df[y_column] = pd.to_numeric(sim_df[y_column], errors='coerce')
             sim_clean = sim_df.dropna(subset=[x_column, y_column])
@@ -605,6 +668,9 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             names_inactive = merged_inactive_clean["Name_clean"].str.replace(" ", "", regex=False).values
             xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
             yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
+
+############################## Special handling for L' CO comparison with ROS+18 ##############################
+
 
         if x_column == 'log L′ CO':
             ### insert code here ####
@@ -664,6 +730,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
             yerr_inactive = get_errorbars(merged_inactive_clean, "LCO_err_selected")
 
+        ############################## Prep data for plotting ##############################
+
         names_llama = list(names_agn) + list(names_inactive)
         if use_phangs:
             shared_names_phangs = [name if name in names_llama else None for name in names_phangs]
@@ -674,7 +742,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
 
         if use_wis:
-            shared_names_wis = [name if name in names_llama else None for name in names_wis]
+            shared_names_wis = [name if name in names_llama or name in ["NGC1387","NGC5064"] else None for name in names_wis]
             if not plotshared:
                 mask_keep = ~np.isin(names_wis, names_llama)
                 x_wis = x_wis[mask_keep]
@@ -696,7 +764,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 print("No valid Y data to plot.")
                 return
 
-        # Set up figure
+        ############################### Set up figure ##############################
 
         if not is_x_categorical and not is_y_categorical:
 
@@ -712,9 +780,9 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ax_scatter = fig.add_subplot(gs[0])
             ax_scatter.set_facecolor('none')
 
-            from scipy.stats import spearmanr
+        ############################## Spearman coefficients ##############################
 
-            # ---- Append statistics to global stats table ----
+            from scipy.stats import spearmanr
             global stats_rows
 
             if soloplot is None: 
@@ -812,7 +880,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             all_y = pd.concat(data_y)
 
 
-            # set limits:
+            ############################### set limits: ##############################
 
             if manual_limits is not None:
                 xlower, xupper, ylower, yupper = manual_limits
@@ -843,7 +911,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     ylower = float(positives.min()) * 0.9
                     print("Adjusted y lower bound for log scale to", ylower)
 
-                # Background image:
+                ############################### Background image ##############################
 
             if background_image is not None:
                 try:
@@ -872,7 +940,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 marker_AGN = 'o'
                 marker_inactive = 'o'
 
-            # Plot scatter points
+            ############################### Plot scatter points ##############################
+
             if soloplot in (None, 'AGN'):
                 ax_scatter.errorbar(
                     x_agn, y_agn,
@@ -924,6 +993,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
                         ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
             
+    ############################## Plot comparison samples ##############################
+
             if soloplot is None and use_gb21:
                 ax_scatter.scatter(
                 x_gb21, y_gb21,
@@ -945,8 +1016,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     names_llama = list(names_agn) + list(names_inactive)
                     for x, y, name in zip(x_wis, y_wis, shared_names_wis):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
-
-
 
             if soloplot is None and use_phangs:        
                 ax_scatter.scatter(
@@ -974,6 +1043,16 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     for x, y, name in zip(x_sim, y_sim, shared_names_sim):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='saddlebrown', zorder=10)
 
+            if use_aux:
+                ax_scatter.scatter(
+                x_aux, y_aux,
+                marker='*', color='cyan', label='wis/phangs pipeline', s=100, alpha=0.9, edgecolors='black', linewidths=0.5
+                )
+                for x, y, name in zip(x_aux, y_aux, names_aux):
+                    ax_scatter.text(float(x), float(y), name, fontsize=7, color='teal', zorder=10)
+
+            ############################## Add excluded ticks ##############################
+
             if exclude_names is not None:
                             # For X-axis (horizontal ticks)
                 for x_val in excluded_x:
@@ -986,7 +1065,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 for x_val, name in zip(excluded_x, exclude_names):
                     ax_scatter.text(x_val, ylower, name, fontsize=6, rotation=90, color='gray', verticalalignment='bottom')
 
-            # apply scale and limits
+            ############################### apply scale and limits ##############################
             if logx:
                 ax_scatter.set_xscale("log")
             if logy:
@@ -995,22 +1074,28 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ax_scatter.set_xlim(xlower, xupper)
             ax_scatter.set_ylim(ylower, yupper)
 
-            # Histogram bin edges
+            ############################### Histogram bin edges ##############################
 
             y_for_bins = all_y[(all_y >= ylower) & (all_y <= yupper)]
             if y_for_bins.empty:
                 y_for_bins = all_y
             bin_edges = np.histogram_bin_edges(y_for_bins, bins=7)
 
-            # Scatter labels
-            ax_scatter.set_xlabel(x_column)
-            ax_scatter.set_ylabel(y_column)
+            ############################### Scatter labels ###############################
+            if x_column == 'log L′ CO':
+                ax_scatter.set_xlabel(f"Single-dish log L′ CO (K km s pc$^2$)")
+            else:
+                ax_scatter.set_xlabel(x_column)
+            if y_column == 'L\'CO (K km_s pc2)':
+                ax_scatter.set_ylabel(f"ALMA L′ CO (K km s pc$^2$)")
+            else:
+                ax_scatter.set_ylabel(y_column)
             ax_scatter.grid(True)
             leg = ax_scatter.legend(loc=legend_loc)
             leg.set_zorder(30)
             ax_scatter.set_title(f'{y_column} vs {x_column}')
 
-        # Histogram subplot
+        ############################### Histogram subplot ##############################
             ax_hist = fig.add_subplot(gs[1], sharey=ax_scatter)
 
             if soloplot in (None, 'AGN') and not comb_llama:
@@ -1070,7 +1155,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             ax_hist.axis('off')
 
-            # Save
+            ############################### Save ###############################
             parts = []
             if soloplot:
                 parts.append(f"_{soloplot}")
@@ -2244,8 +2329,8 @@ phangs_properties2 = {
 }
 
 # for t in result: 
-#     if 'T' in t.colnames: 
-#         print(f"Table: {t.meta.get('name', 'unknown')}, Columns: {t['T']}")
+#     if 'i' in t.colnames: 
+#         print(f"Table: {t.meta.get('name', 'unknown')}, Columns: {t['i']}")
 
 wis_H_phot = Table.read('/Users/administrator/Astro/LLAMA/wisdom_2mass_Hphotometry.fits', format='fits')
 phangs_H_phot = Table.read('/Users/administrator/Astro/LLAMA/phangs_2mass_Hphotometry.fits', format='fits')
@@ -2374,7 +2459,7 @@ for mask in masks:
 
         # plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
         # plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+        # plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
         # plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
         # plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
         # plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
@@ -2418,19 +2503,19 @@ for mask in masks:
 
         # ############## L'CO comparison with Ros18 #####################
 
-        # plot_llama_property('log L′ CO','L\'CO_APEX (K km s pc2)',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,logy=True,mask=mask,R_kpc=R_kpc,exclude_names=None)
+        # plot_llama_property('log L′ CO','L\'CO (K km_s pc2)',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,logy=True,mask=mask,R_kpc=R_kpc,exclude_names=None)
 
 
     ############### CAS WISDOM, PHANGS coplot   #############
 
-#         if R_kpc == 1.5:
-#             plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
-#             plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
-#             plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'])
+        if R_kpc == 1.5:
+            plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True)
+            plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True)
+            plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,GB21_density,wisdom, simulations, phangs,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True)
 
-#             plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
-#             plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
-#             plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
+            # plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
+            # plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
+            # plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, GB21=GB21_density, wis=wisdom, sim=simulations, phangs=phangs, use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
 
 #         ###### compare on same axis ######
 
