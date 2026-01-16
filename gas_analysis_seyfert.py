@@ -402,7 +402,7 @@ def safe_process(args):
         print(f"Error processing {name}: {e}")
         return ("__ERROR__", name, str(e), tb)
 
-def process_file(args, images_too_small, isolate=None, manual_rebin=False):
+def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_exp=False):
     mom0_file, emom0_file, subdir, output_dir, co32, rebin, PHANGS_mask, R_kpc, flux_mask = args
     file = mom0_file
     error_map_file = emom0_file
@@ -885,7 +885,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False):
             plt.legend()
             plt.tight_layout()
             plot_path = os.path.join(output_dir, f"{name}_{PHANGS_mask}_{rebin}_{R_kpc}kpc_expfit.png")
-            plt.savefig(plot_path,dpi=200)
+            if save_exp == True:
+                plt.savefig(plot_path,dpi=200)
             plt.close()
 
         except:
@@ -953,10 +954,10 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
             else:
                 if name in ["NGC4388","NGC6814","NGC5728"]:
                     continue
-                # print(f'native resolution for {name} is lower than {rebin} pc, using native res files')
+                print(f'{rebin} pc for {name}, using native res files or rebinning manually')
                 manual_rebin = True
-                # mom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_mom0.fits")
-                # emom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_emom0.fits")
+                mom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_mom0.fits")
+                emom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_emom0.fits")
 
 
         elif rebin is not None and co32:
@@ -970,10 +971,10 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
             else:
                 if name not in ["NGC4388","NGC6814","NGC5728"]:
                     continue
-                # print(f'native resolution for {name} is lower than {rebin} pc, using native res files')
+                print(f'{rebin} pc for {name}, using native res files or rebinning manually')
                 manual_rebin = True
-                # mom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_mom0.fits")
-                # emom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_emom0.fits")
+                mom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_mom0.fits")
+                emom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_emom0.fits")
 
 
         elif not rebin and not co32:
