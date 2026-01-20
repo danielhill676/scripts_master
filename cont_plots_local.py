@@ -75,7 +75,7 @@ def normalize_name(col):
     )
 
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, use_gb21=False, soloplot=None, exclude_names=None, logx=False, logy=False,  #see archived_comp_samp_build for rebuilding PHANGS WIS SIM GB21
-                        background_image=None, manual_limits=None, square=False, best_fit=False, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False, which_compare=None, use_aux=False, use_cont = False):
+                        background_image=None, manual_limits=None, square=False, best_fit=False, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False, which_compare=None, use_aux=False):
     """possible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -100,15 +100,13 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     # Load LLAMA table
     llamatab = Table.read('/Users/administrator/Astro/LLAMA/llama_main_properties.fits', format='fits')
 
-    base_AGN = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN"
-    base_inactive = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive"
-    base_aux = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/aux"
-    base_cont_AGN = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/AGN"
-    base_cont_inactive = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/inactive"
+    base_AGN = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/AGN"
+    base_inactive = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/inactive"
+    base_aux = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/aux"
 
-    default_AGN = f"{base_AGN}/gas_analysis_summary.csv"
-    default_inactive = f"{base_inactive}/gas_analysis_summary.csv"
-    default_aux = f"{base_aux}/gas_analysis_summary.csv"
+    default_AGN = f"{base_AGN}/cont_analysis_summary.csv"
+    default_inactive = f"{base_inactive}/cont_analysis_summary.csv"
+    default_aux = f"{base_aux}/cont_analysis_summary.csv"
 
     ################## comparing different masks/radii ########################
 
@@ -156,8 +154,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             path_AGN = f"{base_AGN}/gas_analysis_summary_{m}_{r}kpc.csv"
             path_inactive = f"{base_inactive}/gas_analysis_summary_{m}_{r}kpc.csv"
             path_aux = f"{base_aux}/gas_analysis_summary_{m}_{r}kpc.csv"
-            path_cont_AGN = f"{base_AGN}/cont_analysis_results/cont_analysis_summary_{r}kpc.csv"
-            path_cont_inactive = f"{base_inactive}/cont_analysis_results/cont_analysis_summary_{r}kpc.csv"
 
             if not os.path.exists(path_AGN):
                 print(f"WARNING: {path_AGN} not found")
@@ -173,13 +169,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             fit_data_inactive = pd.read_csv(path_inactive)
             if use_aux:
                 fit_data_aux = pd.read_csv(path_aux)
-            if use_cont:
-                if os.path.exists(path_cont_AGN):
-                    cont_data_AGN = pd.read_csv(path_cont_AGN)
-                    fit_data_AGN = pd.merge(fit_data_AGN, cont_data_AGN, left_on='Galaxy', right_on='Galaxy',how='left')
-                if os.path.exists(path_cont_inactive):
-                    cont_data_inactive = pd.read_csv(path_cont_inactive)
-                    fit_data_inactive = pd.merge(fit_data_inactive, cont_data_inactive, left_on='Galaxy', right_on='Galaxy',how='left')
 
             df_combined['Name_clean'] = normalize_name(df_combined['Name'])
             llamatab['name_clean'] = normalize_name(llamatab['name'])
@@ -362,12 +351,12 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
         # Handle all filename logic
         if rebin is not None and mask is not None:
-            AGN_path = f"{base_AGN}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
-            inactive_path = f"{base_inactive}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
+            AGN_path = f"{base_AGN}/gas_analysis_summary_{rebin}pc_{R_kpc}kpc.csv"
+            inactive_path = f"{base_inactive}/gas_analysis_summary_{rebin}pc_{R_kpc}kpc.csv"
 
         else:
-            AGN_path = f"{base_AGN}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
-            inactive_path = f"{base_inactive}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
+            AGN_path = f"{base_AGN}/cont_analysis_summary_{R_kpc}kpc.csv"
+            inactive_path = f"{base_inactive}/cont_analysis_summary_{R_kpc}kpc.csv"
 
         # ---- Final fallback checks ----
         if not os.path.exists(AGN_path):
@@ -383,31 +372,15 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         fit_data_inactive = pd.read_csv(inactive_path)
         if use_aux:
             if rebin is not None and mask is not None:
-                aux_path = f"{base_aux}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
+                aux_path = f"{base_aux}/cont_analysis_summary_{rebin}pc_{R_kpc}kpc.csv"
             else:
-                aux_path = f"{base_aux}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
+                aux_path = f"{base_aux}/gas_analysis_summary_{R_kpc}kpc.csv"
             if not os.path.exists(aux_path):
                 print(f"WARNING: {aux_path} not found")
                 use_aux = False
             if use_aux:
                 fit_data_aux = pd.read_csv(aux_path)
-        if use_cont:
-
-            cont_AGN_path = f"{base_cont_AGN}/cont_analysis_summary_{R_kpc}kpc.csv"
-            cont_inactive_path = f"{base_cont_inactive}/cont_analysis_summary_{R_kpc}kpc.csv"
-
-            if os.path.exists(cont_AGN_path):
-                cont_data_AGN = pd.read_csv(cont_AGN_path)
-                fit_data_AGN = pd.merge(fit_data_AGN, cont_data_AGN, left_on='Galaxy', right_on='Galaxy',how='left')
-            else:
-                print(f"WARNING: {cont_AGN_path} not found")
-            if os.path.exists(cont_inactive_path):
-                cont_data_inactive = pd.read_csv(cont_inactive_path)
-                fit_data_inactive = pd.merge(fit_data_inactive, cont_data_inactive, left_on='Galaxy', right_on='Galaxy',how='left')
-            else:
-                print(f"WARNING: {cont_inactive_path} not found")
-
-            display(fit_data_inactive)
+            
 
         df_combined['Name_clean'] = normalize_name(df_combined['Name'])
         llamatab['name_clean'] = normalize_name(llamatab['name'])
@@ -417,7 +390,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         fit_data_inactive['Galaxy_clean'] = normalize_name(fit_data_inactive['Galaxy'])
         if use_aux:
             fit_data_aux['Galaxy_clean'] = normalize_name(fit_data_aux['Galaxy'])
-
 
         # --- Map name → id ---
         name_to_id = dict(zip(llamatab['name_clean'], llamatab['id']))
@@ -794,7 +766,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 "spearman_sim": rho_sim,
                 "spearman_sim_p": p_sim,
                 "rebin": rebin,
-                "mask": mask,
                 "R_kpc": R_kpc
             }
             
@@ -2081,8 +2052,8 @@ for mask in masks:
 
     ############### CAS WISDOM, PHANGS coplot   #############
 
-        # if R_kpc == 1.5:
-        #     plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True)
+        if R_kpc == 1.5:
+            plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True)
         #     plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True)
         #     plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True) 
 
@@ -2090,11 +2061,6 @@ for mask in masks:
             # plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
             # plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
 
-        plot_llama_property('log LX', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True,soloplot='AGN')
-        plot_llama_property('log LH (L⊙)', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True)
-        plot_llama_property('Axis Ratio', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True)
-        plot_llama_property('Concentration', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True)
-             
 #         ###### compare on same axis ######
 
 # plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False, exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
@@ -2121,9 +2087,6 @@ for mask in masks:
 
  #   """posible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
  #      posible y_column: 'Smoothness', 'Asymmetry', 'Gini', 'Sigma0', 'rs'"""
-
-
-
 
 stats_table = pd.DataFrame(stats_rows)
 stats_table.to_csv(

@@ -391,16 +391,20 @@ def cont_power_jybeam(image, mask, pixel_scale_arcsec2, beam_area_arcsec2, **kwa
 
 def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, aperture=None, norm_type='linear'): 
     # Initialise plot
-    plt.rcParams.update({'font.size': 35})
-    fig = plt.figure(figsize=(18 , 18),constrained_layout=True)
+    fontsize = 23 * R_kpc
+    fontsize = 0
+    plt.rcParams.update({'font.size': fontsize})
+    figsize = 12 * R_kpc
+    fig = plt.figure(figsize=(figsize , figsize),constrained_layout=True)
     ax = fig.add_subplot(111, projection=image.wcs.celestial)
     ax.margins(x=0,y=0)
     # ax.set_axis_off()
 
-    add_scalebar(ax,1/3600,label="1''",corner='top left',color='black',borderpad=0.5,size_vertical=0.5)
-    add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='black',borderpad=0.5,fill=False,linewidth=3,hatch='///')
+    add_scalebar(ax,1/3600,label="1''",corner='top left',color='lime',borderpad=2,size_vertical=0.5)
+    linewith = 2 * R_kpc
+    add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='lime',borderpad=2,fill=True,linewidth=linewith)
 
-    # fig.tight_layout()
+    fig.tight_layout()
     if np.isfinite(image.data).any():
         if norm_type == 'sqrt':
             norm = simple_norm(image.data, 'sqrt', vmin=np.nanmin(image.data), vmax=np.nanmax(image.data))
@@ -987,11 +991,6 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, R_
 
     results_raw = []
 
-    # ctx = multiprocessing.get_context("spawn")
-    # with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count(),
-    #                         initializer=init_worker,
-    #                         initargs=(llamatab,), mp_context=ctx) as executor:
-    #     results_raw = list(executor.map(safe_process, parallel_args))
 
     images_too_small = []
 
@@ -1017,17 +1016,7 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, R_
 
         # Map isolate tokens -> output column names in results rows
         isolate_colmap = {
-            # "gini":  ["Gini", "Gini_err"],
-            # "asym":  ["Asymmetry", "Asymmetry_err"],
-            # "smooth":["Smoothness", "Smoothness_err"],
-            # "conc":  ["Concentration", "Concentration_err"],
-            # "tmass": ["total_mass (M_sun)", "total_mass_err (M_sun)"],
-            # "LCO":   ["L'CO (K km_s pc2)", "L'CO_err (K km_s pc2)"],
-            # "mw":    ["mass_weighted_sd", "mass_weighted_sd_err"],
-            # "aw":    ["area_weighted_sd", "area_weighted_sd_err"],
-            # "clump": ["clumping_factor", "clumping_factor_err"],
-            # "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
-            # "plot":  [],  # plot-only: update nothing in CSV
+
             "cont_power": ["cont_power_jybeam", "cont_power_jybeam_err"]
         }
 
@@ -1181,31 +1170,18 @@ if __name__ == '__main__':
     # CO(2-1)
     outer_dir_cont = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/imaging/'
     print("Starting CO(2-1) analysis...")
-    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=120,R_kpc=1.5,flux_mask=True)
-    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=120,R_kpc=1.5,flux_mask=False)
 
-    process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=1.5)
     # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=1.5)
-
     # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=1)
-    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=1)
-
-    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=0.3)
 
 
     # CO(3-2)
     co32 = True
     outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/imaging/'
     print("Starting CO(3-2) analysis...")
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,R_kpc=1.5,isolate=isolate,flux_mask=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=1.5,isolate=isolate)
+
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=1.5,isolate=isolate)
-
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=1,isolate=isolate)
-
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=0.3,isolate=isolate)

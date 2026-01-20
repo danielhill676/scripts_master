@@ -339,14 +339,17 @@ def exp_profile(r, Sigma0, rs):
 
 def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, aperture=None, norm_type='linear'): 
     # Initialise plot
-    plt.rcParams.update({'font.size': 35})
-    fig = plt.figure(figsize=(18 , 18),constrained_layout=True)
+    fontsize = 35 * R_kpc
+    plt.rcParams.update({'font.size': fontsize})
+    figsize = 18 * R_kpc
+    fig = plt.figure(figsize=(figsize , figsize),constrained_layout=True)
     ax = fig.add_subplot(111, projection=image.wcs.celestial)
     ax.margins(x=0,y=0)
     # ax.set_axis_off()
 
-    add_scalebar(ax,1/3600,label="1''",corner='top left',color='black',borderpad=0.5,size_vertical=0.5)
-    add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='black',borderpad=0.5,fill=False,linewidth=3,hatch='///')
+    add_scalebar(ax,1/3600,label="1''",corner='top left',color='lime',borderpad=2,size_vertical=0.5)
+    linewith = 2 * R_kpc
+    add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='lime',borderpad=2,fill=True,linewidth=linewith)
 
     # fig.tight_layout()
     if np.isfinite(image.data).any():
@@ -1213,7 +1216,7 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
 if __name__ == '__main__':
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
     base_output_dir = '/data/c3040163/llama/alma/gas_analysis_results'
-    isolate = None
+    isolate = 'plot'
 
     # CO(2-1)
     outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
