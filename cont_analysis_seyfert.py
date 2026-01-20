@@ -28,8 +28,10 @@ from matplotlib.patches import Ellipse
 from astroquery.simbad import Simbad
 simbad = Simbad()
 from astroquery.vizier import Vizier
+import warnings
+from astropy.wcs import FITSFixedWarning
 
-
+warnings.filterwarnings("ignore", category=FITSFixedWarning)
 
 np.seterr(all='ignore')
 co32 = False
@@ -38,8 +40,37 @@ LLAMATAB = None
 # ------------------ Monte Carlo Helpers ------------------
 
 def generate_random_images(image, error_map, n_iter=1000, seed=None):
+    """
+    Generate Monte Carlo realizations of an image.
+
+    If no valid error_map is provided (None, all-NaN, or non-physical),
+    return None to signal that MC should be skipped.
+    """
     rng = np.random.default_rng(seed)
-    return rng.normal(loc=image, scale=error_map, size=(n_iter, *image.shape))
+
+    # No error map provided
+    if error_map is None:
+        return None
+
+    error_map = np.asarray(error_map)
+
+    # Shape safety
+    if error_map.shape != image.shape:
+        return None
+
+    # Require at least one finite error value
+    if not np.any(np.isfinite(error_map)):
+        return None
+
+    # Non-physical uncertainties → skip MC
+    if np.any(error_map < 0):
+        return None
+
+    return rng.normal(
+        loc=image,
+        scale=error_map,
+        size=(n_iter, *image.shape)
+    )
 
 
 def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dtype_str, mask, metric_kwargs, isolate=None, seed=None):
@@ -62,114 +93,126 @@ def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dt
     rng = np.random.default_rng(seed)
 
     # lists to collect values per-image
-    gini_vals = []
-    asym_vals = []
-    smooth_vals = []
-    conc_vals = []
-    tm_vals = []
-    mw_vals = []
-    aw_vals = []
-    clump_vals = []
-    LCO_vals = []
-    LCO_JCMT_vals = []
-    LCO_APEX_vals = []
+    # gini_vals = []
+    # asym_vals = []
+    # smooth_vals = []
+    # conc_vals = []
+    # tm_vals = []
+    # mw_vals = []
+    # aw_vals = []
+    # clump_vals = []
+    # LCO_vals = []
+    # LCO_JCMT_vals = []
+    # LCO_APEX_vals = []
+    cont_power_jybeam_vals = []
 
     for i in range(n_iter_chunk):
         # create one MC realisation locally: image + gaussian noise scaled by errmap
-        noise = rng.standard_normal(size=shape) * errmap
-        mc_img = image + noise  # this is local to worker, no copying between processes
+        if not np.any(errmap > 0):
+            mc_img = image.copy()
+        else:
+            noise = rng.standard_normal(size=shape) * errmap
+            mc_img = image + noise
 
         # compute metrics (use your existing functions; catch exceptions per metric)
-        try:
-            gini_vals.append(gini_single(mc_img, mask))
-        except Exception:
-            gini_vals.append(np.nan)
-        try:
-            asym_vals.append(asymmetry_single(mc_img, mask))
-        except Exception:
-            asym_vals.append(np.nan)
-        try:
-            smooth_vals.append(smoothness_single(mc_img, mask,
-                                                 pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
-                                                 pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]))
-        except Exception:
-            smooth_vals.append(np.nan)
-        try:
-            conc_vals.append(concentration_single(mc_img, mask,
-                                                  pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
-                                                  pc_per_arcsec=metric_kwargs["pc_per_arcsec"]))
-        except Exception:
-            conc_vals.append(np.nan)
-        try:
-            tm_vals.append(total_mass_single(mc_img, mask,
-                                             metric_kwargs["pixel_area_pc2"],
-                                             metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                             metric_kwargs["alpha_CO"],
-                                             metric_kwargs["name"],
-                                             co32=metric_kwargs["co32"]))
-        except Exception:
-            tm_vals.append(np.nan)
-        try:
-            mw_vals.append(mass_weighted_sd_single(mc_img, mask,
-                                                   metric_kwargs["pixel_area_pc2"],
-                                                   metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                   metric_kwargs["alpha_CO"],
-                                                   metric_kwargs["name"],
-                                                   co32=metric_kwargs["co32"]))
-        except Exception:
-            mw_vals.append(np.nan)
-        try:
-            aw_vals.append(area_weighted_sd_single(mc_img, mask,
-                                                   metric_kwargs["pixel_area_pc2"],
-                                                   metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                   metric_kwargs["alpha_CO"],
-                                                   metric_kwargs["name"],
-                                                   co32=metric_kwargs["co32"]))
-        except Exception:
-            aw_vals.append(np.nan)
-        try:
-            clump_vals.append(clumping_factor_single(mc_img, mask,
-                                                     metric_kwargs["pixel_area_pc2"],
-                                                     metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                     metric_kwargs["alpha_CO"],
-                                                     metric_kwargs["name"],
-                                                     co32=metric_kwargs["co32"]))
-        except Exception:
-            clump_vals.append(np.nan)
-        # LCO if you added it:
-        try:
-            LCO_vals.append(LCO_single(mc_img, mask,
-                                metric_kwargs["pixel_scale_arcsec"],
-                                metric_kwargs["pixel_area_pc2"],
-                                metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                metric_kwargs["alpha_CO"],
-                                metric_kwargs["name"],
-                                co32=metric_kwargs["co32"]))
-        except Exception:
-            LCO_vals.append(np.nan)
+        # try:
+        #     gini_vals.append(gini_single(mc_img, mask))
+        # except Exception:
+        #     gini_vals.append(np.nan)
+        # try:
+        #     asym_vals.append(asymmetry_single(mc_img, mask))
+        # except Exception:
+        #     asym_vals.append(np.nan)
+        # try:
+        #     smooth_vals.append(smoothness_single(mc_img, mask,
+        #                                          pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
+        #                                          pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]))
+        # except Exception:
+        #     smooth_vals.append(np.nan)
+        # try:
+        #     conc_vals.append(concentration_single(mc_img, mask,
+        #                                           pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
+        #                                           pc_per_arcsec=metric_kwargs["pc_per_arcsec"]))
+        # except Exception:
+        #     conc_vals.append(np.nan)
+        # try:
+        #     tm_vals.append(total_mass_single(mc_img, mask,
+        #                                      metric_kwargs["pixel_area_pc2"],
+        #                                      metric_kwargs["R_21"], metric_kwargs["R_31"],
+        #                                      metric_kwargs["alpha_CO"],
+        #                                      metric_kwargs["name"],
+        #                                      co32=metric_kwargs["co32"]))
+        # except Exception:
+        #     tm_vals.append(np.nan)
+        # try:
+        #     mw_vals.append(mass_weighted_sd_single(mc_img, mask,
+        #                                            metric_kwargs["pixel_area_pc2"],
+        #                                            metric_kwargs["R_21"], metric_kwargs["R_31"],
+        #                                            metric_kwargs["alpha_CO"],
+        #                                            metric_kwargs["name"],
+        #                                            co32=metric_kwargs["co32"]))
+        # except Exception:
+        #     mw_vals.append(np.nan)
+        # try:
+        #     aw_vals.append(area_weighted_sd_single(mc_img, mask,
+        #                                            metric_kwargs["pixel_area_pc2"],
+        #                                            metric_kwargs["R_21"], metric_kwargs["R_31"],
+        #                                            metric_kwargs["alpha_CO"],
+        #                                            metric_kwargs["name"],
+        #                                            co32=metric_kwargs["co32"]))
+        # except Exception:
+        #     aw_vals.append(np.nan)
+        # try:
+        #     clump_vals.append(clumping_factor_single(mc_img, mask,
+        #                                              metric_kwargs["pixel_area_pc2"],
+        #                                              metric_kwargs["R_21"], metric_kwargs["R_31"],
+        #                                              metric_kwargs["alpha_CO"],
+        #                                              metric_kwargs["name"],
+        #                                              co32=metric_kwargs["co32"]))
+        # except Exception:
+        #     clump_vals.append(np.nan)
+        # # LCO if you added it:
+        # try:
+        #     LCO_vals.append(LCO_single(mc_img, mask,
+        #                         metric_kwargs["pixel_scale_arcsec"],
+        #                         metric_kwargs["pixel_area_pc2"],
+        #                         metric_kwargs["R_21"], metric_kwargs["R_31"],
+        #                         metric_kwargs["alpha_CO"],
+        #                         metric_kwargs["name"],
+        #                         co32=metric_kwargs["co32"]))
+        # except Exception:
+        #     LCO_vals.append(np.nan)
+
+        # try:
+        #     LCO_JCMT_vals.append(LCO_single_JCMT(mc_img, mask,
+        #                         metric_kwargs["pixel_scale_arcsec"],
+        #                         metric_kwargs["pixel_area_pc2"],
+        #                         metric_kwargs["R_21"], metric_kwargs["R_31"],
+        #                         metric_kwargs["alpha_CO"],
+        #                         metric_kwargs["name"],
+        #                         co32=metric_kwargs["co32"]))
+        # except Exception:
+        #     LCO_JCMT_vals.append(np.nan)
+
+        # try:
+        #     LCO_APEX_vals.append(LCO_single_APEX(mc_img, mask,
+        #                         metric_kwargs["pixel_scale_arcsec"],
+        #                         metric_kwargs["pixel_area_pc2"],
+        #                         metric_kwargs["R_21"], metric_kwargs["R_31"],
+        #                         metric_kwargs["alpha_CO"],
+        #                         metric_kwargs["name"],
+        #                         co32=metric_kwargs["co32"]))
+        # except Exception:
+        #     LCO_APEX_vals.append(np.nan)
 
         try:
-            LCO_JCMT_vals.append(LCO_single_JCMT(mc_img, mask,
-                                metric_kwargs["pixel_scale_arcsec"],
-                                metric_kwargs["pixel_area_pc2"],
-                                metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                metric_kwargs["alpha_CO"],
-                                metric_kwargs["name"],
-                                co32=metric_kwargs["co32"]))
-        except Exception:
-            LCO_JCMT_vals.append(np.nan)
-
-        try:
-            LCO_APEX_vals.append(LCO_single_APEX(mc_img, mask,
-                                metric_kwargs["pixel_scale_arcsec"],
-                                metric_kwargs["pixel_area_pc2"],
-                                metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                metric_kwargs["alpha_CO"],
-                                metric_kwargs["name"],
-                                co32=metric_kwargs["co32"]))
-        except Exception:
-            LCO_APEX_vals.append(np.nan)
+            cont_power_jybeam(mc_img, mask,
+                              metric_kwargs["pixel_scale_arcsec2"],
+                              metric_kwargs["beam_area_arcsec2"],
+                              **metric_kwargs)
             
+        except Exception:
+            cont_power_jybeam_vals.append(np.nan)
 
     # close shared memory views (do NOT unlink here)
     shm_img.close()
@@ -177,17 +220,18 @@ def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dt
 
     # return lists (pickling these lists of scalars is small)
     return {
-        "gini": gini_vals,
-        "asym": asym_vals,
-        "smooth": smooth_vals,
-        "conc": conc_vals,
-        "tmass": tm_vals,
-        "mw": mw_vals,
-        "aw": aw_vals,
-        "clump": clump_vals,
-        "LCO": LCO_vals,
-        "LCO_JCMT": LCO_JCMT_vals,
-        "LCO_APEX": LCO_APEX_vals
+        # "gini": gini_vals,
+        # "asym": asym_vals,
+        # "smooth": smooth_vals,
+        # "conc": conc_vals,
+        # "tmass": tm_vals,
+        # "mw": mw_vals,
+        # "aw": aw_vals,
+        # "clump": clump_vals,
+        # "LCO": LCO_vals,
+        # "LCO_JCMT": LCO_JCMT_vals,
+        # "LCO_APEX": LCO_APEX_vals,
+        "cont_power_jybeam": cont_power_jybeam_vals,
     }
 
 
@@ -335,9 +379,17 @@ def radial_profile_with_errors(data, errors, mask, center=None, nbins=30):
 def exp_profile(r, Sigma0, rs):
     return Sigma0 * np.exp(-r / rs)
 
+def cont_power_jybeam(image, mask, pixel_scale_arcsec2, beam_area_arcsec2, **kwargs):
+    valid = (~mask) & np.isfinite(image)
+    if np.sum(valid) == 0:
+        return np.nan
+    total_flux_jy = np.nansum(image[valid]) * (pixel_scale_arcsec2) / beam_area_arcsec2
+    print(f"contpower result: {total_flux_jy}")
+    return total_flux_jy
+
 # ----------------- Moment map plotting ------------------
 
-def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, aperture=None, norm_type='linear'): 
+def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, aperture=None, norm_type='linear'): 
     # Initialise plot
     plt.rcParams.update({'font.size': 35})
     fig = plt.figure(figsize=(18 , 18),constrained_layout=True)
@@ -382,9 +434,13 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
         ax.add_patch(ellipse_patch)
 
     if rebin is not None:
-        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+        if not os.path.exists(outfolder+f'/plots/'):
+            os.makedirs(outfolder+f'/plots/')
+        plt.savefig(outfolder+f'/plots/{R_kpc}_{rebin}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
     else:
-        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+        if not os.path.exists(outfolder+f'/plots/'):
+            os.makedirs(outfolder+f'/plots/')
+        plt.savefig(outfolder+f'/plots/{R_kpc}_no_rebin_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
     plt.close(fig)
         
 # ------------------ Processing ------------------
@@ -403,9 +459,9 @@ def safe_process(args):
         return ("__ERROR__", name, str(e), tb)
 
 def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_exp=False):
-    mom0_file, emom0_file, subdir, output_dir, co32, rebin, PHANGS_mask, R_kpc, flux_mask = args
-    file = mom0_file
-    error_map_file = emom0_file
+    cont_im_file, econt_im_file, subdir, output_dir, co32, rebin, R_kpc, flux_mask = args
+    file = cont_im_file
+    error_map_file = econt_im_file
 
     # Galaxy name extraction (now robust)
     base = os.path.basename(file)
@@ -425,6 +481,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     # Load FITS
     image_untrimmed = fits.getdata(file, memmap=True)
+    print(error_map_file)
     if error_map_file is not np.nan:
         error_map_untrimmed = fits.getdata(error_map_file, memmap=True)
     else:
@@ -545,9 +602,11 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                         continue
 
     pixel_scale_arcsec = np.abs(header.get("CDELT1", 0)) * 3600
+    pixel_scale_arcsec2 = pixel_scale_arcsec**2
     pc_per_arcsec = (D_Mpc * 1e6) / 206265
     BMAJ = header.get("BMAJ", 0)
     BMIN = header.get("BMIN", 0)
+    beam_area_arcsec2 = (np.pi / (4 * np.log(2))) * (BMAJ * 3600) * (BMIN * 3600)
     beam_scale_pc = np.sqrt(np.abs(BMAJ * BMIN)) * 3600 * pc_per_arcsec
 
     ######################## carry out manual rebin if missing ########################
@@ -738,204 +797,101 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     if isolate == None or 'plot' in isolate:
-        plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, PHANGS_mask, aperture=aperture_to_plot)
+        plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, aperture=aperture_to_plot)
 
     if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']):
 
-        # Generate Monte-Carlo images (full set)
-        N_MC = 1000
-        images_mc = generate_random_images(image, error_map, n_iter=N_MC)
+        use_mc = False  # <<< set to False to skip MC and just calculate once
 
-        # ---- PARALLEL MC PROCESSING HERE ----
-        dtype = image.dtype  # e.g. np.float64
-        shape = image.shape
+        if use_mc:
+            # --- Monte Carlo path ---
+            # Determine per-worker iteration split
+            N_MC = 1000
+            cpu = min(max(1, multiprocessing.cpu_count() - 1), 8)
+            iters_per_worker = [N_MC // cpu] * cpu
+            for i in range(N_MC % cpu):
+                iters_per_worker[i] += 1
 
-        shm_img = shared_memory.SharedMemory(create=True, size=image.nbytes)
-        shm_err = shared_memory.SharedMemory(create=True, size=error_map.nbytes)
-        # write into shared memory
-        shm_array_img = np.ndarray(shape, dtype=dtype, buffer=shm_img.buf)
-        shm_array_err = np.ndarray(shape, dtype=dtype, buffer=shm_err.buf)
-        shm_array_img[:] = image[:]       # copy once
-        shm_array_err[:] = error_map[:]   # copy once
+            # Shared memory for image and error map
+            dtype = image.dtype
+            shape = image.shape
+            shm_img = shared_memory.SharedMemory(create=True, size=image.nbytes)
+            shm_err = shared_memory.SharedMemory(create=True, size=error_map.nbytes)
+            shm_array_img = np.ndarray(shape, dtype=dtype, buffer=shm_img.buf)
+            shm_array_err = np.ndarray(shape, dtype=dtype, buffer=shm_err.buf)
+            shm_array_img[:] = image[:]
+            shm_array_err[:] = error_map[:]
 
-        cpu = min( max(1, multiprocessing.cpu_count()-1), 8 )  # e.g., reserve one core
-        iters_per_worker = [N_MC // cpu] * cpu
-        for i in range(N_MC % cpu):
-            iters_per_worker[i] += 1
+            metric_kwargs_small = dict(
+                name=name,
+                co32=co32,
+                pixel_area_pc2=pixel_area_pc2,
+                pixel_scale_arcsec2=pixel_scale_arcsec2,
+                beam_area_arcsec2=beam_area_arcsec2,
+                R_21=R_21,
+                R_31=R_31,
+                alpha_CO=alpha_CO,
+                pc_per_arcsec=pc_per_arcsec,
+                pixel_scale_arcsec=pixel_scale_arcsec
+            )
 
-        metric_kwargs_small = dict(
-            name=name,
-            co32=co32,
-            pixel_area_pc2=pixel_area_pc2,
-            R_21=R_21,
-            R_31=R_31,
-            alpha_CO=alpha_CO,
-            pc_per_arcsec=pc_per_arcsec,
-            pixel_scale_arcsec=pixel_scale_arcsec
-        )
+            # Run MC in parallel
+            with ProcessPoolExecutor(max_workers=cpu) as ex:
+                futures = []
+                for w, n_iter_chunk in enumerate(iters_per_worker):
+                    seed = np.random.SeedSequence().entropy + w
+                    futures.append(ex.submit(
+                        process_mc_chunk_shm,
+                        n_iter_chunk,
+                        shm_img.name,
+                        shm_err.name,
+                        shape,
+                        str(dtype),
+                        mask,
+                        metric_kwargs_small,
+                        isolate,
+                        seed
+                    ))
+                results = [f.result() for f in futures]
 
-        with ProcessPoolExecutor(max_workers=cpu) as ex:
-            futures = []
-            for w, n_iter_chunk in enumerate(iters_per_worker):
-                seed = np.random.SeedSequence().entropy + w
-                futures.append(ex.submit(
-                    process_mc_chunk_shm,
-                    n_iter_chunk,
-                    shm_img.name,
-                    shm_err.name,
-                    shape,
-                    str(dtype),
-                    mask,
-                    metric_kwargs_small,
-                    isolate,
-                    seed
-                ))
-            results = [f.result() for f in futures]
+            # Cleanup shared memory
+            shm_img.close()
+            shm_img.unlink()
+            shm_err.close()
+            shm_err.unlink()
 
-        # When done, unlink the shared memory
-        shm_img.close()
-        shm_img.unlink()
-        shm_err.close()
-        shm_err.unlink()
+            # Combine results
+            def merge_global(metric_name):
+                all_values = []
+                for r in results:
+                    if metric_name in r:
+                        all_values.extend(r[metric_name] if isinstance(r[metric_name], (list, np.ndarray)) else [r[metric_name]])
+                arr = np.array(all_values, dtype=float)
+                if len(arr) == 0 or np.all(np.isnan(arr)):
+                    print(f"All MC calculations failed for metric {metric_name} in galaxy {name}.")
+                    return np.nan, np.nan
+                return float(np.nanmedian(arr)), float(np.nanstd(arr))
 
-        def merge_global(metric_name):
-            """Concatenate raw MC values across chunks and compute global stats."""
-            
-            # Collect lists from every chunk
-            all_values = []
-            for r in results:
-                if metric_name in r:
-                    all_values.extend(r[metric_name])
+            cont_power, cont_power_err = merge_global("cont_power_jybeam")
 
-            # Convert to array
-            arr = np.array(all_values, dtype=float)
-
-            # Handle case where everything failed
-            if len(arr) == 0 or np.all(np.isnan(arr)):
-                print(f"All MC calculations failed for metric {metric_name} in galaxy {name}.")
-                return np.nan, np.nan
-
-            # Global median and std
-            return float(np.nanmedian(arr)), float(np.nanstd(arr))
-
-        gini, gini_err = merge_global("gini")
-        asym, asym_err = merge_global("asym")
-        smooth, smooth_err = merge_global("smooth")
-        conc, conc_err = merge_global("conc")
-        total_mass, total_mass_err = merge_global("tmass")
-        LCO, LCO_err = merge_global("LCO")
-        LCO_JCMT, LCO_JCMT_err = merge_global("LCO_JCMT")
-        LCO_APEX, LCO_APEX_err = merge_global("LCO_APEX")
-        mw_sd, mw_sd_err = merge_global("mw")
-        aw_sd, aw_sd_err = merge_global("aw")
-        clump, clump_err = merge_global("clump")
-    else:
-        print("Skipping metric calculations as per isolate parameter.")
-        gini, gini_err = np.nan, np.nan
-        asym, asym_err = np.nan, np.nan
-        smooth, smooth_err = np.nan, np.nan
-        conc, conc_err = np.nan, np.nan
-        total_mass, total_mass_err = np.nan, np.nan
-        LCO, LCO_err = np.nan, np.nan
-        LCO_JCMT, LCO_JCMT_err = np.nan, np.nan
-        LCO_APEX, LCO_APEX_err = np.nan, np.nan
-        mw_sd, mw_sd_err = np.nan, np.nan
-        aw_sd, aw_sd_err = np.nan, np.nan
-        clump, clump_err = np.nan, np.nan
-
-    if isolate == None or 'expfit' in isolate:
-
-        # Radial profile unchanged
-        try:
-            radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
-            valid = np.isfinite(profile) & np.isfinite(profile_err)
-            radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
-        except:
-            radii, profile, profile_err = np.array([]), np.array([]), np.array([])
-            print(f"Radial profile extraction failed for {name}.")
-
-        try:
-            popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
-                                absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
-            perr = np.sqrt(np.diag(pcov))
-            sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
-            rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
-            rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
-            rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
-
-            # --- Create decently sized figure and control font sizes ---
-            plt.figure(figsize=(8, 6))           # Larger canvas
-            plt.rcParams.update({
-                'font.size': 10,                 # base font size
-                'axes.titlesize': 12,            # title
-                'axes.labelsize': 11,            # axis labels  
-                'xtick.labelsize': 10,
-                'ytick.labelsize': 10,
-                'legend.fontsize': 10
-})
-
-            bin_widths = np.diff(np.linspace(0, radii.max(), len(radii)+1))
-            bin_widths_pc = bin_widths * pixel_scale_arcsec * pc_per_arcsec
-            radii_pc = radii * pixel_scale_arcsec * pc_per_arcsec
-            plt.errorbar(radii_pc, profile, yerr=profile_err, fmt='x', label="Data", capsize=3, xerr=bin_widths_pc / 2)
-            plt.plot(radii_pc, exp_profile(radii, *popt), label="Fit", color='orange')
-            plt.xlabel("Radius (pc)")
-            plt.ylabel("Integrated intensity [Jy/beam km/s]")
-            plt.title(name)
-            plt.legend()
-            plt.tight_layout()
-            plot_path = os.path.join(output_dir, f"{name}_{PHANGS_mask}_{rebin}_{R_kpc}kpc_expfit.png")
-            if save_exp == True:
-                plt.savefig(plot_path,dpi=200)
-            plt.close()
-
-        except:
-            sigma0, rs = "fit failed", "fit failed"
-    else:
-        sigma0, rs = np.nan, np.nan
-
-    # print({
-    #     "Galaxy": name,
-    #     "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
-    #     "Asymmetry": round(asym, 3), "Asymmetry_err": round(asym_err, 3),
-    #     "Smoothness": round(smooth, 3), "Smoothness_err": round(smooth_err, 3),
-    #     "Concentration": round(conc, 3), "Concentration_err": round(conc_err, 3),
-    #     "Sigma0 (Jy/beam km/s)": sigma0,
-    #     "rs (pc)": rs,
-    #     "Resolution (pc)": round(beam_scale_pc, 2),
-    #     "clumping_factor": round(clump, 3), "clumping_factor_err": round(clump_err, 3),
-    #     "pc_per_arcsec": round(pc_per_arcsec, 1),
-    #     "total_mass (M_sun)": round(total_mass, 2), "total_mass_err (M_sun)": round(total_mass_err, 2),
-    #     "L'CO (K km_s pc2)": round(LCO, 3), "L'CO_err (K km_s pc2)": round(LCO_err, 3),
-    #     "mass_weighted_sd": round(mw_sd, 1), "mass_weighted_sd_err": round(mw_sd_err, 1),
-    #     "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1)
-    # })
+        else:
+            # --- Single calculation path ---
+            val = cont_power_jybeam(image, mask, pixel_scale_arcsec2,beam_area_arcsec2)
+            cont_power = val
+            cont_power_err = np.nan  # No MC → no error estimate
 
     return {
         "Galaxy": name,
-        "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
-        "Asymmetry": round(asym, 3), "Asymmetry_err": round(asym_err, 3),
-        "Smoothness": round(smooth, 3), "Smoothness_err": round(smooth_err, 3),
-        "Concentration": round(conc, 3), "Concentration_err": round(conc_err, 3),
-        "Sigma0 (Jy/beam km/s)": sigma0,
-        "rs (pc)": rs,
         "Resolution (pc)": round(beam_scale_pc, 2),
-        "clumping_factor": round(clump, 3), "clumping_factor_err": round(clump_err, 3),
         "pc_per_arcsec": round(pc_per_arcsec, 1),
-        "total_mass (M_sun)": round(total_mass, 2), "total_mass_err (M_sun)": round(total_mass_err, 2),
-        "L'CO (K km_s pc2)": round(LCO, 3), "L'CO_err (K km_s pc2)": round(LCO_err, 3),
-        "L'CO_JCMT (K km s pc2)": round(LCO_JCMT, 3), "L'CO_JCMT_err (K km s pc2)": round(LCO_JCMT_err, 3),
-        "L'CO_APEX (K km s pc2)": round(LCO_APEX, 3), "L'CO_APEX_err (K km s pc2)": round(LCO_APEX_err, 3),
-        "mass_weighted_sd": round(mw_sd, 1), "mass_weighted_sd_err": round(mw_sd_err, 1),
-        "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1),
-        "emission_pixels": emission_pixels,
-        "emission_fraction": emission_fraction
+        "cont_power_jy": round(cont_power, 3),
+        "cont_power_jy_err": round(cont_power_err, 3)
     }
 
 # ------------------ Parallel Directory Processing ------------------
 
-def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, mask='broad', R_kpc=1, flux_mask=False, isolate=None):
-    print(f"Processing directory: {outer_dir} (CO32={co32}, rebin={rebin}, mask={mask}, R_kpc={R_kpc}), isolate={isolate})")
+def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, R_kpc=1, flux_mask=False, isolate=None):
+    print(f"Processing directory: {outer_dir} (CO32={co32}, rebin={rebin}, R_kpc={R_kpc}), isolate={isolate})")
     valid_names = set(llamatab['id'])
     subdirs = [d for d in os.listdir(outer_dir)
                 if os.path.isdir(os.path.join(outer_dir, d))]# and d in valid_names]
@@ -947,49 +903,55 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
         if rebin is not None and not co32:
             if name in ["NGC4388","NGC6814","NGC5728"]:
                 continue
-            if os.path.exists(os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_mom0.fits")):
-                mom0_file = os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_mom0.fits")
-                emom0_file = os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_emom0.fits")
+            if os.path.exists(os.path.join(subdir, f"{name}_12m_cont_{rebin}pc.fits")):
+                cont_im_file = os.path.join(subdir, f"{name}_12m_cont_{rebin}pc.fits")
+                econt_im_file = os.path.join(subdir, f"{name}_12m_cont_{rebin}pc.fits")
+                econt_im_file = "Not exists"
 
             else:
                 if name in ["NGC4388","NGC6814","NGC5728"]:
                     continue
                 print(f'{rebin} pc for {name}, using native res files or rebinning manually')
                 manual_rebin = True
-                mom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_mom0.fits")
-                emom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_emom0.fits")
+                cont_im_file = os.path.join(subdir, f"{name}_12m_cont.fits")
+                econt_im_file = os.path.join(subdir, f"{name}_12m_cont.fits")
+                econt_im_file = "Not exists"
 
 
         elif rebin is not None and co32:
             if name not in ["NGC4388","NGC6814","NGC5728"]:
                 continue
-            if os.path.exists(os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_mom0.fits")):
-                mom0_file = os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_mom0.fits")
+            if os.path.exists(os.path.join(subdir, f"{name}_12m_cont_{rebin}pc.fits")):
+                cont_im_file = os.path.join(subdir, f"{name}_12m_cont_{rebin}pc.fits")
 
-                emom0_file = os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_emom0.fits")
+                econt_im_file = os.path.join(subdir, f"{name}_12m_cont_{rebin}pc.fits")
+                econt_im_file = "Not exists"
 
             else:
                 if name not in ["NGC4388","NGC6814","NGC5728"]:
                     continue
                 print(f'{rebin} pc for {name}, using native res files or rebinning manually')
                 manual_rebin = True
-                mom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_mom0.fits")
-                emom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_emom0.fits")
+                cont_im_file = os.path.join(subdir, f"{name}_12m_cont.fits")
+                econt_im_file = os.path.join(subdir, f"{name}_12m_cont.fits")
+                econt_im_file = "Not exists"
+
 
 
         elif not rebin and not co32:
             if name in ["NGC4388","NGC6814","NGC5728"]:
                 continue
-            mom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_mom0.fits")
+            cont_im_file = os.path.join(subdir, f"{name}_12m_cont.fits")
 
-            emom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_emom0.fits")
-
+            econt_im_file = os.path.join(subdir, f"{name}_12m_cont.fits")
+            econt_im_file = "Not exists"
         else:
             if name not in ["NGC4388","NGC6814","NGC5728"]:
                 continue
-            mom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_mom0.fits")
+            cont_im_file = os.path.join(subdir, f"{name}_12m_cont.fits")
 
-            emom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_emom0.fits")
+            econt_im_file = os.path.join(subdir, f"{name}_12m_cont.fits")
+            econt_im_file = "Not exists"
 
 
         try:
@@ -999,20 +961,20 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
         output_dir = os.path.join(base_output_dir, "inactive" if type_val=="i" else "AGN")
         group = "inactive" if type_val=="i" else "aux" if type_val=="aux" else "AGN"
         os.makedirs(output_dir, exist_ok=True)
-        if os.path.exists(mom0_file):
-            if not os.path.exists(emom0_file):
-                emom0_file = np.nan
-            args_list.append((mom0_file, emom0_file, subdir, output_dir, co32,rebin,mask,R_kpc,flux_mask))
+        if os.path.exists(cont_im_file):
+            if not os.path.exists(econt_im_file):
+                econt_im_file = np.nan
+            args_list.append((cont_im_file, econt_im_file, subdir, output_dir, co32,rebin,R_kpc,flux_mask))
             meta_info.append((name, group, output_dir))
             ############### Copy moment0 files to central location ###############
-            mom0_filename = os.path.basename(mom0_file)
-            if emom0_file is np.nan:
-                emom0_filename = "nan"
+            cont_im_filename = os.path.basename(cont_im_file)
+            if econt_im_file is np.nan:
+                econt_im_filename = "nan"
             else:
-                emom0_filename = os.path.basename(emom0_file)
+                econt_im_filename = os.path.basename(econt_im_file)
             # os.system(f'mkdir -p /data/c3040163/llama/alma/pipeline_m0/{name}/')
-            # os.system(f'cp {mom0_file} /data/c3040163/llama/alma/pipeline_m0/{name}/{mom0_filename}')
-            # os.system(f'cp {emom0_file} /data/c3040163/llama/alma/pipeline_m0/{name}/{emom0_filename}')
+            # os.system(f'cp {cont_im_file} /data/c3040163/llama/alma/pipeline_m0/{name}/{cont_im_filename}')
+            # os.system(f'cp {econt_im_file} /data/c3040163/llama/alma/pipeline_m0/{name}/{econt_im_filename}')
             #######################################################################
         else:
             print(f"Skipping {name}: required files not found")
@@ -1055,17 +1017,18 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
 
         # Map isolate tokens -> output column names in results rows
         isolate_colmap = {
-            "gini":  ["Gini", "Gini_err"],
-            "asym":  ["Asymmetry", "Asymmetry_err"],
-            "smooth":["Smoothness", "Smoothness_err"],
-            "conc":  ["Concentration", "Concentration_err"],
-            "tmass": ["total_mass (M_sun)", "total_mass_err (M_sun)"],
-            "LCO":   ["L'CO (K km_s pc2)", "L'CO_err (K km_s pc2)"],
-            "mw":    ["mass_weighted_sd", "mass_weighted_sd_err"],
-            "aw":    ["area_weighted_sd", "area_weighted_sd_err"],
-            "clump": ["clumping_factor", "clumping_factor_err"],
-            "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
-            "plot":  []  # plot-only: update nothing in CSV
+            # "gini":  ["Gini", "Gini_err"],
+            # "asym":  ["Asymmetry", "Asymmetry_err"],
+            # "smooth":["Smoothness", "Smoothness_err"],
+            # "conc":  ["Concentration", "Concentration_err"],
+            # "tmass": ["total_mass (M_sun)", "total_mass_err (M_sun)"],
+            # "LCO":   ["L'CO (K km_s pc2)", "L'CO_err (K km_s pc2)"],
+            # "mw":    ["mass_weighted_sd", "mass_weighted_sd_err"],
+            # "aw":    ["area_weighted_sd", "area_weighted_sd_err"],
+            # "clump": ["clumping_factor", "clumping_factor_err"],
+            # "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
+            # "plot":  [],  # plot-only: update nothing in CSV
+            "cont_power": ["cont_power_jybeam", "cont_power_jybeam_err"]
         }
 
         # Accept isolate as string, list or None
@@ -1087,17 +1050,17 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
             cols_updated = list(dict.fromkeys(cols_updated))  # uniq, preserve order
 
         # Helper for building outfile path
-        def _outfile_path(outdir, rebin, mask, R_kpc):
+        def _outfile_path(outdir, rebin, R_kpc):
             if rebin is not None:
                 if flux_mask:
-                    return os.path.join(outdir, f"gas_analysis_summary_{rebin}pc_flux90_{mask}_{R_kpc}kpc.csv")
+                    return os.path.join(outdir, f"cont_analysis_summary_{rebin}pc_flux90_{R_kpc}kpc.csv")
                 else:
-                    return os.path.join(outdir, f"gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv")
+                    return os.path.join(outdir, f"cont_analysis_summary_{rebin}pc_{R_kpc}kpc.csv")
             else:
                 if flux_mask:
-                    return os.path.join(outdir, f"gas_analysis_summary_flux90_{mask}_{R_kpc}kpc.csv")
+                    return os.path.join(outdir, f"cont_analysis_summary_flux90_{R_kpc}kpc.csv")
                 else:
-                    return os.path.join(outdir, f"gas_analysis_summary_{mask}_{R_kpc}kpc.csv")
+                    return os.path.join(outdir, f"cont_analysis_summary_{R_kpc}kpc.csv")
 
         for group in ["AGN", "inactive", "aux"]:
             group_df = df[df["group"] == group].copy()
@@ -1106,7 +1069,7 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
 
             outdir = os.path.join(base_output_dir, group)
             os.makedirs(outdir, exist_ok=True)
-            outfile = _outfile_path(outdir, rebin, mask, R_kpc)
+            outfile = _outfile_path(outdir, rebin, R_kpc)
 
             if not os.path.exists(outfile):
                 # no existing file -> just write new (full rows)
@@ -1212,37 +1175,37 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
 
 if __name__ == '__main__':
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
-    base_output_dir = '/data/c3040163/llama/alma/gas_analysis_results'
+    base_output_dir = '/data/c3040163/llama/alma/cont_analysis_results'
     isolate = None
 
     # CO(2-1)
-    outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
+    outer_dir_cont = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/imaging/'
     print("Starting CO(2-1) analysis...")
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False)
+    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=120,R_kpc=1.5,flux_mask=True)
+    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=120,R_kpc=1.5,flux_mask=False)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5)
+    process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=1.5)
+    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=1.5)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1)
+    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=1)
+    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=1)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_cont, llamatab, base_output_dir, co32=False,rebin=None,R_kpc=0.3,isolate=isolate)
 
 
     # CO(3-2)
     co32 = True
-    outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
+    outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/imaging/'
     print("Starting CO(3-2) analysis...")
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,R_kpc=1.5,isolate=isolate,flux_mask=True)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=1.5,isolate=isolate)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,R_kpc=0.3,isolate=isolate)
