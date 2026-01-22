@@ -13,7 +13,7 @@ llamatab.sort('D [Mpc]')
 llamatab_inactive = llamatab[llamatab['type'] == 'i']
 llamatab_AGN = llamatab[llamatab['type'] != 'i']
 
-def figure_maker(fig_y,fig_x,cols,rows,path,fig_title,type,m0=True):
+def figure_maker(fig_y,fig_x,cols,rows,path,fig_title,type,m0=True,R_kpc=1.5,rebin=None,mask='strict'):
     
     fig = plt.figure(figsize=(fig_x, fig_y), constrained_layout=True)
     ax = []
@@ -27,13 +27,22 @@ def figure_maker(fig_y,fig_x,cols,rows,path,fig_title,type,m0=True):
         if table['id'][i] == 'IC4653' or table['id'][i] == 'NGC5128':
             continue
 
-        if m0 == True:
+        if m0 == True and rebin is None:
             subplot = mpimg.imread(
-                path + '/1.5_no_rebin_strict_' + f"{table['id'][i]}" + '.png'
+                path + f'/{R_kpc}_no_rebin_{mask}_' + f"{table['id'][i]}" + '.png'
             )
-        if m0 == False:
+        if m0 == False and rebin is None:
             subplot = mpimg.imread(
-            path + '/0.3_no_rebin_' + f"{table['id'][i]}" + '.png'
+                path + f'/0.3_no_rebin_' + f"{table['id'][i]}" + '.png'
+        )
+
+        if m0 == True and rebin is not None:
+            subplot = mpimg.imread(
+                path + f'/{R_kpc}_{rebin}_{mask}_' + f"{table['id'][i]}" + '.png'
+            )
+        if m0 == False and rebin is not None:
+            subplot = mpimg.imread(
+                path + f'/{R_kpc}_{rebin}_' + f"{table['id'][i]}" + '.png'
         )
 
         axi = fig.add_subplot(rows, cols, i + 1)
@@ -58,8 +67,12 @@ fig_y = 10
 cols = 5
 rows = 4
 
-# figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots','Moment 0 maps for LLAMA AGN','AGN')
-# figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots','Moment 0 maps for LLAMA Inactive galaxies','inactive')
+figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots','Moment 0 maps for LLAMA AGN','AGN')
+figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots','Moment 0 maps for LLAMA Inactive galaxies','inactive')
+figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots','120pc beam Moment 0 maps for LLAMA AGN','AGN',rebin=120,mask='strict')
+figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots','120pc beam Moment 0 maps for LLAMA Inactive galaxies','inactive',rebin=120,mask='strict')
+figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots','flux masked 120pc beam Moment 0 maps for LLAMA AGN','AGN',rebin=120,mask='flux90_strict')
+figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots','flux masked 120pc beam Moment 0 maps for LLAMA Inactive galaxies','inactive',rebin=120,mask='flux90_strict')
 figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/AGN/plots','Continuum maps for LLAMA AGN','AGN',m0=False)
 figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/inactive/plots','Continuum maps for LLAMA Inactive galaxies','inactive',m0=False)
 

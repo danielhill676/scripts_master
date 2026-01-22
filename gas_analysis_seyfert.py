@@ -337,7 +337,7 @@ def exp_profile(r, Sigma0, rs):
 
 # ----------------- Moment map plotting ------------------
 
-def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, aperture=None, norm_type='linear'): 
+def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, flux_mask, aperture=None, norm_type='linear'): 
     # Initialise plot
     fontsize = 35 * R_kpc
     plt.rcParams.update({'font.size': fontsize})
@@ -345,7 +345,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     fig = plt.figure(figsize=(figsize , figsize),constrained_layout=True)
     ax = fig.add_subplot(111, projection=image.wcs.celestial)
     ax.margins(x=0,y=0)
-    # ax.set_axis_off()
+    ax.set_axis_off()
 
     add_scalebar(ax,1/3600,label="1''",corner='top left',color='lime',borderpad=2,size_vertical=0.5)
     linewith = 2 * R_kpc
@@ -385,7 +385,10 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
         ax.add_patch(ellipse_patch)
 
     if rebin is not None:
-        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+        if not flux_mask:
+            plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+        else:
+            plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)    
     else:
         plt.savefig(outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
     plt.close(fig)
@@ -414,6 +417,9 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     base = os.path.basename(file)
 
     name = base.split("_12m")[0]
+
+    if not name.endswith(("_phangs","_wis")):
+        return
 
     # Load LLAMA table once per galaxy
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
@@ -461,69 +467,116 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     for attempt in range(max_retries):
         if name.endswith("_phangs"):
-            name_ned = name.split("_phangs")[0]
-            try:
-                Ned_table = Ned.query_object(name_ned)
-
-                RA = Ned_table['RA'][0]
-                DEC = Ned_table['DEC'][0]
-                simbad.add_votable_fields('mesdistance')
-                tbl = simbad.query_object(name_ned)
-                D_Mpc = tbl['mesdistance.dist'][0]
-                D_Mpc_unit = tbl['mesdistance.unit'][0]
-                diam_table = Ned.get_table(name_ned, table='diameters')
-                PA = diam_table['Position Angle'][0]
+            name_ned = (name.split("_phangs")[0]).upper()
+            if name_ned not in llamatab['name']:
                 try:
-                    result = Vizier.query_object(name_ned, catalog="J/ApJS/197/21/cgs")
-                    I = np.nanmedian(np.array(result[0]['i']))
-                except:
-                    result = Vizier.query_object(name_ned, catalog="VII/145/catalog")
-                    I = np.nanmedian(np.array(result[0]['i']))
+                    Ned_table = Ned.query_object(name_ned)
 
-                break  # success, exit retry loop
-            except (requests.exceptions.ConnectionError, RemoteServiceError, requests.exceptions.ReadTimeout) as e:
-                print(f"⚠️  NED query failed for {name_ned} (attempt {attempt+1}/{max_retries}): {e}")
-                if attempt < max_retries - 1:
-                    print("Retrying in 5 seconds...")
-                    time.sleep(5)
-                else:
-                    print("❌ All NED attempts failed.")
-                    # fallback: if your FITS table already includes RA/DEC, use them
+                    RA = Ned_table['RA'][0]
+                    DEC = Ned_table['DEC'][0]
 
-                    print(f"Skipping {name_ned} — no coordinates available.")
-                    continue
+                    simbad.add_votable_fields('mesdistance')
+                    tbl = simbad.query_object(name_ned)
+                    D_Mpc = tbl['mesdistance.dist'][0]
+                    D_Mpc_unit = tbl['mesdistance.unit'][0]
+                    diam_table = Ned.get_table(name_ned, table='diameters')
+                    PA = diam_table['Position Angle'][0]
+                    try:
+                        result = Vizier.query_object(name_ned, catalog="J/ApJS/197/21/cgs")
+                        I = np.nanmedian(np.array(result[0]['i']))
+                    except:
+                        result = Vizier.query_object(name_ned, catalog="VII/145/catalog")
+                        I = np.nanmedian(np.array(result[0]['i']))
+
+                    break  # success, exit retry loop
+                except (requests.exceptions.ConnectionError, RemoteServiceError, requests.exceptions.ReadTimeout) as e:
+                    print(f"⚠️  NED query failed for {name_ned} (attempt {attempt+1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        print("Retrying in 5 seconds...")
+                        time.sleep(5)
+                    else:
+                        print("❌ All NED attempts failed.")
+                        # fallback: if your FITS table already includes RA/DEC, use them
+
+                        print(f"Skipping {name_ned} — no coordinates available.")
+                        continue
+            else:
+                try:
+                    Ned_table = Ned.query_object(llamatab[llamatab['id'] == name_ned]['name'][0])
+                    RA = Ned_table['RA'][0]
+                    DEC = Ned_table['DEC'][0]
+                    break  # success, exit retry loop
+                except (requests.exceptions.ConnectionError, RemoteServiceError, requests.exceptions.ReadTimeout) as e:
+                    print(f"⚠️  NED query failed for {name} (attempt {attempt+1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        print("Retrying in 5 seconds...")
+                        time.sleep(5)
+                    else:
+                        print("❌ All NED attempts failed.")
+                        # fallback: if your FITS table already includes RA/DEC, use them
+                        if 'RA' in llamatab.colnames and 'DEC' in llamatab.colnames:
+                            RA = llamatab[llamatab['id'] == name_ned]['RA'][0]
+                            DEC = llamatab[llamatab['id'] == name_ned]['DEC'][0]
+                            print(f"Using fallback RA/DEC from llamatab for {name}.")
+                        else:
+                            print(f"Skipping {name} — no coordinates available.")
+                            continue
+        
 
         elif name.endswith("_wis"):
-            name_ned = name.split("_wis")[0]
-            try:
-                Ned_table = Ned.query_object(name_ned)
-                RA = Ned_table['RA'][0]
-                DEC = Ned_table['DEC'][0]
-                simbad.add_votable_fields('mesdistance')
-                tbl = simbad.query_object(name_ned)
-                D_Mpc = tbl['mesdistance.dist'][0]
-                D_Mpc_unit = tbl['mesdistance.unit'][0]
-                diam_table = Ned.get_table(name_ned, table='diameters')
-                PA = diam_table['Position Angle'][0]
+            name_ned = (name.split("_wis")[0]).upper()
+            if name_ned not in llamatab['name']:
                 try:
-                    result = Vizier.query_object(name_ned, catalog="J/ApJS/197/21/cgs")
-                    I = np.nanmedian(np.array(result[0]['i']))
-                except:
-                    result = Vizier.query_object(name_ned, catalog="VII/145/catalog")
-                    I = np.nanmedian(np.array(result[0]['i']))
+                    Ned_table = Ned.query_object(name_ned)
+                    RA = Ned_table['RA'][0]
+                    DEC = Ned_table['DEC'][0]
+                    simbad.add_votable_fields('mesdistance')
+                    tbl = simbad.query_object(name_ned)
+                    D_Mpc = tbl['mesdistance.dist'][0]
+                    D_Mpc_unit = tbl['mesdistance.unit'][0]
+                    diam_table = Ned.get_table(name_ned, table='diameters')
+                    PA = diam_table['Position Angle'][0]
+                    try:
+                        result = Vizier.query_object(name_ned, catalog="J/ApJS/197/21/cgs")
+                        I = np.nanmedian(np.array(result[0]['i']))
+                    except:
+                        result = Vizier.query_object(name_ned, catalog="VII/145/catalog")
+                        I = np.nanmedian(np.array(result[0]['i']))
 
-                break  # success, exit retry loop
-            except (requests.exceptions.ConnectionError, RemoteServiceError, requests.exceptions.ReadTimeout) as e:
-                print(f"⚠️  NED query failed for {name_ned} (attempt {attempt+1}/{max_retries}): {e}")
-                if attempt < max_retries - 1:
-                    print("Retrying in 5 seconds...")
-                    time.sleep(5)
-                else:
-                    print("❌ All NED attempts failed.")
-                    # fallback: if your FITS table already includes RA/DEC, use them
+                    break  # success, exit retry loop
+                except (requests.exceptions.ConnectionError, RemoteServiceError, requests.exceptions.ReadTimeout) as e:
+                    print(f"⚠️  NED query failed for {name_ned} (attempt {attempt+1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        print("Retrying in 5 seconds...")
+                        time.sleep(5)
+                    else:
+                        print("❌ All NED attempts failed.")
+                        # fallback: if your FITS table already includes RA/DEC, use them
 
-                    print(f"Skipping {name_ned} — no coordinates available.")
-                    continue
+                        print(f"Skipping {name_ned} — no coordinates available.")
+                        continue
+            else:
+                try:
+                    Ned_table = Ned.query_object(llamatab[llamatab['id'] == name_ned]['name'][0])
+                    RA = Ned_table['RA'][0]
+                    DEC = Ned_table['DEC'][0]
+                    break  # success, exit retry loop
+                except (requests.exceptions.ConnectionError, RemoteServiceError, requests.exceptions.ReadTimeout) as e:
+                    print(f"⚠️  NED query failed for {name} (attempt {attempt+1}/{max_retries}): {e}")
+                    if attempt < max_retries - 1:
+                        print("Retrying in 5 seconds...")
+                        time.sleep(5)
+                    else:
+                        print("❌ All NED attempts failed.")
+                        # fallback: if your FITS table already includes RA/DEC, use them
+                        if 'RA' in llamatab.colnames and 'DEC' in llamatab.colnames:
+                            RA = llamatab[llamatab['id'] == name_ned]['RA'][0]
+                            DEC = llamatab[llamatab['id'] == name_ned]['DEC'][0]
+                            print(f"Using fallback RA/DEC from llamatab for {name}.")
+                        else:
+                            print(f"Skipping {name} — no coordinates available.")
+                            continue
+
 
         else:
             try:
@@ -741,7 +794,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     if isolate == None or 'plot' in isolate:
-        plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, PHANGS_mask, aperture=aperture_to_plot)
+        plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, PHANGS_mask, flux_mask, aperture=aperture_to_plot)
 
     if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']):
 
@@ -916,6 +969,11 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     return {
         "Galaxy": name,
+        "pc_per_arcsec": round(pc_per_arcsec, 1),
+        "RA (deg)": RA,
+        "DEC (deg)": DEC,
+        "PA (deg)": PA,
+        "Inclination (deg)": I,
         "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
         "Asymmetry": round(asym, 3), "Asymmetry_err": round(asym_err, 3),
         "Smoothness": round(smooth, 3), "Smoothness_err": round(smooth_err, 3),
@@ -924,7 +982,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         "rs (pc)": rs,
         "Resolution (pc)": round(beam_scale_pc, 2),
         "clumping_factor": round(clump, 3), "clumping_factor_err": round(clump_err, 3),
-        "pc_per_arcsec": round(pc_per_arcsec, 1),
         "total_mass (M_sun)": round(total_mass, 2), "total_mass_err (M_sun)": round(total_mass_err, 2),
         "L'CO (K km_s pc2)": round(LCO, 3), "L'CO_err (K km_s pc2)": round(LCO_err, 3),
         "L'CO_JCMT (K km s pc2)": round(LCO_JCMT, 3), "L'CO_JCMT_err (K km s pc2)": round(LCO_JCMT_err, 3),
@@ -999,7 +1056,7 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
             type_val = llamatab[llamatab['id'] == name]['type'][0]
         except:
             type_val = 'aux'
-        output_dir = os.path.join(base_output_dir, "inactive" if type_val=="i" else "AGN")
+        output_dir = os.path.join(base_output_dir, "inactive" if type_val=="i" else "aux" if type_val=="aux" else "AGN")
         group = "inactive" if type_val=="i" else "aux" if type_val=="aux" else "AGN"
         os.makedirs(output_dir, exist_ok=True)
         if os.path.exists(mom0_file):
@@ -1221,31 +1278,31 @@ if __name__ == '__main__':
     # CO(2-1)
     outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
     print("Starting CO(2-1) analysis...")
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
 
-    # CO(3-2)
-    co32 = True
-    outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
-    print("Starting CO(3-2) analysis...")
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
+    # # CO(3-2)
+    # co32 = True
+    # outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
+    # print("Starting CO(3-2) analysis...")
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)

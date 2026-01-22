@@ -392,13 +392,12 @@ def cont_power_jybeam(image, mask, pixel_scale_arcsec2, beam_area_arcsec2, **kwa
 def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, aperture=None, norm_type='linear'): 
     # Initialise plot
     fontsize = 23 * R_kpc
-    fontsize = 0
     plt.rcParams.update({'font.size': fontsize})
     figsize = 12 * R_kpc
     fig = plt.figure(figsize=(figsize , figsize),constrained_layout=True)
     ax = fig.add_subplot(111, projection=image.wcs.celestial)
     ax.margins(x=0,y=0)
-    # ax.set_axis_off()
+    ax.set_axis_off()
 
     add_scalebar(ax,1/3600,label="1''",corner='top left',color='lime',borderpad=2,size_vertical=0.5)
     linewith = 2 * R_kpc
