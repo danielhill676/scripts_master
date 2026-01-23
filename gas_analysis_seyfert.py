@@ -420,6 +420,22 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     name = base.split("_12m")[0]
 
+    pair_names = []
+
+    if name in df_pairs["Active Galaxy"].values:
+        rows = df_pairs[df_pairs["Active Galaxy"].str.strip() == name]
+        for _, row in rows.iterrows():
+            pair_name = row["Inactive Galaxy"].strip()
+            pair_names.append(pair_name)
+    elif name in df_pairs["Inactive Galaxy"].values:
+        rows = df_pairs[df_pairs["Inactive Galaxy"].str.strip() == name]
+        for _, row in rows.iterrows():
+            pair_name = row["Active Galaxy"].strip()
+            pair_names.append(pair_name)
+
+
+
+
     # Load LLAMA table once per galaxy
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
 
@@ -1217,6 +1233,67 @@ def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, ma
             merged_df.to_csv(outfile, index=False)
             print(f"Results for {group} saved to {outfile} (updated {len(ids_new)} rows).")
             print('images too small:', images_too_small)
+
+
+
+############# MATCHED PAIR DATA #############
+
+# Inactive galaxies by match number (from the image; right-hand panel)
+inactive_by_num = {
+    1: "NGC 3351",
+    2: "NGC 3175",
+    3: "NGC 4254",
+    4: "ESO 208-G021",
+    5: "NGC 1079",
+    6: "NGC 1947",
+    7: "NGC 5921",
+    8: "NGC 2775",
+    9: "ESO 093-G003",
+    10: "NGC 718",
+    11: "NGC 3717",
+    12: "NGC 5845",
+    13: "NGC 7727",
+    14: "IC 4653",
+    15: "NGC 4260",
+    16: "NGC 5037",
+    17: "NGC 4224",
+    18: "NGC 3749",
+}
+
+# Active galaxies with the exact numbers shown in their corners (from the image; left panel)
+active_to_nums = {
+    "NGC 1365": [7],
+    "NGC 7582": [11, 17],
+    "NGC 6814": [3],
+    "NGC 4388": [11],
+    "NGC 7213": [8],
+    "MCG-06-30-015": [12],
+    "NGC 5506": [2, 15, 16, 17, 18],
+    "NGC 2110": [4, 6],
+    "NGC 3081": [5, 9, 10],
+    "MCG-05-28-016": [5, 14],
+    "ESO 137-G034": [13],
+    "NGC 2992": [2, 15, 16, 17, 18],
+    "NGC 4235": [2, 16, 17, 18],
+    "NGC 4593": [1, 8],
+    "NGC 7172": [15, 16, 17],   # ← three pairs; includes NGC 4224 (17)
+    "NGC 3783": [10],
+    "ESO 021-G004": [17],
+    "NGC 5728": [13, 17],
+}
+
+# Build all pairs (one row per link)
+rows = []
+for active, nums in active_to_nums.items():
+    for n in nums:
+        rows.append({
+            "pair_id": n,
+            "Active Galaxy": active,
+            "Inactive Galaxy": inactive_by_num[n],
+        })
+
+df_pairs = pd.DataFrame(rows).sort_values(["pair_id", "Active Galaxy"]).reset_index(drop=True)
+
 
 
 # ------------------ Main ------------------
