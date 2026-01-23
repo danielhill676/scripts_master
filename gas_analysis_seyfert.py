@@ -577,9 +577,13 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     pc_per_arcsec = main_meta["pc_per_arcsec"]
     header = main_meta["header"]
 
+    beam_scales_pc = [beam_scale_pc]
+    beam_scale_labels = [name]
+
     if rebin is None:
 
-        pair_beam_scales = {}
+        beam_scales_pc = [beam_scale_pc]
+        beam_scale_labels = [name]
 
         for pair_name in pair_names:
 
@@ -593,7 +597,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             )
 
             if not os.path.exists(pair_fits):
-                pair_beam_scales[pair_name_norm] = np.nan
+                beam_scales_pc.append(np.nan)
+                beam_scale_labels.append(pair_name_norm)
                 print(f"Missing FITS for path {pair_fits}")
                 continue
 
@@ -603,20 +608,24 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                     fits_file=pair_fits,
                     llamatab=llamatab
                 )
-                pair_beam_scales[pair_name_norm] = pair_meta["beam_scale_pc"]
 
-                print(
-                    f"Pair {pair_name_norm}: "
-                    f"BMAJ={pair_meta['BMAJ']:.4e}, "
-                    f"BMIN={pair_meta['BMIN']:.4e}, "
-                    f"D={pair_meta['D_Mpc']:.2f} Mpc → "
-                    f"beam={pair_meta['beam_scale_pc']:.2f} pc"
-                )
+                beam_scales_pc.append(pair_meta["beam_scale_pc"])
+                beam_scale_labels.append(pair_name_norm)
+
+                # print(
+                #     f"Pair {pair_name_norm}: "
+                #     f"BMAJ={pair_meta['BMAJ']:.4e}, "
+                #     f"BMIN={pair_meta['BMIN']:.4e}, "
+                #     f"D={pair_meta['D_Mpc']:.2f} Mpc → "
+                #     f"beam={pair_meta['beam_scale_pc']:.2f} pc"
+                # )
 
             except Exception as e:
-                pair_beam_scales[pair_name_norm] = np.nan
+                beam_scales_pc.append(np.nan)
+                beam_scale_labels.append(pair_name_norm)
                 print(f"Failed to process pair {pair_name_norm}: {e}")
 
+    print(f"Beam scales (pc): {dict(zip(beam_scale_labels, beam_scales_pc))}")
 
 
     ######################## carry out manual rebin if missing ########################
