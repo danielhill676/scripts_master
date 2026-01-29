@@ -334,7 +334,7 @@ def exp_profile(r, Sigma0, rs):
 
 # ----------------- Moment map plotting ------------------
 
-def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, flux_mask, aperture=None, norm_type='linear'): 
+def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, flux_mask, aperture=None, norm_type='linear', res_src='native'): 
     # Initialise plot
     fontsize = 35 * R_kpc
     plt.rcParams.update({'font.size': fontsize})
@@ -387,7 +387,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
         else:
             plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)    
     else:
-        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}.png',bbox_inches='tight',pad_inches=0.0)
     plt.close(fig)
         
 # ------------------ Processing ------------------
@@ -501,6 +501,51 @@ def resolve_galaxy_beam_scale(
         "header": header
 
     }
+
+def make_projected_region_mask(
+    shape, R_kpc, pc_per_arcsec, pixel_scale_arcsec, PA, I
+):
+    """
+    Create a boolean mask for a circular region of radius R_kpc in the galaxy
+    plane, projected onto the sky as an ellipse.
+
+    Returns
+    -------
+    mask : 2D boolean array
+        True inside the projected ellipse
+    aperture : EllipticalAperture
+        Photutils aperture object defining the ellipse
+    """
+    R_pc = R_kpc * 1000.0
+    R_arcsec = R_pc / pc_per_arcsec
+    R_pix = R_arcsec / pixel_scale_arcsec
+    R_multip = 1
+
+    # ---- Apply inclination: b = a cos(i)
+    I_rad = np.deg2rad(I)
+    a = R_pix * R_multip
+    b = R_pix * R_multip * np.cos(I_rad)
+
+    # ---- Convert astronomical PA → photutils angle
+    # Photutils θ is CCW from +x (east)
+    # Astronomical PA is measured east of north
+    #
+    # Therefore:
+    theta = np.deg2rad(90.0 - PA)
+    angle = theta * u.rad
+
+    # ---- Build elliptical aperture
+    cx_trim = shape[1] // 2
+    cy_trim = shape[0] // 2
+    center = PixCoord(x=cx_trim, y=cy_trim)
+    aperture = EllipsePixelRegion(center=center, width=2*a, height=2*b, angle=angle)
+
+    # ---- Convert to mask image
+    yy, xx = np.mgrid[0:shape[0], 0:shape[1]]
+    coords = PixCoord(xx, yy)
+    mask = aperture.contains(coords)
+
+    return mask, aperture, R_kpc
 
 
 def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_exp=False):
@@ -628,669 +673,631 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     print(f"Beam scales (pc): {dict(zip(beam_scale_labels, beam_scales_pc))}")
 
 
-    ######################## carry out manual rebin if missing ########################
+    ####################### loop through matched pair resolutions #######################
+    images = []
+    errormaps = []
+    BMAJs = []
+    BMINs = []
+    res_values = []
+    res_sources = []
 
-    if manual_rebin:
-        smooth_factor = rebin / beam_scale_pc
-        if rebin is not None and smooth_factor > 1:
+    # ---------- build resolution list ----------
+    res_list = []
+
+    native_res = float(beam_scale_pc)
+    res_list.append(("native", native_res))
+
+    if rebin is None:
+        for pair_id, bs_pc in zip(pair_names, beam_scales_pc):
+            if not np.isnan(bs_pc) and bs_pc > native_res:
+                res_list.append((pair_id, float(bs_pc)))
+
+    # preserve order, unique
+    res_list = list(dict.fromkeys(res_list))
+
+    # ---------- smoothing ----------
+    for src, res in res_list:
+
+        image_copy = image_untrimmed.copy()
+        error_map_copy = error_map_untrimmed.copy()
+        beam_scale_pc_copy = native_res
+
+        smooth_factor = res / beam_scale_pc_copy
+        if res is not None and smooth_factor > 1:
             pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
-            sigma_kernel_pc = np.sqrt(rebin**2 - beam_scale_pc**2)
+            sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
             sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
             from scipy.ndimage import gaussian_filter
-            image_untrimmed = gaussian_filter(image_untrimmed, sigma=sigma_kernel_pix)
-            error_map_untrimmed = gaussian_filter(error_map_untrimmed, sigma=sigma_kernel_pix)
 
-            beam_scale_pc = rebin
-            BMAJ = beam_scale_pc / (pc_per_arcsec * 3600)
-            BMIN = BMAJ
+            image_copy = gaussian_filter(image_copy, sigma=sigma_kernel_pix)
+            error_map_copy = gaussian_filter(error_map_copy, sigma=sigma_kernel_pix)
+
+            beam_scale_pc_copy = res
+            BMAJ_new = beam_scale_pc_copy / (pc_per_arcsec * 3600)
+            BMIN_new = BMAJ_new
         else:
-            print(f"No rebinning applied for {name}: requested rebin {rebin} pc is not larger than beam scale {beam_scale_pc:.2f} pc.")
-           
+            BMAJ_new = BMAJ
+            BMIN_new = BMIN
+
+        images.append(image_copy)
+        errormaps.append(error_map_copy)
+        BMAJs.append(BMAJ_new)
+        BMINs.append(BMIN_new)
+        res_values.append(float(res))
+        res_sources.append(src)
+
+    ######################## carry out manual rebin if missing ########################
+    if manual_rebin:
+        smooth_factor = rebin / native_res
+        if rebin is not None and smooth_factor > 1:
+            pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
+            sigma_kernel_pc = np.sqrt(rebin**2 - native_res**2)
+            sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
+            from scipy.ndimage import gaussian_filter
+
+            image_rb = gaussian_filter(image_untrimmed, sigma=sigma_kernel_pix)
+            error_rb = gaussian_filter(error_map_untrimmed, sigma=sigma_kernel_pix)
+
+            BMAJ_rb = rebin / (pc_per_arcsec * 3600)
+            BMIN_rb = BMAJ_rb
+
+            images.append(image_rb)
+            errormaps.append(error_rb)
+            BMAJs.append(BMAJ_rb)
+            BMINs.append(BMIN_rb)
+            res_values.append(float(rebin))
+            res_sources.append("rebin")
+        else:
+            print(
+                f"No rebinning applied for {name}: requested rebin {rebin} pc "
+                f"is not larger than beam scale {native_res:.2f} pc."
+            )
+
     ##################################################################################
 
-    pixel_area_pc2 = (pixel_scale_arcsec * pc_per_arcsec)**2
-    R_21, R_31, alpha_CO = 0.7, 0.31, 4.35
-    R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
+    rows = []
 
-    gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
+    for img_idx, (
+            image_untrimmed,
+            error_map_untrimmed,
+            BMAJ,
+            BMIN,
+            res_pc,
+            res_src
+        ) in enumerate(zip(images, errormaps, BMAJs, BMINs, res_values, res_sources)):
 
-    wcs_full = WCS(header)
+        beam_scale_pc = res_pc
 
-    ny, nx = image_untrimmed.shape
+        pixel_area_pc2 = (pixel_scale_arcsec * pc_per_arcsec)**2
+        R_21, R_31, alpha_CO = 0.7, 0.31, 4.35
+        R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
 
-    try:
-        cx, cy = gal_cen.to_pixel(wcs_full)
-        cx, cy = int(cx), int(cy)
-    except Exception as e:
-        print(f"WARNING: WCS conversion failed for {name}: {e}")
-        print("Falling back to image center.")
-        cx, cy = nx // 2, ny // 2
+        gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
+        wcs_full = WCS(header)
 
-    # Target padded size (square of side 2*R_pixel)
-    target_size = 2 * R_pixel
-    ny_full, nx_full = image_untrimmed.shape
+        ny, nx = image_untrimmed.shape
+        try:
+            cx, cy = gal_cen.to_pixel(wcs_full)
+            cx, cy = int(cx), int(cy)
+        except Exception as e:
+            print(f"WARNING: WCS conversion failed for {name}: {e}")
+            cx, cy = nx // 2, ny // 2
 
-    # Compute physical size for warning
-    nx_kpc = nx_full * pixel_scale_arcsec * pc_per_arcsec / 1000  
-    ny_kpc = ny_full * pixel_scale_arcsec * pc_per_arcsec / 1000  
+        target_size = 2 * R_pixel
+        nx_full, ny_full = nx, ny
 
-    if nx_full < target_size or ny_full < target_size:
-        print(f"Image too small for requested R_kpc={R_kpc} kpc. "
-              f"Image size: {nx_kpc:.2f}×{ny_kpc:.2f} kpc. "
-              f"Padding to {target_size}×{target_size} pixels.")
-        images_too_small.append(name)
+        x1, x2 = cx - R_pixel, cx + R_pixel
+        y1, y2 = cy - R_pixel, cy + R_pixel
 
-    # Compute slice boundaries centered on RA/DEC
-    x1, x2 = cx - R_pixel, cx + R_pixel
-    y1, y2 = cy - R_pixel, cy + R_pixel
+        image = np.full((target_size, target_size), np.nan)
+        error_map = np.full_like(image, np.nan)
+        mask = np.ones_like(image, dtype=bool)
 
-    # Initialize padded outputs
-    image = np.full((target_size, target_size), np.nan, dtype=image_untrimmed.dtype)
-    error_map = np.full((target_size, target_size), np.nan, dtype=error_map_untrimmed.dtype)
-    mask = np.ones((target_size, target_size), dtype=bool)
+        x1i, x2i = max(0, x1), min(nx_full, x2)
+        y1i, y2i = max(0, y1), min(ny_full, y2)
 
-    # Find overlap with real image bounds
-    x1_img, x2_img = max(x1, 0), min(x2, nx_full)
-    y1_img, y2_img = max(y1, 0), min(y2, ny_full)
+        xp1, xp2 = x1i - x1, x1i - x1 + (x2i - x1i)
+        yp1, yp2 = y1i - y1, y1i - y1 + (y2i - y1i)
 
-    # Compute placement inside padded array
-    x1_pad = x1_img - x1
-    x2_pad = x1_pad + (x2_img - x1_img)
-    y1_pad = y1_img - y1
-    y2_pad = y1_pad + (y2_img - y1_img)
+        image[yp1:yp2, xp1:xp2] = image_untrimmed[y1i:y2i, x1i:x2i]
+        error_map[yp1:yp2, xp1:xp2] = error_map_untrimmed[y1i:y2i, x1i:x2i]
+        mask[yp1:yp2, xp1:xp2] = mask_untrimmed[y1i:y2i, x1i:x2i]
 
-    # Copy valid region
-    image[y1_pad:y2_pad, x1_pad:x2_pad] = image_untrimmed[y1_img:y2_img, x1_img:x2_img]
-    error_map[y1_pad:y2_pad, x1_pad:x2_pad] = error_map_untrimmed[y1_img:y2_img, x1_img:x2_img]
-    mask[y1_pad:y2_pad, x1_pad:x2_pad] = mask_untrimmed[y1_img:y2_img, x1_img:x2_img]
+        # ---------- NaN handling ----------
+        nan_pixels = np.isnan(image)
+        if nan_pixels.any():
+            image[nan_pixels] = 0.0
+            mask[nan_pixels] = False
+            error_map[nan_pixels] = np.nanmean(error_map)
 
-    target_image  = image
-    target_mask   = mask
-    target_emap   = error_map
-    
+        emission_pixels = np.count_nonzero(np.abs(image) > 1e-10)
+        emission_fraction = emission_pixels / image.size
 
-    # 1. Identify NaNs in the image region
-    nan_pixels = np.isnan(target_image)
+        # ---------- Update WCS ----------
+        wcs_trimmed = wcs_full.deepcopy()
+        wcs_trimmed.wcs.crpix[0] -= x1
+        wcs_trimmed.wcs.crpix[1] -= y1
 
-    if nan_pixels.any():
-        print(f"WARNING: Image for {name} contains NaN values within the "
-            f"{target_size}×{target_size} pixel target region.")
+        image_nd = NDData(data=image, wcs=wcs_trimmed)
 
-        # 2. Replace NaNs in image with 0
-        target_image[nan_pixels] = 0.0
-        print(f"Replaced {np.sum(nan_pixels)} NaN pixels with 0 in image for {name}.")
+        # ---------- Flux mask ----------
+        if flux_mask == True:
+            total_flux = np.nansum(image[~mask])
+            f = 1.0
+            ratio = 1.0
+            while ratio > 0.9:
+                flux_mask_90, flux_aperture_90, R_90 = make_projected_region_mask(
+                    image.shape, R_kpc * f * 1.42 , pc_per_arcsec, pixel_scale_arcsec, PA, I
+                )
+                flux_90 = np.nansum(image[flux_mask_90 & ~mask])
+                ratio = flux_90 / total_flux if total_flux > 0 else 0.0
+                f -= 0.001
 
-        # 3. Mask: set those pixels to False (invalid)
-        target_mask[nan_pixels] = False
-
-        # 4. Determine mean error for pixels in the region where image == 0
-        zero_pixels = (target_image == 0) & (~np.isnan(target_emap))
-        if zero_pixels.any():
-            mean_err = np.nanmean(target_emap[zero_pixels])
+            print(
+                f"Flux in aperture = {ratio} of total. R_90 (kpc): ",
+                round(R_90, 2)
+            )
+            mask = flux_mask_90 | mask
+            aperture_to_plot = flux_aperture_90
         else:
-            # fallback if weird case — use global mean of non-NaN error
-            mean_err = np.nanmean(target_emap)
+            aperture_to_plot = None
 
-        # 5. Fill errormap at the NaN-image pixels with this mean value
-        target_emap[nan_pixels] = mean_err
+        # ---------- Plot ----------
+        if isolate is None or 'plot' in isolate:
+            plot_moment_map(
+                image_nd, output_dir, name,
+                BMAJ, BMIN, R_kpc, rebin,
+                PHANGS_mask, flux_mask,
+                aperture=aperture_to_plot, res_src=res_src
+            )
 
-        images_too_small.append(name)
+        if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']):
 
-    # Write modified arrays back
-    image[:] = target_image
-    mask[:] = target_mask
-    error_map[:] = target_emap
+            # Generate Monte-Carlo images (full set)
+            N_MC = 1000
+            images_mc = generate_random_images(image, error_map, n_iter=N_MC)
 
-    emission_pixels = np.count_nonzero(np.abs(image) > 1e-10)
-    total_pixels = image.size
-    emission_fraction = emission_pixels / total_pixels
+            # ---- PARALLEL MC PROCESSING HERE ----
+            dtype = image.dtype  # e.g. np.float64
+            shape = image.shape
 
+            shm_img = shared_memory.SharedMemory(create=True, size=image.nbytes)
+            shm_err = shared_memory.SharedMemory(create=True, size=error_map.nbytes)
+            # write into shared memory
+            shm_array_img = np.ndarray(shape, dtype=dtype, buffer=shm_img.buf)
+            shm_array_err = np.ndarray(shape, dtype=dtype, buffer=shm_err.buf)
+            shm_array_img[:] = image[:]       # copy once
+            shm_array_err[:] = error_map[:]   # copy once
 
-    # Update WCS for cutout
-    wcs_trimmed = wcs_full.deepcopy()
-    wcs_trimmed.wcs.crpix[0] -= x1
-    wcs_trimmed.wcs.crpix[1] -= y1
+            cpu = min( max(1, multiprocessing.cpu_count()-1), 8 )  # e.g., reserve one core
+            iters_per_worker = [N_MC // cpu] * cpu
+            for i in range(N_MC % cpu):
+                iters_per_worker[i] += 1
 
-    image_nd = NDData(data=image, wcs=wcs_trimmed)
+            metric_kwargs_small = dict(
+                name=name,
+                co32=co32,
+                pixel_area_pc2=pixel_area_pc2,
+                R_21=R_21,
+                R_31=R_31,
+                alpha_CO=alpha_CO,
+                pc_per_arcsec=pc_per_arcsec,
+                pixel_scale_arcsec=pixel_scale_arcsec
+            )
 
+            with ProcessPoolExecutor(max_workers=cpu) as ex:
+                futures = []
+                for w, n_iter_chunk in enumerate(iters_per_worker):
+                    seed = np.random.SeedSequence().entropy + w
+                    futures.append(ex.submit(
+                        process_mc_chunk_shm,
+                        n_iter_chunk,
+                        shm_img.name,
+                        shm_err.name,
+                        shape,
+                        str(dtype),
+                        mask,
+                        metric_kwargs_small,
+                        isolate,
+                        seed
+                    ))
+                results = [f.result() for f in futures]
 
-    def make_projected_region_mask(
-        shape, R_kpc
-    ):
-        """
-        Create a boolean mask for a circular region of radius R_kpc in the galaxy
-        plane, projected onto the sky as an ellipse.
+            # When done, unlink the shared memory
+            shm_img.close()
+            shm_img.unlink()
+            shm_err.close()
+            shm_err.unlink()
 
-        Returns
-        -------
-        mask : 2D boolean array
-            True inside the projected ellipse
-        aperture : EllipticalAperture
-            Photutils aperture object defining the ellipse
-        """
-        R_pc = R_kpc * 1000.0
-        R_arcsec = R_pc / pc_per_arcsec
-        R_pix = R_arcsec / pixel_scale_arcsec
-        R_multip = 1
+            def merge_global(metric_name):
+                """Concatenate raw MC values across chunks and compute global stats."""
+                
+                # Collect lists from every chunk
+                all_values = []
+                for r in results:
+                    if metric_name in r:
+                        all_values.extend(r[metric_name])
 
-        # ---- Apply inclination: b = a cos(i)
-        I_rad = np.deg2rad(I)
-        a = R_pix * R_multip
-        b = R_pix * R_multip * np.cos(I_rad)
+                # Convert to array
+                arr = np.array(all_values, dtype=float)
 
-        # ---- Convert astronomical PA → photutils angle
-        # Photutils θ is CCW from +x (east)
-        # Astronomical PA is measured east of north
-        #
-        # Therefore:
-        theta = np.deg2rad(90.0 - PA)
-        angle = theta * u.rad
+                # Handle case where everything failed
+                if len(arr) == 0 or np.all(np.isnan(arr)):
+                    print(f"All MC calculations failed for metric {metric_name} in galaxy {name}.")
+                    return np.nan, np.nan
 
-        # ---- Build elliptical aperture
-        cx_trim = shape[1] // 2
-        cy_trim = shape[0] // 2
-        center = PixCoord(x=cx_trim, y=cy_trim)
-        aperture = EllipsePixelRegion(center=center, width=2*a, height=2*b, angle=angle)
+                # Global median and std
+                return float(np.nanmedian(arr)), float(np.nanstd(arr))
 
-        # ---- Convert to mask image
-        yy, xx = np.mgrid[0:shape[0], 0:shape[1]]
-        coords = PixCoord(xx, yy)
-        mask = aperture.contains(coords)
+            gini, gini_err = merge_global("gini")
+            asym, asym_err = merge_global("asym")
+            smooth, smooth_err = merge_global("smooth")
+            conc, conc_err = merge_global("conc")
+            total_mass, total_mass_err = merge_global("tmass")
+            LCO, LCO_err = merge_global("LCO")
+            LCO_JCMT, LCO_JCMT_err = merge_global("LCO_JCMT")
+            LCO_APEX, LCO_APEX_err = merge_global("LCO_APEX")
+            mw_sd, mw_sd_err = merge_global("mw")
+            aw_sd, aw_sd_err = merge_global("aw")
+            clump, clump_err = merge_global("clump")
+        else:
+            print("Skipping metric calculations as per isolate parameter.")
+            gini, gini_err = np.nan, np.nan
+            asym, asym_err = np.nan, np.nan
+            smooth, smooth_err = np.nan, np.nan
+            conc, conc_err = np.nan, np.nan
+            total_mass, total_mass_err = np.nan, np.nan
+            LCO, LCO_err = np.nan, np.nan
+            LCO_JCMT, LCO_JCMT_err = np.nan, np.nan
+            LCO_APEX, LCO_APEX_err = np.nan, np.nan
+            mw_sd, mw_sd_err = np.nan, np.nan
+            aw_sd, aw_sd_err = np.nan, np.nan
+            clump, clump_err = np.nan, np.nan
 
-        return mask, aperture, R_kpc
+        if isolate == None or 'expfit' in isolate:
 
-    if flux_mask == True:
-        total_flux = np.nansum(image[~mask])
-        f = 1.0
-        ratio = 1.0
-        while ratio > 0.9:
-            flux_mask_90 , flux_aperture_90, R_90  = make_projected_region_mask(image.shape, R_kpc*f*1.42)
-            flux_90 = np.nansum(image[flux_mask_90 & ~mask])
-            ratio = flux_90 / total_flux if total_flux > 0 else 0.0
-            f -= 0.001
-        
-        print(f"Flux in aperature = {ratio} of total. R_90 (kpc): ", round(R_90,2))
-        mask = flux_mask_90 | mask
+            # Radial profile unchanged
+            try:
+                radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
+                valid = np.isfinite(profile) & np.isfinite(profile_err)
+                radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
+            except:
+                radii, profile, profile_err = np.array([]), np.array([]), np.array([])
+                print(f"Radial profile extraction failed for {name}.")
 
-        aperture_to_plot = flux_aperture_90
-    else:
-        aperture_to_plot = None
+            try:
+                popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
+                                    absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
+                perr = np.sqrt(np.diag(pcov))
+                sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
+                rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
+                rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
+                rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
 
+                # --- Create decently sized figure and control font sizes ---
+                plt.figure(figsize=(8, 6))           # Larger canvas
+                plt.rcParams.update({
+                    'font.size': 10,                 # base font size
+                    'axes.titlesize': 12,            # title
+                    'axes.labelsize': 11,            # axis labels  
+                    'xtick.labelsize': 10,
+                    'ytick.labelsize': 10,
+                    'legend.fontsize': 10
+    })
 
-    if isolate == None or 'plot' in isolate:
-        plot_moment_map(image_nd, output_dir, name, BMAJ, BMIN, R_kpc, rebin, PHANGS_mask, flux_mask, aperture=aperture_to_plot)
+                bin_widths = np.diff(np.linspace(0, radii.max(), len(radii)+1))
+                bin_widths_pc = bin_widths * pixel_scale_arcsec * pc_per_arcsec
+                radii_pc = radii * pixel_scale_arcsec * pc_per_arcsec
+                plt.errorbar(radii_pc, profile, yerr=profile_err, fmt='x', label="Data", capsize=3, xerr=bin_widths_pc / 2)
+                plt.plot(radii_pc, exp_profile(radii, *popt), label="Fit", color='orange')
+                plt.xlabel("Radius (pc)")
+                plt.ylabel("Integrated intensity [Jy/beam km/s]")
+                plt.title(name)
+                plt.legend()
+                plt.tight_layout()
+                plot_path = os.path.join(output_dir, f"{name}_{PHANGS_mask}_{rebin}_{R_kpc}kpc_expfit.png")
+                if save_exp == True:
+                    plt.savefig(plot_path,dpi=200)
+                plt.close()
 
-    if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']):
+            except:
+                sigma0, rs = "fit failed", "fit failed"
+        else:
+            sigma0, rs = np.nan, np.nan
 
-        # Generate Monte-Carlo images (full set)
-        N_MC = 1000
-        images_mc = generate_random_images(image, error_map, n_iter=N_MC)
+        # ---------- assemble row ----------
+        rows.append({
+            "Galaxy": name,
+            "Resolution (pc)": round(res_pc, 2),
+            "resolution_source": res_src,
+            "pc_per_arcsec": round(pc_per_arcsec, 1),
+            "RA (deg)": RA,
+            "DEC (deg)": DEC,
+            "PA (deg)": PA,
+            "Inclination (deg)": I,
+            "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
+            "Asymmetry": round(asym, 3), "Asymmetry_err": round(asym_err, 3),
+            "Smoothness": round(smooth, 3), "Smoothness_err": round(smooth_err, 3),
+            "Concentration": round(conc, 3), "Concentration_err": round(conc_err, 3),
+            "Sigma0 (Jy/beam km/s)": sigma0,
+            "rs (pc)": rs,
+            "clumping_factor": round(clump, 3), "clumping_factor_err": round(clump_err, 3),
+            "total_mass (M_sun)": round(total_mass, 2),
+            "total_mass_err (M_sun)": round(total_mass_err, 2),
+            "L'CO (K km_s pc2)": round(LCO, 3),
+            "L'CO_err (K km_s pc2)": round(LCO_err, 3),
+            "L'CO_JCMT (K km s pc2)": round(LCO_JCMT, 3),
+            "L'CO_JCMT_err (K km s pc2)": round(LCO_JCMT_err, 3),
+            "L'CO_APEX (K km s pc2)": round(LCO_APEX, 3),
+            "L'CO_APEX_err (K km s pc2)": round(LCO_APEX_err, 3),
+            "mass_weighted_sd": round(mw_sd, 1),
+            "mass_weighted_sd_err": round(mw_sd_err, 1),
+            "area_weighted_sd": round(aw_sd, 1),
+            "area_weighted_sd_err": round(aw_sd_err, 1),
+            "emission_pixels": emission_pixels,
+            "emission_fraction": emission_fraction
+        })
 
-        # ---- PARALLEL MC PROCESSING HERE ----
-        dtype = image.dtype  # e.g. np.float64
-        shape = image.shape
-
-        shm_img = shared_memory.SharedMemory(create=True, size=image.nbytes)
-        shm_err = shared_memory.SharedMemory(create=True, size=error_map.nbytes)
-        # write into shared memory
-        shm_array_img = np.ndarray(shape, dtype=dtype, buffer=shm_img.buf)
-        shm_array_err = np.ndarray(shape, dtype=dtype, buffer=shm_err.buf)
-        shm_array_img[:] = image[:]       # copy once
-        shm_array_err[:] = error_map[:]   # copy once
-
-        cpu = min( max(1, multiprocessing.cpu_count()-1), 8 )  # e.g., reserve one core
-        iters_per_worker = [N_MC // cpu] * cpu
-        for i in range(N_MC % cpu):
-            iters_per_worker[i] += 1
-
-        metric_kwargs_small = dict(
-            name=name,
-            co32=co32,
-            pixel_area_pc2=pixel_area_pc2,
-            R_21=R_21,
-            R_31=R_31,
-            alpha_CO=alpha_CO,
-            pc_per_arcsec=pc_per_arcsec,
-            pixel_scale_arcsec=pixel_scale_arcsec
-        )
-
-        with ProcessPoolExecutor(max_workers=cpu) as ex:
-            futures = []
-            for w, n_iter_chunk in enumerate(iters_per_worker):
-                seed = np.random.SeedSequence().entropy + w
-                futures.append(ex.submit(
-                    process_mc_chunk_shm,
-                    n_iter_chunk,
-                    shm_img.name,
-                    shm_err.name,
-                    shape,
-                    str(dtype),
-                    mask,
-                    metric_kwargs_small,
-                    isolate,
-                    seed
-                ))
-            results = [f.result() for f in futures]
-
-        # When done, unlink the shared memory
-        shm_img.close()
-        shm_img.unlink()
-        shm_err.close()
-        shm_err.unlink()
-
-        def merge_global(metric_name):
-            """Concatenate raw MC values across chunks and compute global stats."""
-            
-            # Collect lists from every chunk
-            all_values = []
-            for r in results:
-                if metric_name in r:
-                    all_values.extend(r[metric_name])
-
-            # Convert to array
-            arr = np.array(all_values, dtype=float)
-
-            # Handle case where everything failed
-            if len(arr) == 0 or np.all(np.isnan(arr)):
-                print(f"All MC calculations failed for metric {metric_name} in galaxy {name}.")
-                return np.nan, np.nan
-
-            # Global median and std
-            return float(np.nanmedian(arr)), float(np.nanstd(arr))
-
-        gini, gini_err = merge_global("gini")
-        asym, asym_err = merge_global("asym")
-        smooth, smooth_err = merge_global("smooth")
-        conc, conc_err = merge_global("conc")
-        total_mass, total_mass_err = merge_global("tmass")
-        LCO, LCO_err = merge_global("LCO")
-        LCO_JCMT, LCO_JCMT_err = merge_global("LCO_JCMT")
-        LCO_APEX, LCO_APEX_err = merge_global("LCO_APEX")
-        mw_sd, mw_sd_err = merge_global("mw")
-        aw_sd, aw_sd_err = merge_global("aw")
-        clump, clump_err = merge_global("clump")
-    else:
-        print("Skipping metric calculations as per isolate parameter.")
-        gini, gini_err = np.nan, np.nan
-        asym, asym_err = np.nan, np.nan
-        smooth, smooth_err = np.nan, np.nan
-        conc, conc_err = np.nan, np.nan
-        total_mass, total_mass_err = np.nan, np.nan
-        LCO, LCO_err = np.nan, np.nan
-        LCO_JCMT, LCO_JCMT_err = np.nan, np.nan
-        LCO_APEX, LCO_APEX_err = np.nan, np.nan
-        mw_sd, mw_sd_err = np.nan, np.nan
-        aw_sd, aw_sd_err = np.nan, np.nan
-        clump, clump_err = np.nan, np.nan
-
-    if isolate == None or 'expfit' in isolate:
-
-        # Radial profile unchanged
-        try:
-            radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
-            valid = np.isfinite(profile) & np.isfinite(profile_err)
-            radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
-        except:
-            radii, profile, profile_err = np.array([]), np.array([]), np.array([])
-            print(f"Radial profile extraction failed for {name}.")
-
-        try:
-            popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
-                                absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
-            perr = np.sqrt(np.diag(pcov))
-            sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
-            rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
-            rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
-            rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
-
-            # --- Create decently sized figure and control font sizes ---
-            plt.figure(figsize=(8, 6))           # Larger canvas
-            plt.rcParams.update({
-                'font.size': 10,                 # base font size
-                'axes.titlesize': 12,            # title
-                'axes.labelsize': 11,            # axis labels  
-                'xtick.labelsize': 10,
-                'ytick.labelsize': 10,
-                'legend.fontsize': 10
-})
-
-            bin_widths = np.diff(np.linspace(0, radii.max(), len(radii)+1))
-            bin_widths_pc = bin_widths * pixel_scale_arcsec * pc_per_arcsec
-            radii_pc = radii * pixel_scale_arcsec * pc_per_arcsec
-            plt.errorbar(radii_pc, profile, yerr=profile_err, fmt='x', label="Data", capsize=3, xerr=bin_widths_pc / 2)
-            plt.plot(radii_pc, exp_profile(radii, *popt), label="Fit", color='orange')
-            plt.xlabel("Radius (pc)")
-            plt.ylabel("Integrated intensity [Jy/beam km/s]")
-            plt.title(name)
-            plt.legend()
-            plt.tight_layout()
-            plot_path = os.path.join(output_dir, f"{name}_{PHANGS_mask}_{rebin}_{R_kpc}kpc_expfit.png")
-            if save_exp == True:
-                plt.savefig(plot_path,dpi=200)
-            plt.close()
-
-        except:
-            sigma0, rs = "fit failed", "fit failed"
-    else:
-        sigma0, rs = np.nan, np.nan
-
-    # print({
-    #     "Galaxy": name,
-    #     "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
-    #     "Asymmetry": round(asym, 3), "Asymmetry_err": round(asym_err, 3),
-    #     "Smoothness": round(smooth, 3), "Smoothness_err": round(smooth_err, 3),
-    #     "Concentration": round(conc, 3), "Concentration_err": round(conc_err, 3),
-    #     "Sigma0 (Jy/beam km/s)": sigma0,
-    #     "rs (pc)": rs,
-    #     "Resolution (pc)": round(beam_scale_pc, 2),
-    #     "clumping_factor": round(clump, 3), "clumping_factor_err": round(clump_err, 3),
-    #     "pc_per_arcsec": round(pc_per_arcsec, 1),
-    #     "total_mass (M_sun)": round(total_mass, 2), "total_mass_err (M_sun)": round(total_mass_err, 2),
-    #     "L'CO (K km_s pc2)": round(LCO, 3), "L'CO_err (K km_s pc2)": round(LCO_err, 3),
-    #     "mass_weighted_sd": round(mw_sd, 1), "mass_weighted_sd_err": round(mw_sd_err, 1),
-    #     "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1)
-    # })
-
-    return {
-        "Galaxy": name,
-        "pc_per_arcsec": round(pc_per_arcsec, 1),
-        "RA (deg)": RA,
-        "DEC (deg)": DEC,
-        "PA (deg)": PA,
-        "Inclination (deg)": I, 
-        "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
-        "Asymmetry": round(asym, 3), "Asymmetry_err": round(asym_err, 3),
-        "Smoothness": round(smooth, 3), "Smoothness_err": round(smooth_err, 3),
-        "Concentration": round(conc, 3), "Concentration_err": round(conc_err, 3),
-        "Sigma0 (Jy/beam km/s)": sigma0,
-        "rs (pc)": rs,
-        "Resolution (pc)": round(beam_scale_pc, 2),
-        "clumping_factor": round(clump, 3), "clumping_factor_err": round(clump_err, 3),
-        "total_mass (M_sun)": round(total_mass, 2), "total_mass_err (M_sun)": round(total_mass_err, 2),
-        "L'CO (K km_s pc2)": round(LCO, 3), "L'CO_err (K km_s pc2)": round(LCO_err, 3),
-        "L'CO_JCMT (K km s pc2)": round(LCO_JCMT, 3), "L'CO_JCMT_err (K km s pc2)": round(LCO_JCMT_err, 3),
-        "L'CO_APEX (K km s pc2)": round(LCO_APEX, 3), "L'CO_APEX_err (K km s pc2)": round(LCO_APEX_err, 3),
-        "mass_weighted_sd": round(mw_sd, 1), "mass_weighted_sd_err": round(mw_sd_err, 1),
-        "area_weighted_sd": round(aw_sd, 1), "area_weighted_sd_err": round(aw_sd_err, 1),
-        "emission_pixels": emission_pixels,
-        "emission_fraction": emission_fraction
-    }
+    return rows
 
 # ------------------ Parallel Directory Processing ------------------
 
-def process_directory(outer_dir, llamatab, base_output_dir, co32, rebin=None, mask='broad', R_kpc=1, flux_mask=False, isolate=None):
-    print(f"Processing directory: {outer_dir} (CO32={co32}, rebin={rebin}, mask={mask}, R_kpc={R_kpc}), isolate={isolate})")
-    valid_names = set(llamatab['id'])
-    subdirs = [d for d in os.listdir(outer_dir)
-                if os.path.isdir(os.path.join(outer_dir, d))]# and d in valid_names]
+def process_directory(
+    outer_dir,
+    llamatab,
+    base_output_dir,
+    co32,
+    rebin=None,
+    mask='broad',
+    R_kpc=1,
+    flux_mask=False,
+    isolate=None
+):
+    print(
+        f"Processing directory: {outer_dir} "
+        f"(CO32={co32}, rebin={rebin}, mask={mask}, R_kpc={R_kpc}), "
+        f"isolate={isolate})"
+    )
 
-    args_list, meta_info = [], []
+    valid_names = set(llamatab['id'])
+    subdirs = [
+        d for d in os.listdir(outer_dir)
+        if os.path.isdir(os.path.join(outer_dir, d))
+    ]
+
+    args_list = []
+    meta_info = []
+
     for name in subdirs:
         subdir = os.path.join(outer_dir, name)
         manual_rebin = False
-        if rebin is not None and not co32:
-            if name in ["NGC4388","NGC6814","NGC5728"]:
-                continue
-            if os.path.exists(os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_mom0.fits")):
-                mom0_file = os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_mom0.fits")
-                emom0_file = os.path.join(subdir, f"{name}_12m_co21_{rebin}pc_{mask}_emom0.fits")
 
+        # ---------------- File selection logic (UNCHANGED) ----------------
+        if rebin is not None and not co32:
+            if name in ["NGC4388", "NGC6814", "NGC5728"]:
+                continue
+
+            rebinned = os.path.join(
+                subdir, f"{name}_12m_co21_{rebin}pc_{mask}_mom0.fits"
+            )
+            if os.path.exists(rebinned):
+                mom0_file = rebinned
+                emom0_file = os.path.join(
+                    subdir, f"{name}_12m_co21_{rebin}pc_{mask}_emom0.fits"
+                )
             else:
-                if name in ["NGC4388","NGC6814","NGC5728"]:
-                    continue
                 print(f'{rebin} pc for {name}, using native res files or rebinning manually')
                 manual_rebin = True
-                mom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_mom0.fits")
-                emom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_emom0.fits")
-
+                mom0_file = os.path.join(
+                    subdir, f"{name}_12m_co21_{mask}_mom0.fits"
+                )
+                emom0_file = os.path.join(
+                    subdir, f"{name}_12m_co21_{mask}_emom0.fits"
+                )
 
         elif rebin is not None and co32:
-            if name not in ["NGC4388","NGC6814","NGC5728"]:
+            if name not in ["NGC4388", "NGC6814", "NGC5728"]:
                 continue
-            if os.path.exists(os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_mom0.fits")):
-                mom0_file = os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_mom0.fits")
 
-                emom0_file = os.path.join(subdir, f"{name}_12m_co32_{rebin}pc_{mask}_emom0.fits")
-
+            rebinned = os.path.join(
+                subdir, f"{name}_12m_co32_{rebin}pc_{mask}_mom0.fits"
+            )
+            if os.path.exists(rebinned):
+                mom0_file = rebinned
+                emom0_file = os.path.join(
+                    subdir, f"{name}_12m_co32_{rebin}pc_{mask}_emom0.fits"
+                )
             else:
-                if name not in ["NGC4388","NGC6814","NGC5728"]:
-                    continue
                 print(f'{rebin} pc for {name}, using native res files or rebinning manually')
                 manual_rebin = True
-                mom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_mom0.fits")
-                emom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_emom0.fits")
-
+                mom0_file = os.path.join(
+                    subdir, f"{name}_12m_co32_{mask}_mom0.fits"
+                )
+                emom0_file = os.path.join(
+                    subdir, f"{name}_12m_co32_{mask}_emom0.fits"
+                )
 
         elif not rebin and not co32:
-            if name in ["NGC4388","NGC6814","NGC5728"]:
+            if name in ["NGC4388", "NGC6814", "NGC5728"]:
                 continue
-            mom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_mom0.fits")
 
-            emom0_file = os.path.join(subdir, f"{name}_12m_co21_{mask}_emom0.fits")
+            mom0_file = os.path.join(
+                subdir, f"{name}_12m_co21_{mask}_mom0.fits"
+            )
+            emom0_file = os.path.join(
+                subdir, f"{name}_12m_co21_{mask}_emom0.fits"
+            )
 
         else:
-            if name not in ["NGC4388","NGC6814","NGC5728"]:
+            if name not in ["NGC4388", "NGC6814", "NGC5728"]:
                 continue
-            mom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_mom0.fits")
 
-            emom0_file = os.path.join(subdir, f"{name}_12m_co32_{mask}_emom0.fits")
+            mom0_file = os.path.join(
+                subdir, f"{name}_12m_co32_{mask}_mom0.fits"
+            )
+            emom0_file = os.path.join(
+                subdir, f"{name}_12m_co32_{mask}_emom0.fits"
+            )
 
-
+        # ---------------- Group classification (UNCHANGED) ----------------
         try:
             type_val = llamatab[llamatab['id'] == name]['type'][0]
-        except:
+        except Exception:
             type_val = 'aux'
-        output_dir = os.path.join(base_output_dir, "inactive" if type_val=="i" else "aux" if type_val=="aux" else "AGN")
-        group = "inactive" if type_val=="i" else "aux" if type_val=="aux" else "AGN"
+
+        group = (
+            "inactive" if type_val == "i"
+            else "aux" if type_val == "aux"
+            else "AGN"
+        )
+
+        output_dir = os.path.join(base_output_dir, group)
         os.makedirs(output_dir, exist_ok=True)
-        if os.path.exists(mom0_file):
-            if not os.path.exists(emom0_file):
-                emom0_file = np.nan
-            args_list.append((mom0_file, emom0_file, outer_dir, subdir, output_dir, co32,rebin,mask,R_kpc,flux_mask))
-            meta_info.append((name, group, output_dir))
-            ############### Copy moment0 files to central location ###############
-            mom0_filename = os.path.basename(mom0_file)
-            if emom0_file is np.nan:
-                emom0_filename = "nan"
-            else:
-                emom0_filename = os.path.basename(emom0_file)
-            # os.system(f'mkdir -p /data/c3040163/llama/alma/pipeline_m0/{name}/')
-            # os.system(f'cp {mom0_file} /data/c3040163/llama/alma/pipeline_m0/{name}/{mom0_filename}')
-            # os.system(f'cp {emom0_file} /data/c3040163/llama/alma/pipeline_m0/{name}/{emom0_filename}')
-            #######################################################################
-        else:
+
+        if not os.path.exists(mom0_file):
             print(f"Skipping {name}: required files not found")
+            continue
 
-    parallel_args, parallel_meta = [],[]
+        if not os.path.exists(emom0_file):
+            emom0_file = np.nan
 
-    for args, meta in zip(args_list, meta_info):
-        parallel_args.append(args)
-        parallel_meta.append(meta)
+        args_list.append(
+            (
+                mom0_file,
+                emom0_file,
+                outer_dir,
+                subdir,
+                output_dir,
+                co32,
+                rebin,
+                mask,
+                R_kpc,
+                flux_mask
+            )
+        )
+        meta_info.append((name, group, output_dir, manual_rebin))
 
+    # ---------------- Serial execution (UNCHANGED) ----------------
     results_raw = []
-
-    # ctx = multiprocessing.get_context("spawn")
-    # with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count(),
-    #                         initializer=init_worker,
-    #                         initargs=(llamatab,), mp_context=ctx) as executor:
-    #     results_raw = list(executor.map(safe_process, parallel_args))
-
     images_too_small = []
 
-    for args in parallel_args:
-        res = process_file(args, images_too_small, isolate=isolate, manual_rebin=manual_rebin)
-        results_raw.append(res)
-
-# ------------------ CSV merge with isolate-aware updates ------------------
-
-    # Build results + metadata lists
-    results, meta_clean = [], []
-    for res, meta in zip(results_raw, parallel_meta):
+    for args, meta in zip(args_list, meta_info):
+        name, group, _, manual_rebin = meta
+        res = process_file(
+            args,
+            images_too_small,
+            isolate=isolate,
+            manual_rebin=manual_rebin
+        )
         if res is not None:
-            results.append(res)
-            meta_clean.append(meta)
+            # res is a LIST of rows
+            for row in res:
+                row["id"] = name
+                row["group"] = group
+            results_raw.extend(res)
 
-    if len(results) == 0:
+    if len(results_raw) == 0:
         print("No results to save.")
+        return
+
+    df = pd.DataFrame(results_raw)
+
+    # ---------------- Isolate handling (UNCHANGED LOGIC) ----------------
+    isolate_colmap = {
+        "gini":  ["Gini", "Gini_err"],
+        "asym":  ["Asymmetry", "Asymmetry_err"],
+        "smooth":["Smoothness", "Smoothness_err"],
+        "conc":  ["Concentration", "Concentration_err"],
+        "tmass": ["total_mass (M_sun)", "total_mass_err (M_sun)"],
+        "LCO":   ["L'CO (K km s pc2)", "L'CO_err (K km s pc2)"],
+        "mw":    ["mass_weighted_sd", "mass_weighted_sd_err"],
+        "aw":    ["area_weighted_sd", "area_weighted_sd_err"],
+        "clump": ["clumping_factor", "clumping_factor_err"],
+        "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
+        "plot":  []
+    }
+
+    if isolate is None:
+        isolates_list = None
+    elif isinstance(isolate, (list, tuple, set)):
+        isolates_list = [str(i) for i in isolate]
     else:
-        df = pd.DataFrame(results)
-        df["id"] = [mi[0] for mi in meta_clean]
-        df["group"] = [mi[1] for mi in meta_clean]
+        isolates_list = [str(isolate)]
 
-        # Map isolate tokens -> output column names in results rows
-        isolate_colmap = {
-            "gini":  ["Gini", "Gini_err"],
-            "asym":  ["Asymmetry", "Asymmetry_err"],
-            "smooth":["Smoothness", "Smoothness_err"],
-            "conc":  ["Concentration", "Concentration_err"],
-            "tmass": ["total_mass (M_sun)", "total_mass_err (M_sun)"],
-            "LCO":   ["L'CO (K km_s pc2)", "L'CO_err (K km_s pc2)"],
-            "mw":    ["mass_weighted_sd", "mass_weighted_sd_err"],
-            "aw":    ["area_weighted_sd", "area_weighted_sd_err"],
-            "clump": ["clumping_factor", "clumping_factor_err"],
-            "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
-            "plot":  []  # plot-only: update nothing in CSV
-        }
+    if isolates_list is None:
+        cols_updated = None
+    else:
+        cols_updated = []
+        for iso in isolates_list:
+            cols_updated += isolate_colmap.get(iso, [])
+        cols_updated = list(dict.fromkeys(cols_updated))
 
-        # Accept isolate as string, list or None
-        isolates = isolate
-        if isolates is None:
-            isolates_list = None
-        elif isinstance(isolates, (list, tuple, set)):
-            isolates_list = [str(i) for i in isolates]
+    # ---------------- CSV writing (row identity = id + Resolution) ----------------
+    for group in ["AGN", "inactive", "aux"]:
+        group_df = df[df["group"] == group].copy()
+        if group_df.empty:
+            continue
+
+        outdir = os.path.join(base_output_dir, group)
+        os.makedirs(outdir, exist_ok=True)
+
+        if rebin is not None:
+            outfile = (
+                f"gas_analysis_summary_{rebin}pc_"
+                f"{'flux90_' if flux_mask else ''}"
+                f"{mask}_{R_kpc}kpc.csv"
+            )
         else:
-            isolates_list = [str(isolates)]
+            outfile = (
+                f"gas_analysis_summary_"
+                f"{'flux90_' if flux_mask else ''}"
+                f"{mask}_{R_kpc}kpc.csv"
+            )
 
-        # Build the set of columns that we should consider 'updated' by this run
-        if isolates_list is None:
-            cols_updated = None   # means full replace
-        else:
-            cols_updated = []
-            for isok in isolates_list:
-                cols_updated += isolate_colmap.get(isok, [])
-            cols_updated = list(dict.fromkeys(cols_updated))  # uniq, preserve order
+        outfile = os.path.join(outdir, outfile)
 
-        # Helper for building outfile path
-        def _outfile_path(outdir, rebin, mask, R_kpc):
-            if rebin is not None:
-                if flux_mask:
-                    return os.path.join(outdir, f"gas_analysis_summary_{rebin}pc_flux90_{mask}_{R_kpc}kpc.csv")
-                else:
-                    return os.path.join(outdir, f"gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv")
-            else:
-                if flux_mask:
-                    return os.path.join(outdir, f"gas_analysis_summary_flux90_{mask}_{R_kpc}kpc.csv")
-                else:
-                    return os.path.join(outdir, f"gas_analysis_summary_{mask}_{R_kpc}kpc.csv")
-
-        for group in ["AGN", "inactive", "aux"]:
-            group_df = df[df["group"] == group].copy()
-            if group_df.empty:
+        if not os.path.exists(outfile):
+            if isolates_list is not None and "plot" in isolates_list:
                 continue
+            group_df.to_csv(outfile, index=False)
+            continue
 
-            outdir = os.path.join(base_output_dir, group)
-            os.makedirs(outdir, exist_ok=True)
-            outfile = _outfile_path(outdir, rebin, mask, R_kpc)
+        existing_df = pd.read_csv(outfile)
 
-            if not os.path.exists(outfile):
-                # no existing file -> just write new (full rows)
-                # But if we are in plot-only mode, don't create an empty/NaN row
-                if isolates_list is not None and "plot" in isolates_list:
-                    print(f"Skipping CSV update for plot-only run for group {group} (no outfile existed).")
-                    continue
-                group_df.to_csv(outfile, index=False)
-                print(f"Results for {group} saved to {outfile} (new file).")
-                continue
+        key_cols = ["id", "Resolution (pc)"]
+        new_keys = set(tuple(x) for x in group_df[key_cols].values)
 
-            # Existing file -> load and update intelligently
-            existing_df = pd.read_csv(outfile)
+        if cols_updated is None:
+            mask_keep = ~existing_df[key_cols].apply(tuple, axis=1).isin(new_keys)
+            merged = pd.concat([existing_df[mask_keep], group_df], ignore_index=True)
+            merged.to_csv(outfile, index=False)
+            continue
 
-            ids_new = set(group_df["id"].astype(str).values)
+        if "plot" in (isolates_list or []):
+            continue
 
-            # If full recompute (cols_updated is None) -> replace existing rows for these ids
-            if cols_updated is None:
-                # Remove old rows with same ids and append new rows
-                existing_df = existing_df[~existing_df["id"].astype(str).isin(ids_new)]
-                merged = pd.concat([existing_df, group_df], ignore_index=True)
-                merged.to_csv(outfile, index=False)
-                print(f"Results for {group} saved to {outfile} (replaced {len(ids_new)} rows).")
-                continue
+        for _, new_row in group_df.iterrows():
+            key = tuple(new_row[k] for k in key_cols)
+            mask_existing = existing_df[key_cols].apply(tuple, axis=1) == key
 
-            # If isolate includes 'plot', do NOT touch the CSV for those ids
-            if "plot" in (isolates_list or []):
-                # remove any new rows for ids that already exist (we don't want to change CSV)
-                ids_existing = set(existing_df["id"].astype(str).values)
-                # keep only new rows whose id is not already present (if you want to append new ids even for plot, change this)
-                append_ids = [i for i in ids_new if i not in ids_existing]
-                if len(append_ids) == 0:
-                    print(f"Plot-only run: no CSV updates for group {group} (all ids already present).")
-                    continue
-                # append only the truly new ids (these will be mostly empty metrics — probably undesired)
-                rows_to_append = group_df[group_df["id"].astype(str).isin(append_ids)]
-                if not rows_to_append.empty:
-                    existing_df = pd.concat([existing_df, rows_to_append], ignore_index=True)
-                    existing_df.to_csv(outfile, index=False)
-                    print(f"Plot-only run: appended {len(rows_to_append)} new rows to {outfile}.")
-                else:
-                    print(f"Plot-only run: nothing to append for {outfile}.")
-                continue
+            if mask_existing.any():
+                old_row = existing_df[mask_existing].iloc[0]
+                for col in existing_df.columns:
+                    if col in key_cols or col == "group":
+                        continue
+                    if col not in cols_updated:
+                        group_df.loc[
+                            (group_df[key_cols] == pd.Series(key, index=key_cols)).all(axis=1),
+                            col
+                        ] = old_row[col]
 
-            # General isolated metric update:
-            # For each id in the new results:
-            for id_val in ids_new:
-                mask_new = group_df["id"].astype(str) == str(id_val)
-                new_row = group_df[mask_new].iloc[0]
+        existing_df = existing_df[
+            ~existing_df[key_cols].apply(tuple, axis=1).isin(new_keys)
+        ]
+        merged = pd.concat([existing_df, group_df], ignore_index=True)
+        merged.to_csv(outfile, index=False)
 
-                # If id exists in existing file -> preserve non-updated cols
-                exists_mask = existing_df["id"].astype(str) == str(id_val)
-                if exists_mask.any():
-                    old_row = existing_df[exists_mask].iloc[0]
-
-                    # Ensure all columns from existing_df are present in new_row (if not, we will create them)
-                    for col in existing_df.columns:
-                        if col not in group_df.columns:
-                            # create column in group_df filled with NaN so assignment works
-                            group_df.loc[:, col] = group_df.get(col, np.nan)
-
-                    # For each column in existing_df:
-                    for col in existing_df.columns:
-                        if col in ["id", "group"]:
-                            continue
-
-                        # If this column is one we intend to update (cols_updated),
-                        # then keep new value *if it is finite*; otherwise keep old.
-                        if col in cols_updated:
-                            new_val = new_row.get(col, np.nan)
-                            if pd.isna(new_val):
-                                # preserve old value if new is NaN
-                                group_df.loc[mask_new, col] = old_row[col]
-                            else:
-                                # keep new_val (already in group_df)
-                                pass
-                        else:
-                            # column is NOT being updated now: copy old value into the new row
-                            group_df.loc[mask_new, col] = old_row[col]
-                else:
-                    # id not in existing_df -> we will append the new row.
-                    # But ensure it has all columns existing_df expects: fill missing columns with NaN
-                    for col in existing_df.columns:
-                        if col not in group_df.columns:
-                            group_df.loc[:, col] = group_df.get(col, np.nan)
-
-            # Now remove old rows that match ids_new, then append the updated group_df rows
-            existing_df = existing_df[~existing_df["id"].astype(str).isin(ids_new)]
-            merged_df = pd.concat([existing_df, group_df], ignore_index=True)
-
-            # Reorder columns to keep original CSV column order if possible
-            try:
-                merged_df = merged_df[existing_df.columns]
-            except Exception:
-                pass
-
-            merged_df.to_csv(outfile, index=False)
-            print(f"Results for {group} saved to {outfile} (updated {len(ids_new)} rows).")
-            print('images too small:', images_too_small)
-
+    print("images too small:", images_too_small)
 
 
 ############# MATCHED PAIR DATA #############
