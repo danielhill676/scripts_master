@@ -176,10 +176,16 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if use_cont:
                 if os.path.exists(path_cont_AGN):
                     cont_data_AGN = pd.read_csv(path_cont_AGN)
-                    fit_data_AGN = pd.merge(fit_data_AGN, cont_data_AGN, left_on='Galaxy', right_on='Galaxy',how='left')
+                    overlap = set(fit_data_AGN.columns) & set(cont_data_AGN.columns)
+                    overlap -= {"Galaxy"}  # keep join key
+                    cont_data_AGN_clean = cont_data_AGN.drop(columns=list(overlap))
+                    fit_data_AGN = pd.merge(fit_data_AGN, cont_data_AGN_clean, left_on='Galaxy', right_on='Galaxy',how='left')
                 if os.path.exists(path_cont_inactive):
                     cont_data_inactive = pd.read_csv(path_cont_inactive)
-                    fit_data_inactive = pd.merge(fit_data_inactive, cont_data_inactive, left_on='Galaxy', right_on='Galaxy',how='left')
+                    overlap = set(fit_data_inactive.columns) & set(cont_data_inactive.columns)
+                    overlap -= {"Galaxy"}  # keep join key
+                    cont_data_inactive_clean = cont_data_inactive.drop(columns=list(overlap))
+                    fit_data_inactive = pd.merge(fit_data_inactive, cont_data_inactive_clean, left_on='Galaxy', right_on='Galaxy',how='left')
 
             df_combined['Name_clean'] = normalize_name(df_combined['Name'])
             llamatab['name_clean'] = normalize_name(llamatab['name'])
@@ -398,16 +404,20 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             if os.path.exists(cont_AGN_path):
                 cont_data_AGN = pd.read_csv(cont_AGN_path)
-                fit_data_AGN = pd.merge(fit_data_AGN, cont_data_AGN, left_on='Galaxy', right_on='Galaxy',how='left')
+                overlap = set(fit_data_AGN.columns) & set(cont_data_AGN.columns)
+                overlap -= {"Galaxy"}  # keep join key
+                cont_data_AGN_clean = cont_data_AGN.drop(columns=list(overlap))
+                fit_data_AGN = pd.merge(fit_data_AGN, cont_data_AGN_clean, left_on='Galaxy', right_on='Galaxy',how='left')
             else:
                 print(f"WARNING: {cont_AGN_path} not found")
             if os.path.exists(cont_inactive_path):
                 cont_data_inactive = pd.read_csv(cont_inactive_path)
-                fit_data_inactive = pd.merge(fit_data_inactive, cont_data_inactive, left_on='Galaxy', right_on='Galaxy',how='left')
+                overlap = set(fit_data_inactive.columns) & set(cont_data_inactive.columns)
+                overlap -= {"Galaxy"}  # keep join key
+                cont_data_inactive_clean = cont_data_inactive.drop(columns=list(overlap))
+                fit_data_inactive = pd.merge(fit_data_inactive, cont_data_inactive_clean, left_on='Galaxy', right_on='Galaxy',how='left')
             else:
                 print(f"WARNING: {cont_inactive_path} not found")
-
-            display(fit_data_inactive)
 
         df_combined['Name_clean'] = normalize_name(df_combined['Name'])
         llamatab['name_clean'] = normalize_name(llamatab['name'])
@@ -484,10 +494,16 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
             merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
 
-        x_agn = merged_AGN_clean[x_column]
-        y_agn = merged_AGN_clean[y_column]
-        x_inactive = merged_inactive_clean[x_column]
-        y_inactive = merged_inactive_clean[y_column]
+        merged_AGN_clean_res = merged_AGN_clean.sort_values("Resolution (pc)", ascending=True)
+        merged_AGN_clean_maxres = merged_AGN_clean_res.drop_duplicates(subset="Name_clean", keep="last")
+
+        merged_inactive_clean_res = merged_inactive_clean.sort_values("Resolution (pc)", ascending=True)
+        merged_inactive_clean_maxres = merged_inactive_clean_res.drop_duplicates(subset="Name_clean", keep="last")
+
+        x_agn = merged_AGN_clean_maxres[x_column]
+        y_agn = merged_AGN_clean_maxres[y_column]
+        x_inactive = merged_inactive_clean_maxres[x_column]
+        y_inactive = merged_inactive_clean_maxres[y_column]
 
         # --- Exclude names here ---
         if exclude_names is not None:
@@ -497,23 +513,23 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             exclude_norm = [n.strip().upper() for n in exclude_names]
 
-            mask_excluded_agn = merged_AGN_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
+            mask_excluded_agn = merged_AGN_clean_maxres["Name_clean"].str.strip().str.upper().isin(exclude_norm)
             excluded_x.extend(x_agn[mask_excluded_agn])
             excluded_y.extend(y_agn[mask_excluded_agn])
 
             # Inactive
-            mask_excluded_inactive = merged_inactive_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
+            mask_excluded_inactive = merged_inactive_clean_maxres["Name_clean"].str.strip().str.upper().isin(exclude_norm)
             excluded_x.extend(x_inactive[mask_excluded_inactive])
             excluded_y.extend(y_inactive[mask_excluded_inactive])
 
             # These are already DataFrames → filter with boolean masks
-            merged_AGN_clean = merged_AGN_clean[
-                ~merged_AGN_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
+            merged_AGN_clean = merged_AGN_clean_maxres[
+                ~merged_AGN_clean_maxres["Name_clean"].str.strip().str.upper().isin(exclude_norm)
             ]
 
 
-            merged_inactive_clean = merged_inactive_clean[
-                ~merged_inactive_clean["Name_clean"].str.strip().str.upper().isin(exclude_norm)
+            merged_inactive_clean = merged_inactive_clean_maxres[
+                ~merged_inactive_clean_maxres["Name_clean"].str.strip().str.upper().isin(exclude_norm)
             ]
             agn_bol = agn_bol[
                 ~agn_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
@@ -525,16 +541,16 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
  #see archived_comp_samp_build 
 
         
-        merged_AGN_clean = (
-                    merged_AGN_clean
+        merged_AGN_clean_maxres = (
+                    merged_AGN_clean_maxres
                     .replace([np.inf, -np.inf], np.nan)
                     .infer_objects(copy=False)
                     .dropna(subset=[x_column, y_column])
                 )
 
 
-        merged_inactive_clean = (
-                merged_inactive_clean
+        merged_inactive_clean_maxres = (
+                merged_inactive_clean_maxres
                 .replace([np.inf, -np.inf], np.nan)
                 .infer_objects(copy=False)
                 .dropna(subset=[x_column, y_column])
@@ -595,18 +611,18 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
         if x_column != 'log L′ CO':
 
-            x_agn = merged_AGN_clean[x_column]
-            y_agn = merged_AGN_clean[y_column]
-            names_agn = merged_AGN_clean["Name_clean"].str.replace(" ", "", regex=False).values
-            xerr_agn = get_errorbars(merged_AGN_clean, x_column)
-            yerr_agn = get_errorbars(merged_AGN_clean, y_column)
+            x_agn = merged_AGN_clean_maxres[x_column]
+            y_agn = merged_AGN_clean_maxres[y_column]
+            names_agn = merged_AGN_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
+            xerr_agn = get_errorbars(merged_AGN_clean_maxres, x_column)
+            yerr_agn = get_errorbars(merged_AGN_clean_maxres, y_column)
 
-            x_inactive = merged_inactive_clean[x_column]
-            y_inactive = merged_inactive_clean[y_column]
+            x_inactive = merged_inactive_clean_maxres[x_column]
+            y_inactive = merged_inactive_clean_maxres[y_column]
 
-            names_inactive = merged_inactive_clean["Name_clean"].str.replace(" ", "", regex=False).values
-            xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
-            yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
+            names_inactive = merged_inactive_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
+            xerr_inactive = get_errorbars(merged_inactive_clean_maxres, x_column)
+            yerr_inactive = get_errorbars(merged_inactive_clean_maxres, y_column)
 
 ############################## Special handling for L' CO comparison with ROS+18 ##############################
 
@@ -614,13 +630,13 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ### insert code here ####
             df_ros_obs = pd.DataFrame(Rosario2018_obs)
             df_ros_obs['Name_clean'] = normalize_name(df_ros_obs['Name'])#.str.replace(" ", "", regex=False)
-            merged_AGN_clean = merged_AGN_clean.merge(
+            merged_AGN_clean_maxres = merged_AGN_clean_maxres.merge(
                 df_ros_obs[['Name_clean', 'Telescope']],
                 left_on='Name_clean',
                 right_on='Name_clean',
                 how='left'
             )
-            merged_inactive_clean = merged_inactive_clean.merge(
+            merged_inactive_clean_maxres = merged_inactive_clean_maxres.merge(
                 df_ros_obs[['Name_clean', 'Telescope']],
                 left_on='Name_clean',
                 right_on='Name_clean',
@@ -640,41 +656,41 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 if tel in key:
                     return row[key[tel]]
                 return np.nan
-            
-            x_agn = merged_AGN_clean[x_column]
-            y_agn = merged_AGN_clean.apply(
+
+            x_agn = merged_AGN_clean_maxres[x_column]
+            y_agn = merged_AGN_clean_maxres.apply(
                 lambda row: select_LCO(row, telescope_to_col),
                 axis=1
             )
-            names_agn = merged_AGN_clean["Name_clean"].str.replace(" ", "", regex=False).values
-            merged_AGN_clean['LCO_err_selected'] = merged_AGN_clean.apply(
+            names_agn = merged_AGN_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
+            merged_AGN_clean_maxres['LCO_err_selected'] = merged_AGN_clean_maxres.apply(
                 lambda row: select_LCO(row, telescope_to_errcol),
                 axis=1
             )
-            xerr_agn = get_errorbars(merged_AGN_clean, x_column)
-            yerr_agn = get_errorbars(merged_AGN_clean, "LCO_err_selected")
+            xerr_agn = get_errorbars(merged_AGN_clean_maxres, x_column)
+            yerr_agn = get_errorbars(merged_AGN_clean_maxres, "LCO_err_selected")
 
-            x_inactive = merged_inactive_clean[x_column]
-            y_inactive = merged_inactive_clean.apply(
+            x_inactive = merged_inactive_clean_maxres[x_column]
+            y_inactive = merged_inactive_clean_maxres.apply(
                 lambda row: select_LCO(row, telescope_to_col),
                 axis=1
             )
-            names_inactive = merged_inactive_clean["Name_clean"].str.replace(" ", "", regex=False).values
-            merged_inactive_clean['LCO_err_selected'] = merged_inactive_clean.apply(
+            names_inactive = merged_inactive_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
+            merged_inactive_clean_maxres['LCO_err_selected'] = merged_inactive_clean_maxres.apply(
                 lambda row: select_LCO(row, telescope_to_errcol),
                 axis=1
             )
 
-            merged_AGN_clean['LCO_err_selected'] = pd.to_numeric(
-            merged_AGN_clean['LCO_err_selected'], errors='coerce'
+            merged_AGN_clean_maxres['LCO_err_selected'] = pd.to_numeric(
+            merged_AGN_clean_maxres['LCO_err_selected'], errors='coerce'
         )
 
-            merged_inactive_clean['LCO_err_selected'] = pd.to_numeric(
-            merged_inactive_clean['LCO_err_selected'], errors='coerce'
+            merged_inactive_clean_maxres['LCO_err_selected'] = pd.to_numeric(
+            merged_inactive_clean_maxres['LCO_err_selected'], errors='coerce'
         )
 
-            xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
-            yerr_inactive = get_errorbars(merged_inactive_clean, "LCO_err_selected")
+            xerr_inactive = get_errorbars(merged_inactive_clean_maxres, x_column)
+            yerr_inactive = get_errorbars(merged_inactive_clean_maxres, "LCO_err_selected")
 
         ############################## Prep data for plotting ##############################
 
@@ -1372,20 +1388,62 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             diffs = []
             valid_pairs = 0
 
+            df_pairs['Active Galaxy'] = normalize_name(df_pairs['Active Galaxy'])
+            df_pairs['Inactive Galaxy'] = normalize_name(df_pairs['Inactive Galaxy'])
+
             for _, row in df_pairs.iterrows():
                 agn_name = row["Active Galaxy"].strip()
                 inactive_name = row["Inactive Galaxy"].strip()
 
-                agn_val = merged_AGN.loc[merged_AGN["Name_clean"] == agn_name, y_column]
-                inactive_val = merged_inactive.loc[merged_inactive["Name_clean"] == inactive_name, y_column]
+                # Extract rows for each galaxy
 
-                if not agn_val.empty and not inactive_val.empty:
-                    diff = float(agn_val.values[0]) - float(inactive_val.values[0])
-                    if diff == diff:  # Check for NaN
-                        diffs.append(diff)
-                        valid_pairs += 1
+                agn_rows = merged_AGN[merged_AGN["Name_clean"] == agn_name]
+                inactive_rows = merged_inactive[merged_inactive["Name_clean"] == inactive_name]
 
-            diffs = np.array(diffs)
+                if agn_rows.empty or inactive_rows.empty:
+                    continue
+
+                # Loop over AGN resolutions and look for matching inactive resolution
+                for _, agn_row in agn_rows.iterrows():
+                    res_agn = agn_row["Resolution (pc)"]
+                    val_agn = agn_row[y_column]
+
+                    if not np.isfinite(val_agn):
+                        continue
+
+                    # Find inactive rows at the SAME resolution
+                    match_inactive = inactive_rows[
+                        inactive_rows["Resolution (pc)"] == res_agn
+                    ]
+
+                    if match_inactive.empty:
+                        continue
+
+                    # If multiple (shouldn't happen, but be safe), take first
+                    inactive_row = match_inactive.iloc[0]
+                    val_inactive = inactive_row[y_column]
+
+                    if not np.isfinite(val_inactive):
+                        continue
+
+                    # # OPTIONAL: enforce your native↔pair logic
+                    # append = False
+                    # if src_agn == "native" and src_inactive == agn_name:
+                    #     append = True
+                    # elif src_inactive == "native" and src_agn == inactive_name:
+                    #     append = True
+
+                    # if not append:
+                    #     continue
+
+                    diff = float(val_agn) - float(val_inactive)
+                    diffs.append(diff)
+                    valid_pairs += 1
+
+                    # Stop after first valid match for this pair
+                    break
+
+            diffs = np.asarray(diffs)
             diffs = diffs[np.isfinite(diffs)]
 
             fig, ax = plt.subplots(figsize=(8, 5))
@@ -1728,6 +1786,8 @@ inactive_by_num = {
     16: "NGC 5037",
     17: "NGC 4224",
     18: "NGC 3749",
+    19: "NGC 1375",
+    20: "NGC 1315",
 }
 
 # Active galaxies with the exact numbers shown in their corners (from the image; left panel)
@@ -1741,15 +1801,16 @@ active_to_nums = {
     "NGC 5506": [2, 15, 16, 17, 18],
     "NGC 2110": [4, 6],
     "NGC 3081": [5, 9, 10],
-    "MCG-05-28-016": [5, 14],
+    "MCG-05-23-016": [5, 19],
     "ESO 137-G034": [13],
     "NGC 2992": [2, 15, 16, 17, 18],
     "NGC 4235": [2, 16, 17, 18],
     "NGC 4593": [1, 8],
-    "NGC 7172": [15, 16, 17],   # ← three pairs; includes NGC 4224 (17)
+    "NGC 7172": [15, 16, 17],
     "NGC 3783": [10],
     "ESO 021-G004": [17],
     "NGC 5728": [13, 17],
+    "MCG-05-14-012": [20],
 }
 
 # Build all pairs (one row per link)
@@ -1763,6 +1824,7 @@ for active, nums in active_to_nums.items():
         })
 
 df_pairs = pd.DataFrame(rows).sort_values(["pair_id", "Active Galaxy"]).reset_index(drop=True)
+print(len(df_pairs), "matched pairs constructed.")
 
 
 

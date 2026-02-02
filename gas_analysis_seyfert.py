@@ -27,11 +27,13 @@ from matplotlib.patches import Ellipse
 from astroquery.simbad import Simbad
 simbad = Simbad()
 from astroquery.vizier import Vizier
+from scipy.ndimage import gaussian_filter
 
 np.seterr(all='ignore')
 co32 = False
 LLAMATAB = None
-
+outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
+outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
 # ------------------ Monte Carlo Helpers ------------------
 
 def generate_random_images(image, error_map, n_iter=1000, seed=None):
@@ -452,6 +454,14 @@ def resolve_galaxy_beam_scale(
         RA = Ned_table['RA'][0]
         DEC = Ned_table['DEC'][0]
 
+        # Special replacements:
+        if base_name == 'NGC2992':
+            RA = 146.42476
+            DEC = -14.326274
+        if base_name == 'NGC1365':
+            RA = 53.401542
+            DEC = -36.14039
+
         try:
             D_Mpc = llamatab[llamatab['id'] == base_name]['D [Mpc]'][0]
             I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
@@ -582,9 +592,10 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     # Skip incompatible galaxies
-    if not co32 and name in ['NGC4388','NGC6814','NGC5728']:
+    co32_list = ['NGC4388','NGC6814','NGC5728']
+    if not co32 and name in co32_list:
         return None
-    if co32 and name not in ['NGC4388','NGC6814','NGC5728']:
+    if co32 and name not in co32_list:
         return None
 
     print(f"Processing {name}...")
@@ -633,6 +644,11 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         for pair_name in pair_names:
 
             pair_name_norm = normalize_name(pair_name)
+            
+            if co32 and pair_name_norm not in co32_list:
+                outer_dir = outer_dir_co21
+            if not co32 and pair_name_norm in co32_list:
+                outer_dir = outer_dir_co32
             pair_subdir = os.path.join(outer_dir, pair_name_norm)
 
             pair_fits = os.path.join(
@@ -640,6 +656,10 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 pair_name_norm,
                 os.path.basename(mom0_file).replace(name, pair_name_norm)
             )
+            if co32 and pair_name_norm not in co32_list:
+                pair_fits = pair_fits.replace("_co32_", "_co21_")
+            if not co32 and pair_name_norm in co32_list:
+                pair_fits = pair_fits.replace("_co21_", "_co32_")
 
             if not os.path.exists(pair_fits):
                 beam_scales_pc.append(np.nan)
@@ -656,14 +676,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
                 beam_scales_pc.append(pair_meta["beam_scale_pc"])
                 beam_scale_labels.append(pair_name_norm)
-
-                # print(
-                #     f"Pair {pair_name_norm}: "
-                #     f"BMAJ={pair_meta['BMAJ']:.4e}, "
-                #     f"BMIN={pair_meta['BMIN']:.4e}, "
-                #     f"D={pair_meta['D_Mpc']:.2f} Mpc → "
-                #     f"beam={pair_meta['beam_scale_pc']:.2f} pc"
-                # )
 
             except Exception as e:
                 beam_scales_pc.append(np.nan)
@@ -688,12 +700,17 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     res_list.append(("native", native_res))
 
     if rebin is None:
-        for pair_id, bs_pc in zip(pair_names, beam_scales_pc):
-            if not np.isnan(bs_pc) and bs_pc > native_res:
-                res_list.append((pair_id, float(bs_pc)))
+        for src, bs_pc in zip(beam_scale_labels, beam_scales_pc):
+            if np.isnan(bs_pc):
+                continue
+            if bs_pc > native_res:
+                res_list.append((src, float(bs_pc)))
 
     # preserve order, unique
     res_list = list(dict.fromkeys(res_list))
+
+    for src, res in res_list:
+        assert src == "native" or src in beam_scale_labels
 
     # ---------- smoothing ----------
     for src, res in res_list:
@@ -702,12 +719,15 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         error_map_copy = error_map_untrimmed.copy()
         beam_scale_pc_copy = native_res
 
+        BMAJ_new = BMAJ
+        BMIN_new = BMIN
+
         smooth_factor = res / beam_scale_pc_copy
+
         if res is not None and smooth_factor > 1:
             pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
             sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
             sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
-            from scipy.ndimage import gaussian_filter
 
             image_copy = gaussian_filter(image_copy, sigma=sigma_kernel_pix)
             error_map_copy = gaussian_filter(error_map_copy, sigma=sigma_kernel_pix)
@@ -715,9 +735,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             beam_scale_pc_copy = res
             BMAJ_new = beam_scale_pc_copy / (pc_per_arcsec * 3600)
             BMIN_new = BMAJ_new
-        else:
-            BMAJ_new = BMAJ
-            BMIN_new = BMIN
 
         images.append(image_copy)
         errormaps.append(error_map_copy)
@@ -726,6 +743,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         res_values.append(float(res))
         res_sources.append(src)
 
+
     ######################## carry out manual rebin if missing ########################
     if manual_rebin:
         smooth_factor = rebin / native_res
@@ -733,7 +751,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
             sigma_kernel_pc = np.sqrt(rebin**2 - native_res**2)
             sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
-            from scipy.ndimage import gaussian_filter
 
             image_rb = gaussian_filter(image_untrimmed, sigma=sigma_kernel_pix)
             error_rb = gaussian_filter(error_map_untrimmed, sigma=sigma_kernel_pix)
@@ -769,7 +786,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         beam_scale_pc = res_pc
 
         pixel_area_pc2 = (pixel_scale_arcsec * pc_per_arcsec)**2
-        R_21, R_31, alpha_CO = 0.7, 0.31, 4.35
+        R_21, R_31, alpha_CO = 0.65, 0.32, 4.35
         R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
 
         gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
@@ -1370,7 +1387,6 @@ if __name__ == '__main__':
     isolate = None
 
     # CO(2-1)
-    outer_dir_co21 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived'
     print("Starting CO(2-1) analysis...")
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
@@ -1387,7 +1403,6 @@ if __name__ == '__main__':
 
     # # CO(3-2)
     co32 = True
-    outer_dir_co32 = '/data/c3040163/llama/alma/phangs_imaging_scripts-master/CO32_all_arrays/reduction/derived/'
     print("Starting CO(3-2) analysis...")
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
