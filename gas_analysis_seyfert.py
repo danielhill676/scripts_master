@@ -245,62 +245,251 @@ def concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec, **kwarg
         return np.nan
     return np.log10(flux_50 / flux_200)
 
-def total_mass_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
-    map_LprimeCO = image * pixel_area_pc2
-    map_LprimeCO10 = map_LprimeCO / (R_31 if co32 else R_21)
-    map_MH2 = alpha_CO * map_LprimeCO10
-    return np.nansum(map_MH2[~mask])
+def LCO_single(
+    image,
+    mask,
+    pixel_area_arcsec2,
+    beam_area_arcsec2,
+    beam_area_pc2,
+    R_21,
+    R_31,
+    alpha_CO,
+    name,
+    co32=False,
+    **kwargs
+):
+    """
+    Total L'CO in K km s^-1 pc^2 (beam-correct, resolution-independent).
+    image must be in K km s^-1 (per beam).
+    """
 
-def LCO_single(image, mask, pixel_scale_arcsec, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
-    map_LprimeCO = image * pixel_area_pc2
-    if co32:
-        map_LprimeCO = (map_LprimeCO / R_31) * R_21
-    return np.nansum(map_LprimeCO[~mask])
+    pix_per_beam = beam_area_arcsec2 / pixel_area_arcsec2
 
-def LCO_single_JCMT(image, mask, pixel_scale_arcsec, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
-    map_LprimeCO = image * pixel_area_pc2
+    I_sum = np.nansum(image[~mask])  # K km/s summed over pixels
+    Lprime = I_sum * (beam_area_pc2 / pix_per_beam)
+
     if co32:
-        map_LprimeCO = (map_LprimeCO / R_31) * R_21
+        Lprime = (Lprime / R_31) * R_21
+
+    return Lprime
+
+
+############################
+# Total molecular mass
+############################
+
+def total_mass_single(
+    image,
+    mask,
+    pixel_area_arcsec2,
+    beam_area_arcsec2,
+    beam_area_pc2,
+    R_21,
+    R_31,
+    alpha_CO,
+    name,
+    co32=False,
+    **kwargs
+):
+    """
+    Total H2 mass from beam-correct L'CO.
+    """
+
+    Lprime = LCO_single(
+        image=image,
+        mask=mask,
+        pixel_area_arcsec2=pixel_area_arcsec2,
+        beam_area_arcsec2=beam_area_arcsec2,
+        beam_area_pc2=beam_area_pc2,
+        R_21=R_21,
+        R_31=R_31,
+        alpha_CO=alpha_CO,
+        name=name,
+        co32=co32,
+    )
+
+    Lprime_10 = Lprime / (R_31 if co32 else R_21)
+    return alpha_CO * Lprime_10
+
+
+############################
+# Aperture helpers
+############################
+
+def _aperture_mask(image, pixel_scale_arcsec, radius_arcsec):
     y, x = np.indices(image.shape)
     center = (x.max() / 2, y.max() / 2)
-    r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
-    r_arcsec = r * pixel_scale_arcsec
-    r_JCMT = 20.4 / 2  # JCMT beam radius in arcsec
-    map_LprimeCO_JCMT = map_LprimeCO * (r_arcsec <= r_JCMT)
-    return np.nansum(map_LprimeCO_JCMT[~mask])
+    r_pix = np.sqrt((x - center[0])**2 + (y - center[1])**2)
+    r_arcsec = r_pix * pixel_scale_arcsec
+    return r_arcsec <= radius_arcsec
 
-def LCO_single_APEX(image, mask, pixel_scale_arcsec, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
-    map_LprimeCO = image * pixel_area_pc2
+
+############################
+# Single-dish equivalents
+############################
+
+def LCO_single_JCMT(
+    image,
+    mask,
+    pixel_scale_arcsec,
+    pixel_area_arcsec2,
+    beam_area_arcsec2,
+    beam_area_pc2,
+    R_21,
+    R_31,
+    alpha_CO,
+    name,
+    co32=False,
+    **kwargs
+):
+    jcmt_mask = _aperture_mask(image, pixel_scale_arcsec, 20.4 / 2)
+    combined_mask = mask | ~jcmt_mask
+
+    return LCO_single(
+        image=image,
+        mask=combined_mask,
+        pixel_area_arcsec2=pixel_area_arcsec2,
+        beam_area_arcsec2=beam_area_arcsec2,
+        beam_area_pc2=beam_area_pc2,
+        R_21=R_21,
+        R_31=R_31,
+        alpha_CO=alpha_CO,
+        name=name,
+        co32=co32,
+    )
+
+
+def LCO_single_APEX(
+    image,
+    mask,
+    pixel_scale_arcsec,
+    pixel_area_arcsec2,
+    beam_area_arcsec2,
+    beam_area_pc2,
+    R_21,
+    R_31,
+    alpha_CO,
+    name,
+    co32=False,
+    **kwargs
+):
+    apex_mask = _aperture_mask(image, pixel_scale_arcsec, 27.1 / 2)
+    combined_mask = mask | ~apex_mask
+
+    return LCO_single(
+        image=image,
+        mask=combined_mask,
+        pixel_area_arcsec2=pixel_area_arcsec2,
+        beam_area_arcsec2=beam_area_arcsec2,
+        beam_area_pc2=beam_area_pc2,
+        R_21=R_21,
+        R_31=R_31,
+        alpha_CO=alpha_CO,
+        name=name,
+        co32=co32,
+    )
+
+
+############################
+# Surface density machinery
+############################
+
+def _Sigma_H2_map(
+    image,
+    mask,
+    pixel_area_pc2,
+    pixel_area_arcsec2,
+    beam_area_arcsec2,
+    beam_area_pc2,
+    R_21,
+    R_31,
+    alpha_CO,
+    co32=False,
+):
+    """
+    Returns Σ_H2 in M_sun pc^-2 for each pixel (mask applied).
+    """
+
+    pix_per_beam = beam_area_arcsec2 / pixel_area_arcsec2
+
+    # L'CO per pixel (beam-correct)
+    Lprime_pix = image * (beam_area_pc2 / pix_per_beam)
+
     if co32:
-        map_LprimeCO = (map_LprimeCO / R_31) * R_21
-    y, x = np.indices(image.shape)
-    center = (x.max() / 2, y.max() / 2)
-    r = np.sqrt((x - center[0])**2 + (y - center[1])**2)
-    r_arcsec = r * pixel_scale_arcsec
-    r_APEX = 27.1 / 2  # APEX beam radius in arcsec
-    map_LprimeCO_APEX = map_LprimeCO * (r_arcsec <= r_APEX)
-    return np.nansum(map_LprimeCO_APEX[~mask])
+        Lprime_pix = (Lprime_pix / R_31) * R_21
 
-def mass_weighted_sd_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
-    map_LprimeCO = image * pixel_area_pc2
-    map_LprimeCO10 = map_LprimeCO / (R_31 if co32 else R_21)
-    map_MH2 = alpha_CO * map_LprimeCO10
-    Sigma = map_MH2 / pixel_area_pc2
-    Sigma = Sigma[~mask]
+    MH2_pix = alpha_CO * Lprime_pix
+    Sigma = MH2_pix / pixel_area_pc2
+
+    return Sigma[~mask]
+
+
+def mass_weighted_sd_single(
+    image,
+    mask,
+    pixel_area_pc2,
+    pixel_area_arcsec2,
+    beam_area_arcsec2,
+    beam_area_pc2,
+    R_21,
+    R_31,
+    alpha_CO,
+    name,
+    co32=False,
+    **kwargs
+):
+    Sigma = _Sigma_H2_map(
+        image,
+        mask,
+        pixel_area_pc2,
+        pixel_area_arcsec2,
+        beam_area_arcsec2,
+        beam_area_pc2,
+        R_21,
+        R_31,
+        alpha_CO,
+        co32,
+    )
+
     if Sigma.size == 0:
         return np.nan
+
     numerator = np.sum(Sigma**2 * pixel_area_pc2)
     denominator = np.sum(Sigma * pixel_area_pc2)
+
     return numerator / denominator if denominator > 0 else np.nan
 
-def area_weighted_sd_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
-    map_LprimeCO = image * pixel_area_pc2
-    map_LprimeCO10 = map_LprimeCO / (R_31 if co32 else R_21)
-    map_MH2 = alpha_CO * map_LprimeCO10
-    Sigma = map_MH2 / pixel_area_pc2
-    Sigma = Sigma[~mask]
+
+def area_weighted_sd_single(
+    image,
+    mask,
+    pixel_area_pc2,
+    pixel_area_arcsec2,
+    beam_area_arcsec2,
+    beam_area_pc2,
+    R_21,
+    R_31,
+    alpha_CO,
+    name,
+    co32=False,
+    **kwargs
+):
+    Sigma = _Sigma_H2_map(
+        image,
+        mask,
+        pixel_area_pc2,
+        pixel_area_arcsec2,
+        beam_area_arcsec2,
+        beam_area_pc2,
+        R_21,
+        R_31,
+        alpha_CO,
+        co32,
+    )
+
     if Sigma.size == 0:
         return np.nan
+
     total_area = Sigma.size * pixel_area_pc2
     return np.sum(Sigma * pixel_area_pc2) / total_area if total_area > 0 else np.nan
 
@@ -644,12 +833,13 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         for pair_name in pair_names:
 
             pair_name_norm = normalize_name(pair_name)
+            pair_subdir = os.path.join(outer_dir, pair_name_norm)
             
             if co32 and pair_name_norm not in co32_list:
-                outer_dir = outer_dir_co21
+                pair_subdir = os.path.join(outer_dir_co21, pair_name_norm)
             if not co32 and pair_name_norm in co32_list:
-                outer_dir = outer_dir_co32
-            pair_subdir = os.path.join(outer_dir, pair_name_norm)
+                pair_subdir = os.path.join(outer_dir_co32, pair_name_norm)
+
 
             pair_fits = os.path.join(
                 os.path.dirname(pair_subdir),
@@ -1316,10 +1506,8 @@ def process_directory(
 
     print("images too small:", images_too_small)
 
+### ------------------ Matched Pair Construction ------------------ ####
 
-############# MATCHED PAIR DATA #############
-
-# Inactive galaxies by match number (from the image; right-hand panel)
 inactive_by_num = {
     1: "NGC 3351",
     2: "NGC 3175",
@@ -1339,6 +1527,8 @@ inactive_by_num = {
     16: "NGC 5037",
     17: "NGC 4224",
     18: "NGC 3749",
+    19: "NGC 1375",
+    20: "NGC 1315",
 }
 
 # Active galaxies with the exact numbers shown in their corners (from the image; left panel)
@@ -1352,15 +1542,16 @@ active_to_nums = {
     "NGC 5506": [2, 15, 16, 17, 18],
     "NGC 2110": [4, 6],
     "NGC 3081": [5, 9, 10],
-    "MCG-05-28-016": [5, 14],
+    "MCG-05-23-016": [5, 19],
     "ESO 137-G034": [13],
     "NGC 2992": [2, 15, 16, 17, 18],
     "NGC 4235": [2, 16, 17, 18],
     "NGC 4593": [1, 8],
-    "NGC 7172": [15, 16, 17],   # ← three pairs; includes NGC 4224 (17)
+    "NGC 7172": [15, 16, 17],
     "NGC 3783": [10],
     "ESO 021-G004": [17],
     "NGC 5728": [13, 17],
+    "MCG-05-14-012": [20],
 }
 
 # Build all pairs (one row per link)
@@ -1374,6 +1565,7 @@ for active, nums in active_to_nums.items():
         })
 
 df_pairs = pd.DataFrame(rows).sort_values(["pair_id", "Active Galaxy"]).reset_index(drop=True)
+print(len(df_pairs), "matched pairs constructed.")
 
 llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
 
@@ -1388,31 +1580,31 @@ if __name__ == '__main__':
 
     # CO(2-1)
     print("Starting CO(2-1) analysis...")
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
 
     # # CO(3-2)
     co32 = True
     print("Starting CO(3-2) analysis...")
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
