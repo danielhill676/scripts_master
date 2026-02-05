@@ -41,15 +41,19 @@ def generate_random_images(image, error_map, n_iter=1000, seed=None):
     return rng.normal(loc=image, scale=error_map, size=(n_iter, *image.shape))
 
 
-def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dtype_str, mask, metric_kwargs, isolate=None, seed=None):
+def process_mc_chunk_shm(
+    n_iter_chunk,
+    shm_name_image,
+    shm_name_error,
+    shape,
+    dtype_str,
+    mask,
+    metric_kwargs,
+    isolate=None,
+    seed=None
+):
     """
-    n_iter_chunk: number of MC images this worker should generate
-    shm_name_image: shared memory name for the base image (float64/float32)
-    shm_name_error: shared memory name for the error map
-    shape: (ny, nx)
-    dtype_str: e.g. 'float64' or 'float32'
-    mask: boolean array (this will be pickled but is small compared to images)
-    metric_kwargs: small dict of params (picklable)
+    Monte Carlo metrics for a chunk of images.
     """
     # attach to shared memory blocks
     shm_img = shared_memory.SharedMemory(name=shm_name_image)
@@ -60,7 +64,7 @@ def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dt
 
     rng = np.random.default_rng(seed)
 
-    # lists to collect values per-image
+    # Lists to collect metrics
     gini_vals = []
     asym_vals = []
     smooth_vals = []
@@ -73,108 +77,155 @@ def process_mc_chunk_shm(n_iter_chunk, shm_name_image, shm_name_error, shape, dt
     LCO_JCMT_vals = []
     LCO_APEX_vals = []
 
-    for i in range(n_iter_chunk):
-        # create one MC realisation locally: image + gaussian noise scaled by errmap
+    for _ in range(n_iter_chunk):
         noise = rng.standard_normal(size=shape) * errmap
-        mc_img = image + noise  # this is local to worker, no copying between processes
+        mc_img = image + noise
 
-        # compute metrics (use your existing functions; catch exceptions per metric)
+        # --- Metrics ---
         try:
             gini_vals.append(gini_single(mc_img, mask))
         except Exception:
             gini_vals.append(np.nan)
+
         try:
             asym_vals.append(asymmetry_single(mc_img, mask))
         except Exception:
             asym_vals.append(np.nan)
+
         try:
-            smooth_vals.append(smoothness_single(mc_img, mask,
-                                                 pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
-                                                 pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]))
+            smooth_vals.append(smoothness_single(
+                mc_img, mask,
+                pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
+                pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"]
+            ))
         except Exception:
             smooth_vals.append(np.nan)
+
         try:
-            conc_vals.append(concentration_single(mc_img, mask,
-                                                  pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
-                                                  pc_per_arcsec=metric_kwargs["pc_per_arcsec"]))
+            conc_vals.append(concentration_single(
+                mc_img, mask,
+                pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
+                pc_per_arcsec=metric_kwargs["pc_per_arcsec"]
+            ))
         except Exception:
             conc_vals.append(np.nan)
+
+        # --- L'CO and derived quantities ---
         try:
-            tm_vals.append(total_mass_single(mc_img, mask,
-                                             metric_kwargs["pixel_area_pc2"],
-                                             metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                             metric_kwargs["alpha_CO"],
-                                             metric_kwargs["name"],
-                                             co32=metric_kwargs["co32"]))
-        except Exception:
-            tm_vals.append(np.nan)
-        try:
-            mw_vals.append(mass_weighted_sd_single(mc_img, mask,
-                                                   metric_kwargs["pixel_area_pc2"],
-                                                   metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                   metric_kwargs["alpha_CO"],
-                                                   metric_kwargs["name"],
-                                                   co32=metric_kwargs["co32"]))
-        except Exception:
-            mw_vals.append(np.nan)
-        try:
-            aw_vals.append(area_weighted_sd_single(mc_img, mask,
-                                                   metric_kwargs["pixel_area_pc2"],
-                                                   metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                   metric_kwargs["alpha_CO"],
-                                                   metric_kwargs["name"],
-                                                   co32=metric_kwargs["co32"]))
-        except Exception:
-            aw_vals.append(np.nan)
-        try:
-            clump_vals.append(clumping_factor_single(mc_img, mask,
-                                                     metric_kwargs["pixel_area_pc2"],
-                                                     metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                                     metric_kwargs["alpha_CO"],
-                                                     metric_kwargs["name"],
-                                                     co32=metric_kwargs["co32"]))
-        except Exception:
-            clump_vals.append(np.nan)
-        # LCO if you added it:
-        try:
-            LCO_vals.append(LCO_single(mc_img, mask,
-                                metric_kwargs["pixel_scale_arcsec"],
-                                metric_kwargs["pixel_area_pc2"],
-                                metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                metric_kwargs["alpha_CO"],
-                                metric_kwargs["name"],
-                                co32=metric_kwargs["co32"]))
+            LCO_vals.append(LCO_single(
+                mc_img, mask,
+                pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
+                beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
+                beam_area_pc2=metric_kwargs["beam_area_pc2"],
+                R_21=metric_kwargs["R_21"],
+                R_31=metric_kwargs["R_31"],
+                alpha_CO=metric_kwargs["alpha_CO"],
+                name=metric_kwargs["name"],
+                co32=metric_kwargs["co32"]
+            ))
         except Exception:
             LCO_vals.append(np.nan)
 
         try:
-            LCO_JCMT_vals.append(LCO_single_JCMT(mc_img, mask,
-                                metric_kwargs["pixel_scale_arcsec"],
-                                metric_kwargs["pixel_area_pc2"],
-                                metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                metric_kwargs["alpha_CO"],
-                                metric_kwargs["name"],
-                                co32=metric_kwargs["co32"]))
+            tm_vals.append(total_mass_single(
+                mc_img, mask,
+                pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
+                beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
+                beam_area_pc2=metric_kwargs["beam_area_pc2"],
+                R_21=metric_kwargs["R_21"],
+                R_31=metric_kwargs["R_31"],
+                alpha_CO=metric_kwargs["alpha_CO"],
+                name=metric_kwargs["name"],
+                co32=metric_kwargs["co32"]
+            ))
+        except Exception:
+            tm_vals.append(np.nan)
+
+        try:
+            mw_vals.append(mass_weighted_sd_single(
+                mc_img, mask,
+                pixel_area_pc2=metric_kwargs["pixel_area_pc2"],
+                pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
+                beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
+                beam_area_pc2=metric_kwargs["beam_area_pc2"],
+                R_21=metric_kwargs["R_21"],
+                R_31=metric_kwargs["R_31"],
+                alpha_CO=metric_kwargs["alpha_CO"],
+                name=metric_kwargs["name"],
+                co32=metric_kwargs["co32"]
+            ))
+        except Exception:
+            mw_vals.append(np.nan)
+
+        try:
+            aw_vals.append(area_weighted_sd_single(
+                mc_img, mask,
+                pixel_area_pc2=metric_kwargs["pixel_area_pc2"],
+                pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
+                beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
+                beam_area_pc2=metric_kwargs["beam_area_pc2"],
+                R_21=metric_kwargs["R_21"],
+                R_31=metric_kwargs["R_31"],
+                alpha_CO=metric_kwargs["alpha_CO"],
+                name=metric_kwargs["name"],
+                co32=metric_kwargs["co32"]
+            ))
+        except Exception:
+            aw_vals.append(np.nan)
+
+        try:
+            clump_vals.append(clumping_factor_single(
+                mc_img, mask,
+                pixel_area_pc2=metric_kwargs["pixel_area_pc2"],
+                pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
+                beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
+                beam_area_pc2=metric_kwargs["beam_area_pc2"],
+                R_21=metric_kwargs["R_21"],
+                R_31=metric_kwargs["R_31"],
+                alpha_CO=metric_kwargs["alpha_CO"],
+                name=metric_kwargs["name"],
+                co32=metric_kwargs["co32"]
+            ))
+        except Exception as e:
+            print(f"Error in clump: {e}")
+            clump_vals.append(np.nan)
+
+        # Single-dish L'CO
+        try:
+            LCO_JCMT_vals.append(LCO_single_JCMT(
+                mc_img, mask,
+                pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
+                pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
+                beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
+                beam_area_pc2=metric_kwargs["beam_area_pc2"],
+                R_21=metric_kwargs["R_21"],
+                R_31=metric_kwargs["R_31"],
+                alpha_CO=metric_kwargs["alpha_CO"],
+                name=metric_kwargs["name"],
+                co32=metric_kwargs["co32"]
+            ))
         except Exception:
             LCO_JCMT_vals.append(np.nan)
 
         try:
-            LCO_APEX_vals.append(LCO_single_APEX(mc_img, mask,
-                                metric_kwargs["pixel_scale_arcsec"],
-                                metric_kwargs["pixel_area_pc2"],
-                                metric_kwargs["R_21"], metric_kwargs["R_31"],
-                                metric_kwargs["alpha_CO"],
-                                metric_kwargs["name"],
-                                co32=metric_kwargs["co32"]))
+            LCO_APEX_vals.append(LCO_single_APEX(
+                mc_img, mask,
+                pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"],
+                pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
+                beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
+                beam_area_pc2=metric_kwargs["beam_area_pc2"],
+                R_21=metric_kwargs["R_21"],
+                R_31=metric_kwargs["R_31"],
+                alpha_CO=metric_kwargs["alpha_CO"],
+                name=metric_kwargs["name"],
+                co32=metric_kwargs["co32"]
+            ))
         except Exception:
             LCO_APEX_vals.append(np.nan)
-            
 
-    # close shared memory views (do NOT unlink here)
     shm_img.close()
     shm_err.close()
 
-    # return lists (pickling these lists of scalars is small)
     return {
         "gini": gini_vals,
         "asym": asym_vals,
@@ -493,9 +544,43 @@ def area_weighted_sd_single(
     total_area = Sigma.size * pixel_area_pc2
     return np.sum(Sigma * pixel_area_pc2) / total_area if total_area > 0 else np.nan
 
-def clumping_factor_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=False, **kwargs):
-    mw = mass_weighted_sd_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=co32)
-    aw = area_weighted_sd_single(image, mask, pixel_area_pc2, R_21, R_31, alpha_CO, name, co32=co32)
+def clumping_factor_single(
+    image, mask,
+    pixel_area_pc2,
+    pixel_area_arcsec2,
+    beam_area_arcsec2,
+    beam_area_pc2,
+    R_21,
+    R_31,
+    alpha_CO,
+    name,
+    co32=False,
+    **kwargs
+):
+    mw = mass_weighted_sd_single(
+        image, mask,
+        pixel_area_pc2,
+        pixel_area_arcsec2,
+        beam_area_arcsec2,
+        beam_area_pc2,
+        R_21,
+        R_31,
+        alpha_CO,
+        name,
+        co32=co32
+    )
+    aw = area_weighted_sd_single(
+        image, mask,
+        pixel_area_pc2,
+        pixel_area_arcsec2,
+        beam_area_arcsec2,
+        beam_area_pc2,
+        R_21,
+        R_31,
+        alpha_CO,
+        name,
+        co32=co32
+    )
     return mw / aw if aw and aw > 0 else np.nan
 
 def radial_profile_with_errors(data, errors, mask, center=None, nbins=30):
@@ -679,12 +764,16 @@ def resolve_galaxy_beam_scale(
 
     # ---- beam scale ----
     pixel_scale_arcsec = np.abs(header.get("CDELT1", 0)) * 3600
+    pixel_area_arcsec2 = pixel_scale_arcsec**2
     BMAJ = header.get("BMAJ", np.nan)
     BMIN = header.get("BMIN", np.nan)
-
     beam_arcsec = np.sqrt(np.abs(BMAJ * BMIN)) * 3600
+    beam_area_arcsec2 = (np.pi/(4*np.log(2)))*(BMAJ*3600)*(BMIN*3600)
     pc_per_arcsec = (D_Mpc * 1e6) / 206265
     beam_scale_pc = beam_arcsec * pc_per_arcsec
+    beam_area_pc2 = beam_area_arcsec2 * pc_per_arcsec**2
+    pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
+    pixel_area_pc2 = pixel_scale_pc**2
 
     return {
         "RA": RA,
@@ -697,6 +786,11 @@ def resolve_galaxy_beam_scale(
         "beam_scale_pc": beam_scale_pc,
         "pixel_scale_arcsec": pixel_scale_arcsec,
         "pc_per_arcsec": pc_per_arcsec,
+        "pixel_area_arcsec2": pixel_area_arcsec2,
+        "beam_area_pc2": beam_area_pc2,
+        "pixel_area_arsec2": pixel_area_arcsec2,
+        "beam_area_arcsec2": beam_area_arcsec2,
+        "pixel_area_pc2": pixel_area_pc2,
         "header": header
 
     }
@@ -819,6 +913,10 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     BMAJ = main_meta["BMAJ"]
     BMIN = main_meta["BMIN"]
     pixel_scale_arcsec = main_meta["pixel_scale_arcsec"]
+    pixel_area_arcsec2 = main_meta["pixel_area_arcsec2"]
+    beam_area_pc2 = main_meta["beam_area_pc2"]
+    beam_area_arcsec2 = main_meta["beam_area_arcsec2"]
+    pixel_area_pc2 = main_meta["pixel_area_pc2"]
     pc_per_arcsec = main_meta["pc_per_arcsec"]
     header = main_meta["header"]
 
@@ -882,6 +980,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     BMINs = []
     res_values = []
     res_sources = []
+
 
     # ---------- build resolution list ----------
     res_list = []
@@ -974,10 +1073,18 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         ) in enumerate(zip(images, errormaps, BMAJs, BMINs, res_values, res_sources)):
 
         beam_scale_pc = res_pc
-
-        pixel_area_pc2 = (pixel_scale_arcsec * pc_per_arcsec)**2
         R_21, R_31, alpha_CO = 0.65, 0.32, 4.35
         R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
+
+        pixel_scale_arcsec = np.abs(header.get("CDELT1", 0)) * 3600
+        pixel_area_arcsec2 = pixel_scale_arcsec**2
+        beam_arcsec = np.sqrt(np.abs(BMAJ * BMIN)) * 3600
+        beam_area_arcsec2 = (np.pi/(4*np.log(2)))*(BMAJ*3600)*(BMIN*3600)
+        pc_per_arcsec = (D_Mpc * 1e6) / 206265
+        beam_scale_pc = beam_arcsec * pc_per_arcsec
+        beam_area_pc2 = beam_area_arcsec2 * pc_per_arcsec**2
+        pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
+        pixel_area_pc2 = pixel_scale_pc**2
 
         gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
         wcs_full = WCS(header)
@@ -1085,6 +1192,10 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 name=name,
                 co32=co32,
                 pixel_area_pc2=pixel_area_pc2,
+                beam_area_pc2=beam_area_pc2,
+                beam_scale_pc=beam_scale_pc,
+                pixel_area_arcsec2=pixel_area_arcsec2,
+                beam_area_arcsec2=beam_area_arcsec2,
                 R_21=R_21,
                 R_31=R_31,
                 alpha_CO=alpha_CO,
@@ -1576,35 +1687,35 @@ llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format=
 if __name__ == '__main__':
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
     base_output_dir = '/data/c3040163/llama/alma/gas_analysis_results'
-    isolate = None
+    isolate = "LCO"
 
     # CO(2-1)
     print("Starting CO(2-1) analysis...")
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
 
     # # CO(3-2)
     co32 = True
     print("Starting CO(3-2) analysis...")
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
