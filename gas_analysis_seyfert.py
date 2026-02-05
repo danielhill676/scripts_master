@@ -121,6 +121,7 @@ def process_mc_chunk_shm(
                 R_31=metric_kwargs["R_31"],
                 alpha_CO=metric_kwargs["alpha_CO"],
                 name=metric_kwargs["name"],
+                D_Mpc=metric_kwargs["D_Mpc"],
                 co32=metric_kwargs["co32"]
             ))
         except Exception:
@@ -306,6 +307,7 @@ def LCO_single(
     R_31,
     alpha_CO,
     name,
+    D_Mpc,
     co32=False,
     **kwargs
 ):
@@ -317,7 +319,7 @@ def LCO_single(
     pix_per_beam = beam_area_arcsec2 / pixel_area_arcsec2
 
     I_sum = np.nansum(image[~mask])  # K km/s summed over pixels
-    Lprime = I_sum * (beam_area_pc2 / pix_per_beam)
+    Lprime = I_sum * 23.5 * beam_area_arcsec2/pix_per_beam * D_Mpc**2
 
     if co32:
         Lprime = (Lprime / R_31) * R_21
@@ -339,6 +341,7 @@ def total_mass_single(
     R_31,
     alpha_CO,
     name,
+    D_Mpc,
     co32=False,
     **kwargs
 ):
@@ -356,6 +359,7 @@ def total_mass_single(
         R_31=R_31,
         alpha_CO=alpha_CO,
         name=name,
+        D_Mpc=D_Mpc,
         co32=co32,
     )
 
@@ -390,6 +394,7 @@ def LCO_single_JCMT(
     R_31,
     alpha_CO,
     name,
+    D_Mpc,
     co32=False,
     **kwargs
 ):
@@ -406,6 +411,7 @@ def LCO_single_JCMT(
         R_31=R_31,
         alpha_CO=alpha_CO,
         name=name,
+        D_Mpc=D_Mpc,
         co32=co32,
     )
 
@@ -421,6 +427,7 @@ def LCO_single_APEX(
     R_31,
     alpha_CO,
     name,
+    D_Mpc,
     co32=False,
     **kwargs
 ):
@@ -437,6 +444,7 @@ def LCO_single_APEX(
         R_31=R_31,
         alpha_CO=alpha_CO,
         name=name,
+        D_Mpc=D_Mpc,
         co32=co32,
     )
 
@@ -455,6 +463,7 @@ def _Sigma_H2_map(
     R_21,
     R_31,
     alpha_CO,
+    D_Mpc,
     co32=False,
 ):
     """
@@ -464,8 +473,7 @@ def _Sigma_H2_map(
     pix_per_beam = beam_area_arcsec2 / pixel_area_arcsec2
 
     # L'CO per pixel (beam-correct)
-    Lprime_pix = image * (beam_area_pc2 / pix_per_beam)
-
+    Lprime_pix = image * 23.5 * beam_area_arcsec2/pix_per_beam * D_Mpc**2
     if co32:
         Lprime_pix = (Lprime_pix / R_31) * R_21
 
@@ -486,6 +494,7 @@ def mass_weighted_sd_single(
     R_31,
     alpha_CO,
     name,
+    D_Mpc,
     co32=False,
     **kwargs
 ):
@@ -499,6 +508,7 @@ def mass_weighted_sd_single(
         R_21,
         R_31,
         alpha_CO,
+        D_Mpc,
         co32,
     )
 
@@ -522,6 +532,7 @@ def area_weighted_sd_single(
     R_31,
     alpha_CO,
     name,
+    D_Mpc,
     co32=False,
     **kwargs
 ):
@@ -535,6 +546,7 @@ def area_weighted_sd_single(
         R_21,
         R_31,
         alpha_CO,
+        D_Mpc,
         co32,
     )
 
@@ -554,6 +566,7 @@ def clumping_factor_single(
     R_31,
     alpha_CO,
     name,
+    D_Mpc,
     co32=False,
     **kwargs
 ):
@@ -567,6 +580,7 @@ def clumping_factor_single(
         R_31,
         alpha_CO,
         name,
+        D_Mpc,
         co32=co32
     )
     aw = area_weighted_sd_single(
@@ -579,6 +593,7 @@ def clumping_factor_single(
         R_31,
         alpha_CO,
         name,
+        D_Mpc,
         co32=co32
     )
     return mw / aw if aw and aw > 0 else np.nan
@@ -1196,6 +1211,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 beam_scale_pc=beam_scale_pc,
                 pixel_area_arcsec2=pixel_area_arcsec2,
                 beam_area_arcsec2=beam_area_arcsec2,
+                D_Mpc=D_Mpc,
                 R_21=R_21,
                 R_31=R_31,
                 alpha_CO=alpha_CO,
@@ -1687,7 +1703,7 @@ llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format=
 if __name__ == '__main__':
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
     base_output_dir = '/data/c3040163/llama/alma/gas_analysis_results'
-    isolate = "LCO"
+    isolate = None
 
     # CO(2-1)
     print("Starting CO(2-1) analysis...")
