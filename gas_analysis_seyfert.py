@@ -137,6 +137,7 @@ def process_mc_chunk_shm(
                 R_31=metric_kwargs["R_31"],
                 alpha_CO=metric_kwargs["alpha_CO"],
                 name=metric_kwargs["name"],
+                D_Mpc=metric_kwargs["D_Mpc"],
                 co32=metric_kwargs["co32"]
             ))
         except Exception:
@@ -153,6 +154,7 @@ def process_mc_chunk_shm(
                 R_31=metric_kwargs["R_31"],
                 alpha_CO=metric_kwargs["alpha_CO"],
                 name=metric_kwargs["name"],
+                D_Mpc=metric_kwargs["D_Mpc"],
                 co32=metric_kwargs["co32"]
             ))
         except Exception:
@@ -169,6 +171,7 @@ def process_mc_chunk_shm(
                 R_31=metric_kwargs["R_31"],
                 alpha_CO=metric_kwargs["alpha_CO"],
                 name=metric_kwargs["name"],
+                D_Mpc=metric_kwargs["D_Mpc"],
                 co32=metric_kwargs["co32"]
             ))
         except Exception:
@@ -185,6 +188,7 @@ def process_mc_chunk_shm(
                 R_31=metric_kwargs["R_31"],
                 alpha_CO=metric_kwargs["alpha_CO"],
                 name=metric_kwargs["name"],
+                D_Mpc=metric_kwargs["D_Mpc"],
                 co32=metric_kwargs["co32"]
             ))
         except Exception as e:
@@ -203,6 +207,7 @@ def process_mc_chunk_shm(
                 R_31=metric_kwargs["R_31"],
                 alpha_CO=metric_kwargs["alpha_CO"],
                 name=metric_kwargs["name"],
+                D_Mpc=metric_kwargs["D_Mpc"],
                 co32=metric_kwargs["co32"]
             ))
         except Exception:
@@ -219,6 +224,7 @@ def process_mc_chunk_shm(
                 R_31=metric_kwargs["R_31"],
                 alpha_CO=metric_kwargs["alpha_CO"],
                 name=metric_kwargs["name"],
+                D_Mpc=metric_kwargs["D_Mpc"],
                 co32=metric_kwargs["co32"]
             ))
         except Exception:
@@ -867,6 +873,9 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     name = base.split("_12m")[0]
 
+    if name != 'NGC4254':
+        return
+
     pair_names = []
 
     if rebin == None:
@@ -1100,6 +1109,13 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         beam_area_pc2 = beam_area_arcsec2 * pc_per_arcsec**2
         pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
         pixel_area_pc2 = pixel_scale_pc**2
+        pixels_per_beam = beam_area_arcsec2/pixel_area_arcsec2
+
+        print('beam_area_arcsec2', beam_area_arcsec2,'arcsec2')
+        print('beam_area_pc2', beam_area_pc2,'pc2')
+        print('LCO factor using omega_beam (should be equal to beam_area_pc2)',beam_area_arcsec2*23.5*D_Mpc**2)
+        print('LCO factor from using physical pixel size',pixel_area_pc2*pixels_per_beam)
+
 
         gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
         wcs_full = WCS(header)
@@ -1338,6 +1354,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 sigma0, rs = "fit failed", "fit failed"
         else:
             sigma0, rs = np.nan, np.nan
+        
+        print('L\'CO=',round(LCO, 3))
 
         # ---------- assemble row ----------
         rows.append({
@@ -1710,7 +1728,7 @@ if __name__ == '__main__':
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
@@ -1727,7 +1745,7 @@ if __name__ == '__main__':
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
