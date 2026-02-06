@@ -74,6 +74,7 @@ def process_mc_chunk_shm(
     aw_vals = []
     clump_vals = []
     LCO_vals = []
+    SCOdv_vals = []
     LCO_JCMT_vals = []
     LCO_APEX_vals = []
 
@@ -109,6 +110,19 @@ def process_mc_chunk_shm(
             ))
         except Exception:
             conc_vals.append(np.nan)
+
+
+        try:
+            SCOdv_vals.append(SCOdv_single(
+                mc_img,
+                mask,
+                jy_per_K=metric_kwargs["jy_per_K"],        
+                beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
+                pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"]
+            ))
+        except Exception:
+            SCOdv_vals.append(np.nan)
+
 
         # --- L'CO and derived quantities ---
         try:
@@ -242,6 +256,7 @@ def process_mc_chunk_shm(
         "mw": mw_vals,
         "aw": aw_vals,
         "clump": clump_vals,
+        "SCOdv": SCOdv_vals,
         "LCO": LCO_vals,
         "LCO_JCMT": LCO_JCMT_vals,
         "LCO_APEX": LCO_APEX_vals
@@ -302,6 +317,24 @@ def concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec, **kwarg
     if flux_50 <= 0 or flux_200 <= 0:
         return np.nan
     return np.log10(flux_50 / flux_200)
+
+
+def SCOdv_single(
+    image,
+    mask,
+    jy_per_K,        
+    beam_area_arcsec2, 
+    pixel_area_arcsec2
+):
+    pix_per_beam = beam_area_arcsec2 / pixel_area_arcsec2
+    # Sum integrated intensity in aperture (K km/s)
+    I_sum = np.nansum(image[~mask])
+
+    # Convert to total flux (Jy km/s)
+    S_CO_dv = (I_sum / jy_per_K) / pix_per_beam
+
+    return S_CO_dv
+
 
 def LCO_single(
     image,
@@ -873,7 +906,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     name = base.split("_12m")[0]
 
-    if name != 'NGC4254':
+    if name not in ['NGC4254','ngc4254_phangs','NGC3351','ngc3351_phangs']:
         return
 
     pair_names = []
@@ -943,6 +976,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     pixel_area_pc2 = main_meta["pixel_area_pc2"]
     pc_per_arcsec = main_meta["pc_per_arcsec"]
     header = main_meta["header"]
+
+    jy_per_K = float(header.get("JYTOK", 0))
 
     beam_scales_pc = [beam_scale_pc]
     beam_scale_labels = [name]
@@ -1111,10 +1146,13 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         pixel_area_pc2 = pixel_scale_pc**2
         pixels_per_beam = beam_area_arcsec2/pixel_area_arcsec2
 
+        print(name,beam_scale_pc,'pc res')
         print('beam_area_arcsec2', beam_area_arcsec2,'arcsec2')
         print('beam_area_pc2', beam_area_pc2,'pc2')
         print('LCO factor using omega_beam (should be equal to beam_area_pc2)',beam_area_arcsec2*23.5*D_Mpc**2)
         print('LCO factor from using physical pixel size',pixel_area_pc2*pixels_per_beam)
+        print('JYTOK=',jy_per_K)
+        print('flux factor', 1/(pixels_per_beam*jy_per_K))
 
 
         gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
@@ -1232,7 +1270,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 R_31=R_31,
                 alpha_CO=alpha_CO,
                 pc_per_arcsec=pc_per_arcsec,
-                pixel_scale_arcsec=pixel_scale_arcsec
+                pixel_scale_arcsec=pixel_scale_arcsec,
+                jy_per_K = jy_per_K
             )
 
             with ProcessPoolExecutor(max_workers=cpu) as ex:
@@ -1284,6 +1323,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             smooth, smooth_err = merge_global("smooth")
             conc, conc_err = merge_global("conc")
             total_mass, total_mass_err = merge_global("tmass")
+            SCOdv, SCOdv_err = merge_global("SCOdv")
             LCO, LCO_err = merge_global("LCO")
             LCO_JCMT, LCO_JCMT_err = merge_global("LCO_JCMT")
             LCO_APEX, LCO_APEX_err = merge_global("LCO_APEX")
@@ -1297,6 +1337,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             smooth, smooth_err = np.nan, np.nan
             conc, conc_err = np.nan, np.nan
             total_mass, total_mass_err = np.nan, np.nan
+            SCOdv, SCOdv_err = np.nan, np.nan,
             LCO, LCO_err = np.nan, np.nan
             LCO_JCMT, LCO_JCMT_err = np.nan, np.nan
             LCO_APEX, LCO_APEX_err = np.nan, np.nan
@@ -1356,6 +1397,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             sigma0, rs = np.nan, np.nan
         
         print('L\'CO=',round(LCO, 3))
+        print("flux Jykm/s=",round(SCOdv,3))
+
 
         # ---------- assemble row ----------
         rows.append({
@@ -1728,7 +1771,7 @@ if __name__ == '__main__':
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
