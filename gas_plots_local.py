@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table
 from matplotlib import gridspec
+import matplotlib.transforms as mtransforms
 import math
 from scipy.stats import ks_2samp
 from matplotlib.transforms import Bbox
@@ -16,6 +17,7 @@ import time
 from IPython.display import display
 from astropy.table import join
 from astropy.table import MaskedColumn
+from collections import defaultdict
 pd.set_option('future.no_silent_downcasting', True)
 
 stats_rows = []
@@ -75,7 +77,9 @@ def normalize_name(col):
     )
 
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, use_gb21=False, soloplot=None, exclude_names=None, logx=False, logy=False,  #see archived_comp_samp_build for rebuilding PHANGS WIS SIM GB21
-                        background_image=None, manual_limits=None, square=False, best_fit=False, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False, which_compare=None, use_aux=False, use_cont = False,nativex=False,nativey=False):
+                        background_image=None, manual_limits=None, square=False, best_fit=False, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,
+                        comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False, which_compare=None, use_aux=False, use_cont = False,nativex=False,nativey=False,
+                        yhist=True,res_comp=False):
     """possible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -287,6 +291,15 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     ~inactive_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
                 ]
 
+            for df in [merged_AGN_clean, merged_inactive_clean]:
+
+                df = (
+                            df
+                            .replace([np.inf, -np.inf], np.nan)
+                            .infer_objects(copy=False)
+                            .dropna(subset=[x_column, y_column])
+                        )
+
             merged_AGN_clean_res = merged_AGN_clean.sort_values("Resolution (pc)", ascending=True)
             merged_AGN_clean_maxres = merged_AGN_clean_res.drop_duplicates(subset="Name_clean", keep="last")
             merged_AGN_clean_minres = merged_AGN_clean_res.drop_duplicates(subset="Name_clean", keep="first")
@@ -298,57 +311,36 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     #see archived_comp_samp_build 
 
             
-            merged_AGN_clean_maxres = (
-                        merged_AGN_clean_maxres
-                        .replace([np.inf, -np.inf], np.nan)
-                        .infer_objects(copy=False)
-                        .dropna(subset=[x_column, y_column])
-                    )
-
-
-            merged_inactive_clean_maxres = (
-                    merged_inactive_clean_maxres
-                    .replace([np.inf, -np.inf], np.nan)
-                    .infer_objects(copy=False)
-                    .dropna(subset=[x_column, y_column])
-                )
-            
-            merged_AGN_clean_minres = (
-                merged_AGN_clean_maxres
-                .replace([np.inf, -np.inf], np.nan)
-                .infer_objects(copy=False)
-                .dropna(subset=[x_column, y_column])
-            )
-
-
-            merged_inactive_clean_minres = (
-                    merged_inactive_clean_maxres
-                    .replace([np.inf, -np.inf], np.nan)
-                    .infer_objects(copy=False)
-                    .dropna(subset=[x_column, y_column])
-                )
-            
             if nativex:
                 x_agn = merged_AGN_clean_minres[x_column]
                 x_inactive = merged_inactive_clean_minres[x_column]
                 xerr_agn = get_errorbars(merged_AGN_clean_minres, x_column)
                 xerr_inactive = get_errorbars(merged_inactive_clean_minres, x_column)
-                
-            else:
+            elif not res_comp:
                 x_agn = merged_AGN_clean_maxres[x_column]
                 x_inactive = merged_inactive_clean_maxres[x_column]
                 xerr_agn = get_errorbars(merged_AGN_clean_maxres, x_column)
                 xerr_inactive = get_errorbars(merged_inactive_clean_maxres, x_column)
+            else:
+                x_agn = merged_AGN_clean[x_column]
+                x_inactive = merged_inactive_clean[x_column]
+                xerr_agn = get_errorbars(merged_AGN_clean, x_column)
+                xerr_inactive = get_errorbars(merged_inactive_clean, x_column)
             if nativey:
                 y_inactive = merged_inactive_clean_minres[y_column]
                 y_agn = merged_AGN_clean_minres[y_column]
                 yerr_agn = get_errorbars(merged_AGN_clean_minres, y_column)
                 yerr_inactive = get_errorbars(merged_inactive_clean_minres, y_column)
-            else:
+            elif not res_comp:
                 y_agn = merged_AGN_clean_maxres[y_column]
                 y_inactive = merged_inactive_clean_maxres[y_column]
                 yerr_agn = get_errorbars(merged_AGN_clean_maxres, y_column)
                 yerr_inactive = get_errorbars(merged_inactive_clean_maxres, y_column)
+            else:
+                y_agn = merged_AGN_clean[y_column]
+                y_inactive = merged_inactive_clean[y_column]
+                yerr_agn = get_errorbars(merged_AGN_clean, y_column)
+                yerr_inactive = get_errorbars(merged_inactive_clean, y_column)
 
 
 
@@ -402,7 +394,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         ax.set_ylabel(y_column)
         ax.grid(True)
         ax.legend()
-        ax.set_title(f"Comparison of {y_column} vs {x_column} for all masks and radii")
+        # ax.set_title(f"Comparison of {y_column} vs {x_column} for all masks and radii")
         # Build a filesystem-safe suffix listing all masks and radii
         suffix_masks = "_".join(str(m).replace(" ", "").replace(".", "p") for m in compare_masks)
         suffix_radii = "_".join(str(r).replace(" ", "").replace(".", "p") for r in compare_radii)
@@ -644,12 +636,18 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         if nativex:
             x_agn = merged_AGN_clean_minres[x_column]
             x_inactive = merged_inactive_clean_minres[x_column]
+        elif res_comp:
+            x_agn = merged_AGN_clean[x_column]
+            x_inactive = merged_inactive_clean[x_column]
         else:
             x_agn = merged_AGN_clean_maxres[x_column]
             x_inactive = merged_inactive_clean_maxres[x_column]
         if nativey:
             y_inactive = merged_inactive_clean_minres[y_column]
             y_agn = merged_AGN_clean_minres[y_column]
+        elif res_comp:
+            y_agn = merged_AGN_clean[y_column]
+            y_inactive = merged_inactive_clean[y_column]
         else:
             y_agn = merged_AGN_clean_maxres[y_column]
             y_inactive = merged_inactive_clean_maxres[y_column]
@@ -710,342 +708,161 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         if x_column != 'log L′ CO':
 
             if nativex:
-                x_agn = merged_AGN_clean_minres[x_column]
-                xerr_agn = get_errorbars(merged_AGN_clean_minres, x_column)
-                x_inactive = merged_inactive_clean_minres[x_column]
-                xerr_inactive = get_errorbars(merged_inactive_clean_minres, x_column)
-                names_agn = merged_AGN_clean_minres["Name_clean"].str.replace(" ", "", regex=False).values
-                names_inactive = merged_inactive_clean_minres["Name_clean"].str.replace(" ", "", regex=False).values
+                df_x_agn = merged_AGN_clean_minres
+                df_x_inactive = merged_inactive_clean_minres
+            elif res_comp:
+                df_x_agn = merged_AGN_clean
+                df_x_inactive = merged_inactive_clean
             else:
-                x_agn = merged_AGN_clean_maxres[x_column]
-                xerr_agn = get_errorbars(merged_AGN_clean_maxres, x_column)
-                x_inactive = merged_inactive_clean_maxres[x_column]
-                xerr_inactive = get_errorbars(merged_inactive_clean_maxres, x_column)
-                names_inactive = merged_inactive_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
-                names_agn = merged_AGN_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
+                df_x_agn = merged_AGN_clean_maxres
+                df_x_inactive = merged_inactive_clean_maxres
+
+            # Extract x values and errors
+            x_agn = df_x_agn[x_column]
+            xerr_agn = get_errorbars(df_x_agn, x_column)
+            x_inactive = df_x_inactive[x_column]
+            xerr_inactive = get_errorbars(df_x_inactive, x_column)
+
+            # Names (x-side default)
+            names_agn = df_x_agn["Name_clean"].str.replace(" ", "", regex=False).values
+            names_inactive = df_x_inactive["Name_clean"].str.replace(" ", "", regex=False).values
+
             if nativey:
-                y_agn = merged_AGN_clean_minres[y_column]
-                yerr_agn = get_errorbars(merged_AGN_clean_minres, y_column)
-                y_inactive = merged_inactive_clean_minres[y_column]
-                yerr_inactive = get_errorbars(merged_inactive_clean_minres, y_column)
-                names_agn = merged_AGN_clean_minres["Name_clean"].str.replace(" ", "", regex=False).values
-                names_inactive = merged_inactive_clean_minres["Name_clean"].str.replace(" ", "", regex=False).values
+                df_y_agn = merged_AGN_clean_minres
+                df_y_inactive = merged_inactive_clean_minres
+            elif res_comp:
+                df_y_agn = merged_AGN_clean
+                df_y_inactive = merged_inactive_clean
             else:
-                y_agn = merged_AGN_clean_maxres[y_column]
-                yerr_agn = get_errorbars(merged_AGN_clean_maxres, y_column)
-                y_inactive = merged_inactive_clean_maxres[y_column]
-                yerr_inactive = get_errorbars(merged_inactive_clean_maxres, y_column)
-                names_agn = merged_AGN_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
-                names_inactive = merged_inactive_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
+                df_y_agn = merged_AGN_clean_maxres
+                df_y_inactive = merged_inactive_clean_maxres
 
-############################## Special handling for L' CO comparison with ROS+18 ##############################
-        if not nativex and not nativey:
-            if x_column == 'log L′ CO':
-                ### insert code here ####
-                df_ros_obs = pd.DataFrame(Rosario2018_obs)
-                df_ros_obs['Name_clean'] = normalize_name(df_ros_obs['Name'])#.str.replace(" ", "", regex=False)
-                merged_AGN_clean_maxres = merged_AGN_clean_maxres.merge(
+            # Extract y values and errors
+            y_agn = df_y_agn[y_column]
+            yerr_agn = get_errorbars(df_y_agn, y_column)
+            y_inactive = df_y_inactive[y_column]
+            yerr_inactive = get_errorbars(df_y_inactive, y_column)
+
+            # Names are overwritten by y-side selection (same as original logic)
+            names_agn = df_y_agn["Name_clean"].str.replace(" ", "", regex=False).values
+            names_inactive = df_y_inactive["Name_clean"].str.replace(" ", "", regex=False).values
+
+
+        ############################## Special handling for L' CO comparison with ROS+18 ##############################
+        if x_column == 'log L′ CO':
+
+            # --------------------------------------------------
+            # Common setup
+            # --------------------------------------------------
+            df_ros_obs = pd.DataFrame(Rosario2018_obs)
+            df_ros_obs['Name_clean'] = normalize_name(df_ros_obs['Name'])
+
+            tel_to_col = {
+                'JCMT': "L'CO_JCMT (K km s pc2)",
+                'APEX': "L'CO_APEX (K km s pc2)",
+            }
+            tel_to_err = {
+                'JCMT': "L'CO_JCMT_err (K km s pc2)",
+                'APEX': "L'CO_APEX_err (K km s pc2)",
+            }
+
+            def merge_telescope(df):
+                return df.merge(
                     df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
+                    on='Name_clean',
                     how='left'
                 )
-                merged_inactive_clean_maxres = merged_inactive_clean_maxres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                telescope_to_col = {
-                        'JCMT': "L'CO_JCMT (K km s pc2)",
-                        'APEX': "L'CO_APEX (K km s pc2)"
-                    }
-                telescope_to_errcol = {
-                        'JCMT': "L'CO_JCMT_err (K km s pc2)",
-                        'APEX': "L'CO_APEX_err (K km s pc2)"
-                    }
 
-                def select_LCO(row,key):
-                    tel = row['Telescope']
-                    if tel in key:
-                        return row[key[tel]]
-                    return np.nan
+            def select_LCO_vectorised(df, colmap):
+                out = pd.Series(np.nan, index=df.index, dtype=float)
+                for tel, col in colmap.items():
+                    m = df['Telescope'] == tel
+                    out.loc[m] = df.loc[m, col]
+                return out
 
-                x_agn = merged_AGN_clean_maxres[x_column]
-                y_agn = merged_AGN_clean_maxres.apply(
-                    lambda row: select_LCO(row, telescope_to_col),
-                    axis=1
-                )
-                names_agn = merged_AGN_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
-                merged_AGN_clean_maxres['LCO_err_selected'] = merged_AGN_clean_maxres.apply(
-                    lambda row: select_LCO(row, telescope_to_errcol),
-                    axis=1
-                )
-                xerr_agn = get_errorbars(merged_AGN_clean_maxres, x_column)
-                yerr_agn = get_errorbars(merged_AGN_clean_maxres, "LCO_err_selected")
+            # --------------------------------------------------
+            # Decide which dataframes supply x and y
+            # --------------------------------------------------
+            if not nativex and not nativey:
+                df_x_agn, df_x_inactive = merged_AGN_clean_maxres, merged_inactive_clean_maxres
+                df_y_agn, df_y_inactive = merged_AGN_clean_maxres, merged_inactive_clean_maxres
 
-                x_inactive = merged_inactive_clean_maxres[x_column]
-                y_inactive = merged_inactive_clean_maxres.apply(
-                    lambda row: select_LCO(row, telescope_to_col),
-                    axis=1
-                )
-                names_inactive = merged_inactive_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
-                merged_inactive_clean_maxres['LCO_err_selected'] = merged_inactive_clean_maxres.apply(
-                    lambda row: select_LCO(row, telescope_to_errcol),
-                    axis=1
-                )
+            elif nativex and nativey:
+                df_x_agn, df_x_inactive = merged_AGN_clean_minres, merged_inactive_clean_minres
+                df_y_agn, df_y_inactive = merged_AGN_clean_minres, merged_inactive_clean_minres
 
-                merged_AGN_clean_maxres['LCO_err_selected'] = pd.to_numeric(
-                merged_AGN_clean_maxres['LCO_err_selected'], errors='coerce'
+            elif nativex and not nativey:
+                df_x_agn, df_x_inactive = merged_AGN_clean_minres, merged_inactive_clean_minres
+                df_y_agn, df_y_inactive = merged_AGN_clean_maxres, merged_inactive_clean_maxres
+
+            else:  # not nativex and nativey
+                df_x_agn, df_x_inactive = merged_AGN_clean_maxres, merged_inactive_clean_maxres
+                df_y_agn, df_y_inactive = merged_AGN_clean_minres, merged_inactive_clean_minres
+
+            if res_comp:
+                df_x_agn, df_x_inactive = merged_AGN_clean, merged_inactive_clean
+                df_y_agn, df_y_inactive = merged_AGN_clean, merged_inactive_clean
+
+            # --------------------------------------------------
+            # Merge telescope info (only where needed)
+            # --------------------------------------------------
+            df_y_agn = merge_telescope(df_y_agn)
+            df_y_inactive = merge_telescope(df_y_inactive)
+
+            # --------------------------------------------------
+            # Extract x values
+            # --------------------------------------------------
+            x_agn = df_x_agn[x_column]
+            x_inactive = df_x_inactive[x_column]
+
+            # --------------------------------------------------
+            # Extract y values (vectorised telescope selection)
+            # --------------------------------------------------
+            df_y_agn['LCO_selected'] = select_LCO_vectorised(df_y_agn, tel_to_col)
+            df_y_inactive['LCO_selected'] = select_LCO_vectorised(df_y_inactive, tel_to_col)
+
+            y_agn = df_y_agn['LCO_selected']
+            y_inactive = df_y_inactive['LCO_selected']
+
+            # --------------------------------------------------
+            # Error columns (must be *_err)
+            # --------------------------------------------------
+            df_y_agn['LCO_selected_err'] = select_LCO_vectorised(df_y_agn, tel_to_err)
+            df_y_inactive['LCO_selected_err'] = select_LCO_vectorised(df_y_inactive, tel_to_err)
+
+            df_y_agn['LCO_selected_err'] = pd.to_numeric(
+                df_y_agn['LCO_selected_err'], errors='coerce'
+            )
+            df_y_inactive['LCO_selected_err'] = pd.to_numeric(
+                df_y_inactive['LCO_selected_err'], errors='coerce'
             )
 
-                merged_inactive_clean_maxres['LCO_err_selected'] = pd.to_numeric(
-                merged_inactive_clean_maxres['LCO_err_selected'], errors='coerce'
-            )
+            # --------------------------------------------------
+            # Errors (now works as designed)
+            # --------------------------------------------------
+            xerr_agn = get_errorbars(df_x_agn, x_column)
+            xerr_inactive = get_errorbars(df_x_inactive, x_column)
 
-                xerr_inactive = get_errorbars(merged_inactive_clean_maxres, x_column)
-                yerr_inactive = get_errorbars(merged_inactive_clean_maxres, "LCO_err_selected")
+            yerr_agn = get_errorbars(df_y_agn, "LCO_selected")
+            yerr_inactive = get_errorbars(df_y_inactive, "LCO_selected")
 
-        elif nativex and nativey:
-            if x_column == 'log L′ CO':
-                ### insert code here ####
-                df_ros_obs = pd.DataFrame(Rosario2018_obs)
-                df_ros_obs['Name_clean'] = normalize_name(df_ros_obs['Name'])#.str.replace(" ", "", regex=False)
-                merged_AGN_clean_minres = merged_AGN_clean_minres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                merged_inactive_clean_minres = merged_inactive_clean_minres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                telescope_to_col = {
-                        'JCMT': "L'CO_JCMT (K km s pc2)",
-                        'APEX': "L'CO_APEX (K km s pc2)"
-                    }
-                telescope_to_errcol = {
-                        'JCMT': "L'CO_JCMT_err (K km s pc2)",
-                        'APEX': "L'CO_APEX_err (K km s pc2)"
-                    }
+            # --------------------------------------------------
+            # Names
+            # --------------------------------------------------
+            names_agn = df_x_agn["Name_clean"].str.replace(" ", "", regex=False).values
+            names_inactive = df_x_inactive["Name_clean"].str.replace(" ", "", regex=False).values
 
-                def select_LCO(row,key):
-                    tel = row['Telescope']
-                    if tel in key:
-                        return row[key[tel]]
-                    return np.nan
+            # --------------------------------------------------
+            # Convert from log to linear
+            # --------------------------------------------------
+            x_agn = 10 ** x_agn
+            x_inactive = 10 ** x_inactive
+            if xerr_agn is not None:
+                xerr_agn = 10 ** xerr_agn
+            if xerr_inactive is not None:
+                xerr_inactive = 10 ** xerr_inactive
 
-                x_agn = merged_AGN_clean_minres[x_column]
-                y_agn = merged_AGN_clean_minres.apply(
-                    lambda row: select_LCO(row, telescope_to_col),
-                    axis=1
-                )
-                names_agn = merged_AGN_clean_minres["Name_clean"].str.replace(" ", "", regex=False).values
-                merged_AGN_clean_minres['LCO_err_selected'] = merged_AGN_clean_minres.apply(
-                    lambda row: select_LCO(row, telescope_to_errcol),
-                    axis=1
-                )
-                xerr_agn = get_errorbars(merged_AGN_clean_minres, x_column)
-                yerr_agn = get_errorbars(merged_AGN_clean_maxres, "LCO_err_selected")
 
-                x_inactive = merged_inactive_clean_minres[x_column]
-                y_inactive = merged_inactive_clean_minres.apply(
-                    lambda row: select_LCO(row, telescope_to_col),
-                    axis=1
-                )
-                names_inactive = merged_inactive_clean_minres["Name_clean"].str.replace(" ", "", regex=False).values
-                merged_inactive_clean_minres['LCO_err_selected'] = merged_inactive_clean_minres.apply(
-                    lambda row: select_LCO(row, telescope_to_errcol),
-                    axis=1
-                )
-
-                merged_AGN_clean_minres['LCO_err_selected'] = pd.to_numeric(
-                merged_AGN_clean_minres['LCO_err_selected'], errors='coerce'
-            )
-
-                merged_inactive_clean_minres['LCO_err_selected'] = pd.to_numeric(
-                merged_inactive_clean_minres['LCO_err_selected'], errors='coerce'
-            )
-
-                xerr_inactive = get_errorbars(merged_inactive_clean_minres, x_column)
-                yerr_inactive = get_errorbars(merged_inactive_clean_minres, "LCO_err_selected")
-
-        elif nativex and not nativey:
-            if x_column == 'log L′ CO':
-                ### insert code here ####
-                df_ros_obs = pd.DataFrame(Rosario2018_obs)
-                df_ros_obs['Name_clean'] = normalize_name(df_ros_obs['Name'])#.str.replace(" ", "", regex=False)
-                merged_AGN_clean_minres = merged_AGN_clean_minres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                merged_inactive_clean_minres = merged_inactive_clean_minres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                telescope_to_col = {
-                        'JCMT': "L'CO_JCMT (K km s pc2)",
-                        'APEX': "L'CO_APEX (K km s pc2)"
-                    }
-                telescope_to_errcol = {
-                        'JCMT': "L'CO_JCMT_err (K km s pc2)",
-                        'APEX': "L'CO_APEX_err (K km s pc2)"
-                    }
-                merged_AGN_clean_maxres = merged_AGN_clean_maxres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                merged_inactive_clean_maxres = merged_inactive_clean_maxres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                telescope_to_col = {
-                        'JCMT': "L'CO_JCMT (K km s pc2)",
-                        'APEX': "L'CO_APEX (K km s pc2)"
-                    }
-                telescope_to_errcol = {
-                        'JCMT': "L'CO_JCMT_err (K km s pc2)",
-                        'APEX': "L'CO_APEX_err (K km s pc2)"
-                    }
-
-                def select_LCO(row,key):
-                    tel = row['Telescope']
-                    if tel in key:
-                        return row[key[tel]]
-                    return np.nan
-
-                x_agn = merged_AGN_clean_minres[x_column]
-                y_agn = merged_AGN_clean_maxres.apply(
-                    lambda row: select_LCO(row, telescope_to_col),
-                    axis=1
-                )
-                names_agn = merged_AGN_clean_minres["Name_clean"].str.replace(" ", "", regex=False).values
-                merged_AGN_clean_maxres['LCO_err_selected'] = merged_AGN_clean_maxres.apply(
-                    lambda row: select_LCO(row, telescope_to_errcol),
-                    axis=1
-                )
-                xerr_agn = get_errorbars(merged_AGN_clean_minres, x_column)
-                yerr_agn = get_errorbars(merged_AGN_clean_maxres, "LCO_err_selected")
-
-                x_inactive = merged_inactive_clean_minres[x_column]
-                y_inactive = merged_inactive_clean_maxres.apply(
-                    lambda row: select_LCO(row, telescope_to_col),
-                    axis=1
-                )
-                names_inactive = merged_inactive_clean_minres["Name_clean"].str.replace(" ", "", regex=False).values
-                merged_inactive_clean_maxres['LCO_err_selected'] = merged_inactive_clean_maxres.apply(
-                    lambda row: select_LCO(row, telescope_to_errcol),
-                    axis=1
-                )
-
-                merged_AGN_clean_maxres['LCO_err_selected'] = pd.to_numeric(
-                merged_AGN_clean_maxres['LCO_err_selected'], errors='coerce'
-            )
-
-                merged_inactive_clean_maxres['LCO_err_selected'] = pd.to_numeric(
-                merged_inactive_clean_maxres['LCO_err_selected'], errors='coerce'
-            )
-
-                xerr_inactive = get_errorbars(merged_inactive_clean_minres, x_column)
-                yerr_inactive = get_errorbars(merged_inactive_clean_maxres, "LCO_err_selected")
-            
-        else:
-            if x_column == 'log L′ CO':
-                ### insert code here ####
-                df_ros_obs = pd.DataFrame(Rosario2018_obs)
-                df_ros_obs['Name_clean'] = normalize_name(df_ros_obs['Name'])#.str.replace(" ", "", regex=False)
-                merged_AGN_clean_maxres = merged_AGN_clean_maxres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                merged_inactive_clean_maxres = merged_inactive_clean_maxres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                telescope_to_col = {
-                        'JCMT': "L'CO_JCMT (K km s pc2)",
-                        'APEX': "L'CO_APEX (K km s pc2)"
-                    }
-                telescope_to_errcol = {
-                        'JCMT': "L'CO_JCMT_err (K km s pc2)",
-                        'APEX': "L'CO_APEX_err (K km s pc2)"
-                    }
-                merged_AGN_clean_minres = merged_AGN_clean_minres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                merged_inactive_clean_minres = merged_inactive_clean_minres.merge(
-                    df_ros_obs[['Name_clean', 'Telescope']],
-                    left_on='Name_clean',
-                    right_on='Name_clean',
-                    how='left'
-                )
-                telescope_to_col = {
-                        'JCMT': "L'CO_JCMT (K km s pc2)",
-                        'APEX': "L'CO_APEX (K km s pc2)"
-                    }
-                telescope_to_errcol = {
-                        'JCMT': "L'CO_JCMT_err (K km s pc2)",
-                        'APEX': "L'CO_APEX_err (K km s pc2)"
-                    }
-
-                def select_LCO(row,key):
-                    tel = row['Telescope']
-                    if tel in key:
-                        return row[key[tel]]
-                    return np.nan
-
-                x_agn = merged_AGN_clean_maxres[x_column]
-                y_agn = merged_AGN_clean_minres.apply(
-                    lambda row: select_LCO(row, telescope_to_col),
-                    axis=1
-                )
-                names_agn = merged_AGN_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
-                merged_AGN_clean_minres['LCO_err_selected'] = merged_AGN_clean_minres.apply(
-                    lambda row: select_LCO(row, telescope_to_errcol),
-                    axis=1
-                )
-                xerr_agn = get_errorbars(merged_AGN_clean_maxres, x_column)
-                yerr_agn = get_errorbars(merged_AGN_clean_minres, "LCO_err_selected")
-
-                x_inactive = merged_inactive_clean_maxres[x_column]
-                y_inactive = merged_inactive_clean_minres.apply(
-                    lambda row: select_LCO(row, telescope_to_col),
-                    axis=1
-                )
-                names_inactive = merged_inactive_clean_maxres["Name_clean"].str.replace(" ", "", regex=False).values
-                merged_inactive_clean_minres['LCO_err_selected'] = merged_inactive_clean_minres.apply(
-                    lambda row: select_LCO(row, telescope_to_errcol),
-                    axis=1
-                )
-
-                merged_AGN_clean_minres['LCO_err_selected'] = pd.to_numeric(
-                merged_AGN_clean_minres['LCO_err_selected'], errors='coerce'
-            )
-
-                merged_inactive_clean_minres['LCO_err_selected'] = pd.to_numeric(
-                merged_inactive_clean_minres['LCO_err_selected'], errors='coerce'
-            )
-
-                xerr_inactive = get_errorbars(merged_inactive_clean_maxres, x_column)
-                yerr_inactive = get_errorbars(merged_inactive_clean_minres, "LCO_err_selected")
 
         ############################## Prep data for plotting ##############################
 
@@ -1343,8 +1160,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     ax_scatter.plot(
                         xline,
                         yline,
-                        linestyle='-',
-                        color='darkgreen',
+                        linestyle='--',
+                        color='black',
                         linewidth=1,
                         zorder=0
                     )
@@ -1448,14 +1265,138 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             ############################### Plot scatter points ##############################
 
+            def connect_resolution_series(ax, x, y, names, res_pc, color='gray', alpha=0.4, lw=1.0, zorder=1):
+                """
+                Connect points with the same name, ordered by increasing resolution (pc).
+                """
+
+                groups = defaultdict(list)
+
+                for xi, yi, name, r in zip(x, y, names, res_pc):
+                    if name is None or not np.isfinite(xi) or not np.isfinite(yi) or not np.isfinite(r):
+                        continue
+                    groups[name].append((r, xi, yi))
+
+                for name, pts in groups.items():
+                    if len(pts) < 2:
+                        continue
+
+                    pts_sorted = sorted(pts, key=lambda t: t[0])  # increasing resolution
+                    _, xs, ys = zip(*pts_sorted)
+
+                    ax.plot(xs, ys, color=color, alpha=alpha, lw=lw, zorder=zorder)
+            
+
+            def highlight_highest_resolution(
+                ax, x, y, names, res_pc,
+                marker='o', color='black',
+                size_factor=2.0, zorder=5
+            ):
+                """
+                Highlight the highest-resolution (smallest pc) point per target.
+                """
+
+                groups = defaultdict(list)
+
+                for i, (xi, yi, name, r) in enumerate(zip(x, y, names, res_pc)):
+                    if name is None or not np.isfinite(r):
+                        continue
+                    groups[name].append((r, i))
+
+                for name, pts in groups.items():
+                    if len(pts) < 1:
+                        continue
+
+                    # smallest pc = highest resolution
+                    _, idx = min(pts, key=lambda t: t[0])
+
+                    ax.plot(
+                        x.iloc[idx], y.iloc[idx],
+                        marker=marker,
+                        markersize=6 * size_factor,
+                        markerfacecolor=color,
+                        markeredgecolor=color,
+                        linestyle='None',
+                        zorder=zorder
+                    )
+
+            def draw_x_upper_limit(ax, x, y, color,
+                                bar_pts=8, arrow_pts=10,
+                                lw=1.6, zorder=6):
+                """
+                Draw a fixed-size x upper-limit marker |<-- at (x, y).
+                All sizes are in points and do not scale with axes.
+                """
+
+                base = ax.transData
+                fig = ax.figure
+
+                # Vertical bar "|"
+                trans_v = mtransforms.offset_copy(
+                    base, fig=fig, x=0, y=0, units='points'
+                )
+
+                ax.plot(
+                    [x, x], [y, y],
+                    transform=trans_v,
+                    color=color,
+                    lw=lw,
+                    zorder=zorder,
+                    solid_capstyle='butt'
+                )
+
+                # Apply vertical extent in points
+                ax.lines[-1].set_transform(
+                    mtransforms.offset_copy(
+                        base, fig=fig, x=0, y=bar_pts, units='points'
+                    )
+                )
+                ax.plot(
+                    [x, x], [y, y],
+                    transform=mtransforms.offset_copy(
+                        base, fig=fig, x=0, y=-bar_pts, units='points'
+                    ),
+                    color=color,
+                    lw=lw,
+                    zorder=zorder,
+                    solid_capstyle='butt'
+                )
+
+                # Horizontal bar "--"
+                ax.plot(
+                    [x, x], [y, y],
+                    transform=mtransforms.offset_copy(
+                        base, fig=fig, x=-bar_pts, y=0, units='points'
+                    ),
+                    color=color,
+                    lw=lw,
+                    zorder=zorder,
+                    solid_capstyle='butt'
+                )
+
+                # Arrow head "<"
+                ax.plot(
+                    x, y,
+                    marker='<',
+                    markersize=arrow_pts,
+                    markerfacecolor=color,
+                    markeredgecolor=color,
+                    linestyle='None',
+                    transform=mtransforms.offset_copy(
+                        base, fig=fig, x=-bar_pts, y=0, units='points'
+                    ),
+                    zorder=zorder
+                )
+
+
+
+
             colour_AGN = 'red'
             colour_inactive = 'blue'
             label_AGN = 'LLAMA AGN'
             label_inactive = 'LLAMA Inactive'
             marker_AGN = 's'
             marker_inactive = 'v'
-            if x_column == 'log LX':
-                marker_inactive = '<'
             if comb_llama:
                 colour_AGN = 'black'
                 colour_inactive = 'black'
@@ -1463,38 +1404,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 label_inactive = None
                 marker_AGN = 'o'
                 marker_inactive = 'o'
-
-            if yerr_inactive is None:
-                print("yerr_inactive is None")
-            else:
-                try:
-                    # safe coercion to float array then count finite entries
-                    arr = np.asarray(yerr_inactive, dtype=float)
-                    finite_count = np.isfinite(arr).sum()
-                    total = arr.size
-                    print(f"yerr_inactive finite: {finite_count} / {total}")
-                except Exception:
-                    # fallback: iterate and try converting each element to float
-                    vals = np.atleast_1d(yerr_inactive)
-                    finite_mask = []
-                    for v in vals:
-                        try:
-                            fv = float(v)
-                            finite_mask.append(np.isfinite(fv))
-                        except Exception:
-                            finite_mask.append(False)
-                    finite_count = int(np.sum(finite_mask))
-                    total = len(finite_mask)
-                    print(f"yerr_inactive finite (fallback): {finite_count} / {total}")
-            # Safely show example values (handle None and unexpected types)
-            if yerr_inactive is None:
-                print("example yerr values: None")
-            else:
-                try:
-                    sample = yerr_inactive[:10]
-                except Exception:
-                    sample = np.atleast_1d(yerr_inactive)[:10]
-                print("example yerr values:", sample)
 
             if soloplot in (None, 'AGN'):
                 ax_scatter.errorbar(
@@ -1519,17 +1428,61 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     shared_names_agn = [x if x in names_phangs else None for x in names_agn]
                     for x, y, name in zip(x_agn, y_agn, shared_names_agn):
                         ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+                
+                if res_comp:
+                    # resolution in pc, aligned with AGN arrays
+                    res_pc_agn = df_y_agn["Resolution (pc)"].values  # adjust column name if needed
+
+                    connect_resolution_series(
+                        ax_scatter,
+                        x_agn, y_agn,
+                        names_agn,
+                        res_pc_agn,
+                        color=colour_AGN,
+                        alpha=0.5,
+                        lw=1.0,
+                        zorder=1
+                    )
+
+
+                    highlight_highest_resolution(
+                        ax_scatter,
+                        x_agn, y_agn,
+                        names_agn,
+                        res_pc_agn,
+                        marker=marker_AGN,
+                        color=colour_AGN,
+                        size_factor=2.0
+                    )
                     
 
-
-
             if soloplot in (None, 'inactive'):
-                ax_scatter.errorbar(
-                    x_inactive, y_inactive,
-                    xerr=xerr_inactive, yerr=yerr_inactive,
-                    fmt=marker_inactive, color=colour_inactive, label=label_inactive, markersize=6,
-                    capsize=2, elinewidth=1, alpha=0.8
-                )
+                if x_column == 'log LX':
+                    ax_scatter.errorbar(
+                        x_inactive, y_inactive,
+                        yerr=yerr_inactive,
+                        fmt='none',
+                        color=colour_inactive,
+                        label=label_inactive,
+                        capsize=2,
+                        elinewidth=1,
+                        alpha=0.8
+                    )
+                    for x, y in zip(x_inactive, y_inactive):
+                        draw_x_upper_limit(
+                            ax_scatter,
+                            x, y,
+                            color=colour_inactive
+                        )
+                else:
+                    ax_scatter.errorbar(
+                        x_inactive, y_inactive,
+                        xerr=xerr_inactive, yerr=yerr_inactive,
+                        fmt=marker_inactive, color=colour_inactive, label=label_inactive, markersize=6,
+                        capsize=2, elinewidth=1, alpha=0.8
+                    )
+
+
                 if not comb_llama:
                     for x, y, name in zip(x_inactive, y_inactive, names_inactive):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='navy', zorder=10)
@@ -1546,6 +1499,32 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     shared_names_inactive = [x if x in names_phangs else None for x in names_inactive]
                     for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
                         ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+                if res_comp:
+                    # resolution in pc, aligned with AGN arrays
+                    res_pc_inactive = df_y_inactive["Resolution (pc)"].values  # adjust column name if needed
+
+                    connect_resolution_series(
+                        ax_scatter,
+                        x_inactive, y_inactive,
+                        names_inactive,
+                        res_pc_inactive,
+                        color=colour_inactive,
+                        alpha=0.5,
+                        lw=1.0,
+                        zorder=1
+                    )
+
+                    highlight_highest_resolution(
+                        ax_scatter,
+                        x_inactive, y_inactive,
+                        names_inactive,
+                        res_pc_inactive,
+                        marker=marker_inactive,
+                        color=colour_inactive,
+                        size_factor=2.0
+                    )
+
+
             
     ############################## Plot comparison samples ##############################
 
@@ -1648,9 +1627,9 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ax_scatter.grid(True)
             leg = ax_scatter.legend(loc=legend_loc)
             leg.set_zorder(30)
-            ax_scatter.set_title(f'{y_column} vs {x_column}')
-            if x_column == 'log L′ CO':
-                ax_scatter.set_title(f"ALMA L′ CO vs Single-dish log L′ CO")
+            # ax_scatter.set_title(f'{y_column} vs {x_column}')
+            # if x_column == 'log L′ CO':
+            #     ax_scatter.set_title(f"ALMA L′ CO vs Single-dish log L′ CO")
 
             ############################### Standalone histogram ###############################
 
@@ -1931,64 +1910,67 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             print(f"Saved X histogram to: {hist_x_path}")
 
         ############################### Histogram subplot ##############################
-            ax_hist = fig.add_subplot(gs[1], sharey=ax_scatter)
 
-            if soloplot in (None, 'AGN') and not comb_llama:
-                ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
-                            color='red', alpha=0.4, label='AGN')
-                median_agn = np.median(y_agn)
-                ax_hist.axhline(median_agn, color='red', linestyle='--')
-                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn, 
-                            f"{median_agn:.2f}", color='red', fontsize=8, va='center')
+            if yhist:
 
-            if soloplot in (None, 'inactive') and not comb_llama:
-                ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
-                            color='blue', alpha=0.4, label='Inactive')
-                median_inactive = np.median(y_inactive)
-                ax_hist.axhline(median_inactive, color='blue', linestyle='--')
-                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive, 
-                            f"{median_inactive:.2f}", color='blue', fontsize=8, va='center')
-                
-            if comb_llama:
-                combined_y = pd.concat([y_agn, y_inactive])
-                ax_hist.hist(combined_y, bins=bin_edges, orientation='horizontal', 
-                            color='black', alpha=0.4, label='LLAMA Galaxies')
-                median_combined = np.median(combined_y)
-                ax_hist.axhline(median_combined, color='black', linestyle='--')
-                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_combined, 
-                            f"{median_combined:.2f}", color='black', fontsize=8, va='center')
+                ax_hist = fig.add_subplot(gs[1], sharey=ax_scatter)
 
-            if soloplot is None and use_gb21:
-                ax_hist.hist(y_gb21, bins=bin_edges, orientation='horizontal', 
-                            color='green', alpha=0.4, label='GB21')
-                median_gb21 = np.median(y_gb21)
-                ax_hist.axhline(median_gb21, color='green', linestyle='--')
-                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_gb21, 
-                            f"{median_gb21:.2f}", color='green', fontsize=8, va='center')
+                if soloplot in (None, 'AGN') and not comb_llama:
+                    ax_hist.hist(y_agn, bins=bin_edges, orientation='horizontal', 
+                                color='red', alpha=0.4, label='AGN')
+                    median_agn = np.median(y_agn)
+                    ax_hist.axhline(median_agn, color='red', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn, 
+                                f"{median_agn:.2f}", color='red', fontsize=8, va='center')
 
-            if use_wis:
-                ax_hist.hist(y_wis, bins=bin_edges, orientation='horizontal', 
-                            color='purple', alpha=0.4, label='WIS')
-                median_wis = np.median(y_wis)
-                ax_hist.axhline(median_wis, color='purple', linestyle='--')
-                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_wis, 
-                            f"{median_wis:.2f}", color='purple', fontsize=8, va='center')
-            if use_phangs:
-                ax_hist.hist(y_phangs, bins=bin_edges, orientation='horizontal', 
-                            color='orange', alpha=0.4, label='PHANGS')
-                median_phangs = np.median(y_phangs)
-                ax_hist.axhline(median_phangs, color='orange', linestyle='--')
-                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_phangs, 
-                            f"{median_phangs:.2f}", color='orange', fontsize=8, va='center')
-            if use_sim:
-                ax_hist.hist(y_sim, bins=bin_edges, orientation='horizontal', 
-                            color='brown', alpha=0.4, label='Simulations')
-                median_sim = np.median(y_sim)
-                ax_hist.axhline(median_sim, color='brown', linestyle='--')
-                ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_sim, 
-                            f"{median_sim:.2f}", color='brown', fontsize=8, va='center')
+                if soloplot in (None, 'inactive') and not comb_llama:
+                    ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal', 
+                                color='blue', alpha=0.4, label='Inactive')
+                    median_inactive = np.median(y_inactive)
+                    ax_hist.axhline(median_inactive, color='blue', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive, 
+                                f"{median_inactive:.2f}", color='blue', fontsize=8, va='center')
+                    
+                if comb_llama:
+                    combined_y = pd.concat([y_agn, y_inactive])
+                    ax_hist.hist(combined_y, bins=bin_edges, orientation='horizontal', 
+                                color='black', alpha=0.4, label='LLAMA Galaxies')
+                    median_combined = np.median(combined_y)
+                    ax_hist.axhline(median_combined, color='black', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_combined, 
+                                f"{median_combined:.2f}", color='black', fontsize=8, va='center')
 
-            ax_hist.axis('off')
+                if soloplot is None and use_gb21:
+                    ax_hist.hist(y_gb21, bins=bin_edges, orientation='horizontal', 
+                                color='green', alpha=0.4, label='GB21')
+                    median_gb21 = np.median(y_gb21)
+                    ax_hist.axhline(median_gb21, color='green', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_gb21, 
+                                f"{median_gb21:.2f}", color='green', fontsize=8, va='center')
+
+                if use_wis:
+                    ax_hist.hist(y_wis, bins=bin_edges, orientation='horizontal', 
+                                color='purple', alpha=0.4, label='WIS')
+                    median_wis = np.median(y_wis)
+                    ax_hist.axhline(median_wis, color='purple', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_wis, 
+                                f"{median_wis:.2f}", color='purple', fontsize=8, va='center')
+                if use_phangs:
+                    ax_hist.hist(y_phangs, bins=bin_edges, orientation='horizontal', 
+                                color='orange', alpha=0.4, label='PHANGS')
+                    median_phangs = np.median(y_phangs)
+                    ax_hist.axhline(median_phangs, color='orange', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_phangs, 
+                                f"{median_phangs:.2f}", color='orange', fontsize=8, va='center')
+                if use_sim:
+                    ax_hist.hist(y_sim, bins=bin_edges, orientation='horizontal', 
+                                color='brown', alpha=0.4, label='Simulations')
+                    median_sim = np.median(y_sim)
+                    ax_hist.axhline(median_sim, color='brown', linestyle='--')
+                    ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_sim, 
+                                f"{median_sim:.2f}", color='brown', fontsize=8, va='center')
+
+                ax_hist.axis('off')
 
             ############################### Save ###############################
             parts = []
@@ -2108,7 +2090,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             ax.set_xlabel(f"Δ {y_column} (AGN - Inactive)")
             ax.set_ylabel("Number of pairs")
-            ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
+            # ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
             ax.legend()
             outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{mask}_{R_kpc}kpc/'
             os.makedirs(outputdir, exist_ok=True)
@@ -2204,7 +2186,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ax_bar.grid(True)
                 leg = ax_bar.legend(loc=legend_loc)
                 leg.set_zorder(30)
-                ax_bar.set_title(f'{y_column} vs {x_column}')
+                # ax_bar.set_title(f'{y_column} vs {x_column}')
 
                 if manual_limits is not None:
                     xlower, xupper, ylower, yupper = manual_limits
@@ -2333,7 +2315,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ax_bar.grid(True)
                 leg = ax_bar.legend(loc=legend_loc)
                 leg.set_zorder(30)
-                ax_bar.set_title(f'{y_column} vs {x_column}')
+                # ax_bar.set_title(f'{y_column} vs {x_column}')
                 suffix = f"_{soloplot}" if soloplot else ""
                 outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/{mask}_{R_kpc}kpc/'
                 os.makedirs(outputdir, exist_ok=True)
@@ -2715,132 +2697,131 @@ Rosario2018_obs = [
 
 
 
-#masks = ['broad', 'strict','flux90_strict']
-masks = ['strict']
-# radii = [1, 1.5, 0.3]
-radii = [1.5]
+masks = ['broad', 'strict','flux90_strict']
+# masks = ['broad']
+radii = [1, 1.5, 0.3]
+# radii = [1.5]
 
 for mask in masks:
     for R_kpc in radii:
         print(f"Running plots for mask={mask}, R_kpc={R_kpc}")
 
-    ############ CAS with stellar mass #############
+#     ############ CAS with stellar mass #############
 
-        plot_llama_property('log LH (L⊙)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LH (L⊙)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LH (L⊙)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LH (L⊙)','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LH (L⊙)','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+#         plot_llama_property('log LH (L⊙)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LH (L⊙)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LH (L⊙)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LH (L⊙)','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LH (L⊙)','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
 
-        # ############# CAS with Hubble Stage #############
+#         # ############# CAS with Hubble Stage #############
 
-        plot_llama_property('Hubble Stage', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Hubble Stage', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Hubble Stage', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Hubble Stage', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Hubble Stage','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
+#         plot_llama_property('Hubble Stage', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Hubble Stage', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Hubble Stage', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Hubble Stage', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Hubble Stage','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])#,exclude_names=['NGC 2775','NGC 4260','ESO 208-G021','NGC 5845','NGC 2992','NGC 1079','NGC 4388'])
 
-        # ############# CAS with X-ray luminosity #############
+#         # ############# CAS with X-ray luminosity #############
 
-        plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+#         plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
 
 
-        plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+#         plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
 
-        # using GB24 for concentration
+#         # using GB24 for concentration
 
         plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
 
-        # ############## CAS with eachother #############
+#         # ############## CAS with eachother #############
 
-        plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
-        plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
-        plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+#         plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+#         plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+#         plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
 
-        # ############## CAS with concentration #############
+#         # ############## CAS with concentration #############
 
-        plot_llama_property('Gini', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
-        plot_llama_property('Asymmetry', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
-        plot_llama_property('Smoothness', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
-        plot_llama_property('clumping_factor', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],nativey=True)
+#         plot_llama_property('Gini', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
+#         plot_llama_property('Asymmetry', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
+#         plot_llama_property('Smoothness', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
+#         plot_llama_property('clumping_factor', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],nativey=True)
 
-        # ############### CAS with resolution #############
+#         # ############### CAS with resolution #############
 
-        plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
-        plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Resolution (pc)', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None)
-        plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
-        plot_llama_property('Resolution (pc)', 'Resolution (pc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None)
+#         plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],res_comp=True,comb_llama=True)
+#         plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],res_comp=True,comb_llama=True)
+#         plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],res_comp=True,comb_llama=True)
+#         plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],res_comp=True,comb_llama=True)
+#         plot_llama_property('Resolution (pc)', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,res_comp=True,comb_llama=True)
+#         plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],res_comp=True,comb_llama=True)
 
-        # ############### CAS with Gas mass #############
+#         # ############### CAS with Gas mass #############
 
-        plot_llama_property('total_mass (M_sun)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)#,exclude_names=['NGC 1365'])
-        plot_llama_property('total_mass (M_sun)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('total_mass (M_sun)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('total_mass (M_sun)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1311','NGC 2775','NGC 4260'])
-        plot_llama_property('total_mass (M_sun)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+#         plot_llama_property('total_mass (M_sun)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)#,exclude_names=['NGC 1365'])
+#         plot_llama_property('total_mass (M_sun)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('total_mass (M_sun)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('total_mass (M_sun)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1311','NGC 2775','NGC 4260'])
+#         plot_llama_property('total_mass (M_sun)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
 
-        # ############### Clumping factor plot #############
+#         # ############### Clumping factor plot #############
 
-        plot_llama_property('area_weighted_sd','mass_weighted_sd',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Sigma.png',manual_limits=[0.5,5000,0.5,5000], truescale=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+#         plot_llama_property('area_weighted_sd','mass_weighted_sd',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Sigma.png',manual_limits=[0.5,5000,0.5,5000], truescale=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
 
-        # ############### CAS with Bar #############
+#         # ############### CAS with Bar #############
 
-        plot_llama_property('Bar', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
-        plot_llama_property('Bar', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Bar', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Bar', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-        plot_llama_property('Bar','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Bar', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
+#         plot_llama_property('Bar', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Bar', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Bar', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+#         plot_llama_property('Bar','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
 
-        ############## L'CO comparison with Ros18 #####################
+#         ############# L'CO comparison with Ros18 #####################
 
-        plot_llama_property('log L′ CO',"L'CO_JCMT (K km s pc2)",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logy=True,square=True,best_fit=True,mask=mask,R_kpc=R_kpc,exclude_names=None)
+#         plot_llama_property('log L′ CO',"L'CO_JCMT (K km s pc2)",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True, logy=True,square=True,best_fit=False,mask=mask,R_kpc=R_kpc,comb_llama=True, exclude_names=None,yhist=False)
 
 
-    ############## CAS WISDOM, PHANGS coplot   #############
+#     ############# CAS WISDOM, PHANGS coplot   #############
 
-        if R_kpc == 1.5:
-            plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True)
-            plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True)
-            plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True) 
+#         if R_kpc == 1.5:
+#             plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True)
+#             plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True)
+#             plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375'],use_aux=True) 
 
-            plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
-            plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
-            plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
+#             plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
+#             plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
+#             plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=['NGC 1375'])
 
-        plot_llama_property('log LX', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True,soloplot='AGN')
-        plot_llama_property('log LH (L⊙)', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True)
-        plot_llama_property('Axis Ratio', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True)
-        plot_llama_property('Concentration', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True,nativex=True)
+#         plot_llama_property('log LX', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True,soloplot='AGN')
+#         plot_llama_property('log LH (L⊙)', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True)
+#         plot_llama_property('Axis Ratio', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True)
+#         plot_llama_property('Concentration', 'cont_power_jy', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=None,mask=mask,R_kpc=R_kpc,exclude_names=None,use_aux=False,use_cont=True,nativex=True)
              
-        ###### compare on same axis ######
+#         ###### compare on same axis ######
 
-plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False, exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
-plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
-plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
-plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
-plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
-plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
+# plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False, exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
+# plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
+# plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
+# plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
+# plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
+# plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]])
 
-plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False, exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
-plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
-plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
-plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
-plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
-plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
+# plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False, exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
+# plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
+# plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
+# plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
+# plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
+# plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],comb_llama=True,compare=True,which_compare=[['strict','broad'],[1.5]])
 
 
 #         compare_masks = ['strict', 'broad','flux90_strict','flux90_broad','120pc_flux90_strict', '120pc_flux90_broad','120pc_strict', '120pc_broad']

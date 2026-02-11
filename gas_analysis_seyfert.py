@@ -896,7 +896,7 @@ def make_projected_region_mask(
 
 
 def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_exp=False):
-    mom0_file, emom0_file, outer_dir, subdir, output_dir, co32, rebin, PHANGS_mask, R_kpc, flux_mask = args
+    mom0_file, emom0_file, outer_dir, subdir, output_dir, co32, rebin, PHANGS_mask, R_kpc, flux_mask, res_comp = args
     file = mom0_file
     error_map_file = emom0_file
 
@@ -906,12 +906,23 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     name = base.split("_12m")[0]
 
-    if name not in ['NGC4254','ngc4254_phangs','NGC3351','ngc3351_phangs']:
-        return
+
+########## uncomment for flux conservation debugging #######################
+
+    # if name not in ['NGC4254','ngc4254_phangs','NGC3351','ngc3351_phangs']:
+    #     return
+    
+##############################################################################
+
+    if res_comp:
+        if name not in ['NGC3351','NGC4254','NGC6814','NGC7582','MCG630']: # these are the 5 highest resolution targets
+            return
+
 
     pair_names = []
 
-    if rebin == None:
+
+    if rebin == None and not res_comp:
     
         try:    
 
@@ -982,7 +993,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     beam_scales_pc = [beam_scale_pc]
     beam_scale_labels = [name]
 
-    if rebin is None:
+    if rebin is None and not res_comp:
 
         beam_scales_pc = [beam_scale_pc]
         beam_scale_labels = [name]
@@ -1028,8 +1039,17 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 beam_scales_pc.append(np.nan)
                 beam_scale_labels.append(pair_name_norm)
                 print(f"Failed to process pair {pair_name_norm}: {e}")
+    
+    elif res_comp:
+        n = 10
+        beam_scales_pc = np.linspace(beam_scale_pc,161.22,num=n)
+        beam_scale_labels = ['native']
+        for i in range(n-1):
+            beam_scale_labels.append(str(i+2))
 
     print(f"Beam scales (pc): {dict(zip(beam_scale_labels, beam_scales_pc))}")
+
+
 
 
     ####################### loop through matched pair resolutions #######################
@@ -1446,7 +1466,7 @@ def process_directory(
     mask='broad',
     R_kpc=1,
     flux_mask=False,
-    isolate=None
+    isolate=None, res_comp = False
 ):
     print(
         f"Processing directory: {outer_dir} "
@@ -1567,7 +1587,8 @@ def process_directory(
                 rebin,
                 mask,
                 R_kpc,
-                flux_mask
+                flux_mask,
+                res_comp
             )
         )
         meta_info.append((name, group, output_dir, manual_rebin))
@@ -1636,18 +1657,32 @@ def process_directory(
         outdir = os.path.join(base_output_dir, group)
         os.makedirs(outdir, exist_ok=True)
 
-        if rebin is not None:
-            outfile = (
-                f"gas_analysis_summary_{rebin}pc_"
-                f"{'flux90_' if flux_mask else ''}"
-                f"{mask}_{R_kpc}kpc.csv"
-            )
+        if not res_comp:
+            if rebin is not None:
+                outfile = (
+                    f"gas_analysis_summary_{rebin}pc_"
+                    f"{'flux90_' if flux_mask else ''}"
+                    f"{mask}_{R_kpc}kpc.csv"
+                )
+            else:
+                outfile = (
+                    f"gas_analysis_summary_"
+                    f"{'flux90_' if flux_mask else ''}"
+                    f"{mask}_{R_kpc}kpc.csv"
+                )
         else:
-            outfile = (
-                f"gas_analysis_summary_"
-                f"{'flux90_' if flux_mask else ''}"
-                f"{mask}_{R_kpc}kpc.csv"
-            )
+            if rebin is not None:
+                outfile = (
+                    f"gas_analysis_summary_{rebin}pc_"
+                    f"{'flux90_' if flux_mask else ''}"
+                    f"{mask}_{R_kpc}kpc_rescomp.csv"
+                )
+            else:
+                outfile = (
+                    f"gas_analysis_summary_"
+                    f"{'flux90_' if flux_mask else ''}"
+                    f"{mask}_{R_kpc}kpc_rescomp.csv"
+                )    
 
         outfile = os.path.join(outdir, outfile)
 
@@ -1772,13 +1807,15 @@ if __name__ == '__main__':
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
 
     # # CO(3-2)
@@ -1795,4 +1832,6 @@ if __name__ == '__main__':
 
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
