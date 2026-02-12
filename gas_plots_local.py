@@ -76,7 +76,29 @@ def normalize_name(col):
         .str.upper()
     )
 
-def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, use_gb21=False, soloplot=None, exclude_names=None, logx=False, logy=False,  #see archived_comp_samp_build for rebuilding PHANGS WIS SIM GB21
+def fit_concentration_50pc(df, 
+                           R_col='Resolution (pc)', 
+                           C_col='Concentration',
+                           R_sat=200,
+                           C_sat=0.081,
+                           R_target=50,
+                           extrapolate_hires=False):
+
+    R = df[R_col]
+    C = df[C_col]
+
+    C_fit = C + ((C_sat - C) / (R_sat - R)) * (R_target - R)
+
+    print(R)
+    print(C)
+    print(C_fit)
+    if extrapolate_hires:
+        return C_fit
+    else:
+        return C.where(R < R_target, C_fit)
+
+
+def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, use_gb21=False, soloplot=None, exclude_names=None, isolate_names=None, logx=False, logy=False,  #see archived_comp_samp_build for rebuilding PHANGS WIS SIM GB21
                         background_image=None, manual_limits=None, square=False, best_fit=False, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,
                         comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False, which_compare=None, use_aux=False, use_cont = False,nativex=False,nativey=False,
                         yhist=True,res_comp=False):
@@ -245,8 +267,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             x_inactive = merged_inactive_clean[x_column]
             y_inactive = merged_inactive_clean[y_column]
 
-        # --- Exclude names here ---
-            if exclude_names is not None:
+            # --- Exclude names here ---
+            if exclude_names is not None and isolate_names is None:
 
                 excluded_x = []
                 excluded_y = []
@@ -290,7 +312,48 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 inactive_bol = inactive_bol[
                     ~inactive_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
                 ]
+            elif isolate_names is not None:
 
+                excluded_x = []
+                excluded_y = []
+
+                isolate_norm = [n.strip().upper() for n in isolate_names]
+
+                # =======================
+                # AGN
+                # =======================
+
+                mask_keep_agn = merged_AGN_clean["Name_clean"].str.strip().str.upper().isin(isolate_norm)
+
+                # Collect the ones that will be removed (optional, mirrors your logic)
+                excluded_x.extend(x_agn[~mask_keep_agn])
+                excluded_y.extend(y_agn[~mask_keep_agn])
+
+                # =======================
+                # Inactive
+                # =======================
+
+                mask_keep_inactive = merged_inactive_clean["Name_clean"].str.strip().str.upper().isin(isolate_norm)
+
+                excluded_rows = merged_inactive_clean[~mask_keep_inactive]
+                excluded_x.extend(excluded_rows[x_column].dropna().tolist())
+                excluded_y.extend(excluded_rows[y_column].dropna().tolist())
+
+                # =======================
+                # Apply filtering (keep only isolate list)
+                # =======================
+
+                merged_AGN_clean = merged_AGN_clean[mask_keep_agn]
+
+                merged_inactive_clean = merged_inactive_clean[mask_keep_inactive]
+
+                agn_bol = agn_bol[
+                    agn_bol["Name_clean"].str.strip().str.upper().isin(isolate_norm)
+                ]
+
+                inactive_bol = inactive_bol[
+                    inactive_bol["Name_clean"].str.strip().str.upper().isin(isolate_norm)
+                ]
             for df in [merged_AGN_clean, merged_inactive_clean]:
 
                 df = (
@@ -414,9 +477,13 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             AGN_path = f"{base_AGN}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
             inactive_path = f"{base_inactive}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
 
-        else:
+        elif not res_comp:
             AGN_path = f"{base_AGN}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
             inactive_path = f"{base_inactive}/gas_analysis_summary_{mask}_{R_kpc}kpc.csv"
+
+        else:
+            AGN_path = f"{base_AGN}/gas_analysis_summary_{mask}_{R_kpc}kpc_rescomp.csv"
+            inactive_path = f"{base_inactive}/gas_analysis_summary_{mask}_{R_kpc}kpc_rescomp.csv"
 
         # ---- Final fallback checks ----
         if not os.path.exists(AGN_path):
@@ -547,7 +614,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
 
         # --- Exclude names here ---
-        if exclude_names is not None:
+        if exclude_names is not None and isolate_names is None:
 
             excluded_x = []
             excluded_y = []
@@ -591,6 +658,48 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             inactive_bol = inactive_bol[
                 ~inactive_bol["Name_clean"].str.strip().str.upper().isin(exclude_norm)
             ]
+        elif isolate_names is not None:
+
+            excluded_x = []
+            excluded_y = []
+
+            isolate_norm = [n.strip().upper() for n in isolate_names]
+
+            # =======================
+            # AGN
+            # =======================
+
+            mask_keep_agn = merged_AGN_clean["Name_clean"].str.strip().str.upper().isin(isolate_norm)
+
+            # Collect the ones that will be removed (optional, mirrors your logic)
+            excluded_x.extend(x_agn[~mask_keep_agn])
+            excluded_y.extend(y_agn[~mask_keep_agn])
+
+            # =======================
+            # Inactive
+            # =======================
+
+            mask_keep_inactive = merged_inactive_clean["Name_clean"].str.strip().str.upper().isin(isolate_norm)
+
+            excluded_rows = merged_inactive_clean[~mask_keep_inactive]
+            excluded_x.extend(excluded_rows[x_column].dropna().tolist())
+            excluded_y.extend(excluded_rows[y_column].dropna().tolist())
+
+            # =======================
+            # Apply filtering (keep only isolate list)
+            # =======================
+
+            merged_AGN_clean = merged_AGN_clean[mask_keep_agn]
+
+            merged_inactive_clean = merged_inactive_clean[mask_keep_inactive]
+
+            agn_bol = agn_bol[
+                agn_bol["Name_clean"].str.strip().str.upper().isin(isolate_norm)
+            ]
+
+            inactive_bol = inactive_bol[
+                inactive_bol["Name_clean"].str.strip().str.upper().isin(isolate_norm)
+            ]
 
         merged_AGN_clean_res = merged_AGN_clean.sort_values("Resolution (pc)", ascending=True)
         merged_AGN_clean_maxres = merged_AGN_clean_res.drop_duplicates(subset="Name_clean", keep="last")
@@ -619,7 +728,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             )
         
         merged_AGN_clean_minres = (
-            merged_AGN_clean_maxres
+            merged_AGN_clean_minres
             .replace([np.inf, -np.inf], np.nan)
             .infer_objects(copy=False)
             .dropna(subset=[x_column, y_column])
@@ -627,13 +736,16 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
 
         merged_inactive_clean_minres = (
-                merged_inactive_clean_maxres
+                merged_inactive_clean_minres
                 .replace([np.inf, -np.inf], np.nan)
                 .infer_objects(copy=False)
                 .dropna(subset=[x_column, y_column])
             )
         
         if nativex:
+            if x_column == 'Concentration':
+                merged_AGN_clean_minres[x_column] = fit_concentration_50pc(merged_AGN_clean_minres,extrapolate_hires=True)
+                merged_inactive_clean_minres[x_column] = fit_concentration_50pc(merged_inactive_clean_minres,extrapolate_hires=True)
             x_agn = merged_AGN_clean_minres[x_column]
             x_inactive = merged_inactive_clean_minres[x_column]
         elif res_comp:
@@ -643,6 +755,9 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             x_agn = merged_AGN_clean_maxres[x_column]
             x_inactive = merged_inactive_clean_maxres[x_column]
         if nativey:
+            if y_column == 'Concentration':
+                merged_AGN_clean_minres[y_column] = fit_concentration_50pc(merged_AGN_clean_minres,extrapolate_hires=True)
+                merged_inactive_clean_minres[y_column] = fit_concentration_50pc(merged_inactive_clean_minres,extrapolate_hires=True)
             y_inactive = merged_inactive_clean_minres[y_column]
             y_agn = merged_AGN_clean_minres[y_column]
         elif res_comp:
@@ -1896,6 +2011,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 parts.append('_comb')
             if rebin is not None:
                 parts.append(f'_{rebin}pc')
+            if nativex is not None:
+                parts.append('_nativex')
+            if nativey is not None:
+                parts.append('_nativey')
             suffix = ''.join(parts)
 
             hist_x_path = (
@@ -2000,104 +2119,107 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             plt.close(fig)
 
             ############################## Matched-pairs difference histogram ##############################
+            if not res_comp:
+                diffs = []
+                valid_pairs = 0
 
-            diffs = []
-            valid_pairs = 0
+                df_pairs['Active Galaxy'] = normalize_name(df_pairs['Active Galaxy'])
+                df_pairs['Inactive Galaxy'] = normalize_name(df_pairs['Inactive Galaxy'])
 
-            df_pairs['Active Galaxy'] = normalize_name(df_pairs['Active Galaxy'])
-            df_pairs['Inactive Galaxy'] = normalize_name(df_pairs['Inactive Galaxy'])
+                for _, row in df_pairs.iterrows():
+                    agn_name = row["Active Galaxy"].strip()
+                    inactive_name = row["Inactive Galaxy"].strip()
 
-            for _, row in df_pairs.iterrows():
-                agn_name = row["Active Galaxy"].strip()
-                inactive_name = row["Inactive Galaxy"].strip()
+                    # Extract rows for each galaxy
+                    agn_rows = merged_AGN[merged_AGN["Name_clean"] == agn_name]
+                    inactive_rows = merged_inactive[merged_inactive["Name_clean"] == inactive_name]
 
-                # Extract rows for each galaxy
-                agn_rows = merged_AGN[merged_AGN["Name_clean"] == agn_name]
-                inactive_rows = merged_inactive[merged_inactive["Name_clean"] == inactive_name]
-
-                if agn_rows.empty or inactive_rows.empty:
-                    continue
-
-                # =========================
-                # NATIVE RESOLUTION MODE
-                # =========================
-                if nativey:
-
-                    # Select best (smallest) resolution row for each galaxy
-                    agn_row = (
-                        agn_rows
-                        .sort_values("Resolution (pc)")
-                        .iloc[0]
-                    )
-                    inactive_row = (
-                        inactive_rows
-                        .sort_values("Resolution (pc)")
-                        .iloc[0]
-                    )
-
-                    val_agn = agn_row[y_column]
-                    val_inactive = inactive_row[y_column]
-
-                    if not (np.isfinite(val_agn) and np.isfinite(val_inactive)):
+                    if agn_rows.empty or inactive_rows.empty:
                         continue
 
-                    diff = float(val_agn) - float(val_inactive)
-                    diffs.append(diff)
-                    valid_pairs += 1
+                    # =========================
+                    # NATIVE RESOLUTION MODE
+                    # =========================
+                    if nativey:
 
-                    continue  # move to next pair
+                        # Select best (smallest) resolution row for each galaxy
+                        agn_row = (
+                            agn_rows
+                            .sort_values("Resolution (pc)")
+                            .iloc[0]
+                        )
+                        inactive_row = (
+                            inactive_rows
+                            .sort_values("Resolution (pc)")
+                            .iloc[0]
+                        )
 
-                # =========================
-                # MATCHED RESOLUTION MODE
-                # =========================
-                for _, agn_row in agn_rows.iterrows():
-                    res_agn = agn_row["Resolution (pc)"]
-                    val_agn = agn_row[y_column]
+                        if y_column == 'Concentration':
+                            agn_row[y_column] = fit_concentration_50pc(agn_row,extrapolate_hires=True)
+                            inactive_row[y_column] = fit_concentration_50pc(inactive_row,extrapolate_hires=True)
+                        val_agn = agn_row[y_column]
+                        val_inactive = inactive_row[y_column]
 
-                    if not np.isfinite(val_agn):
-                        continue
+                        if not (np.isfinite(val_agn) and np.isfinite(val_inactive)):
+                            continue
 
-                    # Find inactive rows at the SAME resolution
-                    match_inactive = inactive_rows[
-                        inactive_rows["Resolution (pc)"] == res_agn
-                    ]
+                        diff = float(val_agn) - float(val_inactive)
+                        diffs.append(diff)
+                        valid_pairs += 1
 
-                    if match_inactive.empty:
-                        continue
+                        continue  # move to next pair
 
-                    inactive_row = match_inactive.iloc[0]
-                    val_inactive = inactive_row[y_column]
+                    # =========================
+                    # MATCHED RESOLUTION MODE
+                    # =========================
+                    for _, agn_row in agn_rows.iterrows():
+                        res_agn = agn_row["Resolution (pc)"]
+                        val_agn = agn_row[y_column]
 
-                    if not np.isfinite(val_inactive):
-                        continue
+                        if not np.isfinite(val_agn):
+                            continue
 
-                    diff = float(val_agn) - float(val_inactive)
-                    diffs.append(diff)
-                    valid_pairs += 1
+                        # Find inactive rows at the SAME resolution
+                        match_inactive = inactive_rows[
+                            inactive_rows["Resolution (pc)"] == res_agn
+                        ]
 
-                    # Stop after first valid match for this pair
-                    break
+                        if match_inactive.empty:
+                            continue
 
-            diffs = np.asarray(diffs)
-            diffs = diffs[np.isfinite(diffs)]
+                        inactive_row = match_inactive.iloc[0]
+                        val_inactive = inactive_row[y_column]
 
-            fig, ax = plt.subplots(figsize=(8, 5))
-            ax.hist(diffs, bins=10, color="grey", alpha=0.4, edgecolor="black")
-            ax.axvline(np.median(diffs), color="red", linestyle="--", label=f"Median = {np.median(diffs):.2f}")
-            ax.axvline(np.percentile(diffs,25), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,25):.2f}")
-            ax.axvline(np.percentile(diffs,75), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,75):.2f}")
-            ax.axvline(0, color="black", linestyle="solid")  # reference line
+                        if not np.isfinite(val_inactive):
+                            continue
 
-            ax.set_xlabel(f"Δ {y_column} (AGN - Inactive)")
-            ax.set_ylabel("Number of pairs")
-            # ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
-            ax.legend()
-            outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{mask}_{R_kpc}kpc/'
-            os.makedirs(outputdir, exist_ok=True)
-            output_path = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{mask}_{R_kpc}kpc/{y_column}_pair_differences.png'
-            plt.savefig(output_path)
-            print(f"Saved matched-pairs plot to: {output_path}")
-            plt.close(fig)
+                        diff = float(val_agn) - float(val_inactive)
+                        diffs.append(diff)
+                        valid_pairs += 1
+
+                        # Stop after first valid match for this pair
+                        break
+
+                diffs = np.asarray(diffs)
+                diffs = diffs[np.isfinite(diffs)]
+
+                fig, ax = plt.subplots(figsize=(8, 5))
+                ax.hist(diffs, bins=10, color="grey", alpha=0.4, edgecolor="black")
+                ax.axvline(np.median(diffs), color="red", linestyle="--", label=f"Median = {np.median(diffs):.2f}")
+                ax.axvline(np.percentile(diffs,25), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,25):.2f}")
+                ax.axvline(np.percentile(diffs,75), color="blue", linestyle="--", label=f"Lower quartile = {np.percentile(diffs,75):.2f}")
+                ax.axvline(0, color="black", linestyle="solid")  # reference line
+
+                ax.set_xlabel(f"Δ {y_column} (AGN - Inactive)")
+                ax.set_ylabel("Number of pairs")
+                # ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
+                ax.legend()
+                outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{mask}_{R_kpc}kpc/'
+                os.makedirs(outputdir, exist_ok=True)
+                output_path = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{mask}_{R_kpc}kpc/{y_column}_pair_differences.png'
+                plt.savefig(output_path)
+                print(f"Saved matched-pairs plot to: {output_path}")
+                plt.close(fig)
 
 ########################################## Categorical X or Y axis handling ##########################################
 
@@ -2697,10 +2819,10 @@ Rosario2018_obs = [
 
 
 
-masks = ['broad', 'strict','flux90_strict']
-# masks = ['broad']
-radii = [1, 1.5, 0.3]
-# radii = [1.5]
+# masks = ['broad', 'strict','flux90_strict']
+masks = ['strict','broad']
+# radii = [1, 1.5, 0.3]
+radii = [1.5]
 
 for mask in masks:
     for R_kpc in radii:
@@ -2724,11 +2846,11 @@ for mask in masks:
 
 #         # ############# CAS with X-ray luminosity #############
 
-#         plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-#         plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-#         plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-#         plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-#         plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+        # plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+        # plot_llama_property('log LX', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+        # plot_llama_property('log LX', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+        # plot_llama_property('log LX','clumping_factor',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
 
 
 #         plot_llama_property('log LX', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot='inactive',mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
@@ -2741,14 +2863,15 @@ for mask in masks:
 
         plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],nativey=True)
 
+
 #         # ############## CAS with eachother #############
 
-#         plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-#         plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-#         plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
-#         plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
-#         plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
-#         plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+        # plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+        # plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+        # plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'])
+        # plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+        # plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+        # plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
 
 #         # ############## CAS with concentration #############
 
@@ -2759,12 +2882,11 @@ for mask in masks:
 
 #         # ############### CAS with resolution #############
 
-#         plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],res_comp=True,comb_llama=True)
-#         plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],res_comp=True,comb_llama=True)
-#         plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],res_comp=True,comb_llama=True)
-#         plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'],res_comp=True,comb_llama=True)
-#         plot_llama_property('Resolution (pc)', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,res_comp=True,comb_llama=True)
-#         plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'],res_comp=True,comb_llama=True)
+        # plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True)
+        # plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True)
+        # plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True)
+        # plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True)
+        # plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True)
 
 #         # ############### CAS with Gas mass #############
 
