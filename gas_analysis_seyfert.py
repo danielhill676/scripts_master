@@ -778,33 +778,60 @@ def resolve_galaxy_beam_scale(
 
     # ---- metadata resolution ----
     if not needs_extended:
-        Ned_table = query_ned_with_retries(ned_name)
-        RA = Ned_table['RA'][0]
-        DEC = Ned_table['DEC'][0]
-
         # Special replacements:
         if base_name == 'NGC2992':
             RA = 146.42476
             DEC = -14.326274
-        if base_name == 'NGC1365':
+        elif base_name == 'NGC1365':
             RA = 53.401542
             DEC = -36.14039
         # GB24 replacements
-        if base_name == 'NGC7582':
+        elif base_name == 'NGC7582':
             RA = (23+18/60+23.643/3600)*360/24
             DEC = - (42 + 22/60 + 13.54/3600)
-        if base_name == 'NGC7213':
+        elif base_name == 'NGC7213':
             RA = (22+9/60+16.209/3600)*360/24
             DEC = - (47 + 10/60 + 0.12/3600)
-        if base_name == 'NGC3081':
+        elif base_name == 'NGC3081':
             RA = (9+59/60+29.546/3600)*360/24
             DEC = - (22 + 49/60 + 34.78/3600)
-        if base_name == 'NGC4388':
+        elif base_name == 'NGC4388':
             RA = (12+25/60+46.781/3600)*360/24
-            DEC = - (12 + 49/60 + 43.75/3600)
-        if base_name == 'NGC3351' or 'ngc3351_phangs':
+            DEC = + (12 + 39/60 + 43.75/3600)
+        elif base_name == 'NGC2110':
+            RA = (5+52/60+11.377/3600)*360/24
+            DEC = - (7 + 27/60 + 22.48/3600)
+        elif base_name in ['NGC7172','NGC7172_wis']:
+            RA = (22+2/60+1.891/3600)*360/24
+            DEC = - (31 + 52/60 + 10.48/3600)
+        elif base_name == 'NGC4593':
+            RA = (12+39/60+39.444/3600)*360/24
+            DEC = - (5 + 20/60 + 39.03/3600)
+        elif base_name == 'NGC6814':
+            RA = (19+42/60+40.587/3600)*360/24 
+            DEC = - (10 + 19/60 + 25.10/3600) 
+        elif base_name == 'NGC5506':
+             RA = (14+13/60+14.878/3600)*360/24
+             DEC = - (3 + 12/60 + 27.66/3600)
+        elif base_name in ['NGC1365','ngc1365_phangs']:
+            RA = (3+33/60+36.638/3600)*360/24
+            DEC = - (36 + 8/60 + 25.50/3600)
+        elif base_name =='NGC1365':
+            RA = (3+33/60+36.638/3600)*360/24
+            DEC = - (36 + 8/60 + 25.50/3600)
+        elif base_name == 'NGC5728':
+            RA = (14+42/60+23.84/3600)*360/24
+            DEC = - (17 + 15/60 + 11.7/3600)
+        elif base_name == 'NGC2992':
+            RA = (9+45/60+41.943/3600)*360/24
+            DEC = - (14 + 19/60 + 34.57/3600)
+        elif base_name in ['NGC3351', 'ngc3351_phangs']:
             RA = (10+43/60+57.731/3600)*360/24
-            DEC = - (11 + 42/60 + 13.35/3600)
+            DEC = + (11 + 42/60 + 13.35/3600)
+        else:
+            Ned_table = query_ned_with_retries(ned_name)
+            RA = Ned_table['RA'][0]
+            DEC = Ned_table['DEC'][0]
 
         try:
             D_Mpc = llamatab[llamatab['id'] == base_name]['D [Mpc]'][0]
@@ -932,8 +959,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 ########## uncomment for GB24 sample #######################
 
-    if name not in ['NGC7582','NGC3081','NGC4388','NGC7213','NGC3351']:
-        return
+    # if name not in ['NGC4388', 'NGC1365', 'NGC7213', 'NGC7582', 'NGC6814', 'NGC5506', 'NGC3351', 'NGC2110', 'NGC7172', 'NGC2992', 'NGC3081', 'NGC4593', 'NGC5728']:
+    #     return
     
 ##############################################################################
 
@@ -1015,6 +1042,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     beam_scales_pc = [beam_scale_pc]
     beam_scale_labels = [name]
+
+    print(RA,DEC)
 
     if rebin is None and not res_comp:
 
@@ -1822,14 +1851,14 @@ llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format=
 if __name__ == '__main__':
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
     base_output_dir = '/data/c3040163/llama/alma/gas_analysis_results'
-    isolate = 'conc'
+    isolate = None
 
     # CO(2-1)
     print("Starting CO(2-1) analysis...")
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
@@ -1844,8 +1873,8 @@ if __name__ == '__main__':
     # # CO(3-2)
     co32 = True
     print("Starting CO(3-2) analysis...")
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
