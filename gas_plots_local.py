@@ -84,11 +84,19 @@ def clean_df(df, cols):
     )
 
 def align_xy(df_x, df_y, x_col, y_col):
-    merged = df_x[["Name_clean", x_col]].merge(
-        df_y[["Name_clean", y_col]],
-        on="Name_clean",
-        how="inner"
-    )
+    try:
+        merged = df_x[["Name_clean", x_col]].merge(
+            df_y[["Name_clean", y_col]],
+            on="Name_clean",
+            how="inner"
+        )
+    except:
+        merged = df_x[["Galaxy_clean", x_col]].merge(
+            df_y[["Galaxy_clean", y_col]],
+            left_on="Galaxy_clean",
+            right_on="Galaxy_clean",
+            how="inner"
+        )
     return merged
 
 
@@ -127,10 +135,35 @@ def apply_native_concentration(df, column):
     return df
 
 
+def build_ratio_vector(
+    names,                  # array of Name_clean used in plotting
+    ref_df,                 # dataframe to divide by
+    ref_column,             # column to divide by
+    name_column="Galaxy_clean",
+    aux_mode=False
+):
+    """
+    Returns an array aligned to `names` containing the matched reference values.
+    Missing matches return np.nan.
+    """
+
+    if aux_mode:
+        # Apply special aux normalization
+        ref_df = ref_df.copy()
+        ref_df[name_column] = ref_df[name_column].apply(
+            lambda name: normalize_name(name.rsplit("_", 1)[0].upper())
+        )
+
+    lookup = ref_df.set_index(name_column)[ref_column]
+
+    matched = lookup.reindex(names)  # safe alignment
+    return matched.values
+
+
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, use_gb21=False, soloplot=None, exclude_names=None, isolate_names=None, logx=False, logy=False,  #see archived_comp_samp_build for rebuilding PHANGS WIS SIM GB21
                         background_image=None, manual_limits=None, square=False, best_fit=False, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,
                         comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False, which_compare=None, use_aux=False, use_cont = False,nativex=False,nativey=False,
-                        yhist=True,res_comp=False):
+                        yhist=True,res_comp=False,rebinx=None,rebiny=None, maskx=None, masky=None, R_kpcx=None, R_kpcy=None, ratiox = None, ratioy = None):
     """possible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -444,8 +477,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             names_inactive = merged_inactive_clean["Name_clean"].str.replace(" ", "", regex=False).values
 
-
-
             x_comb = pd.concat([x_agn.dropna(), x_inactive.dropna()])
             y_comb = pd.concat([y_agn.dropna(), y_inactive.dropna()])
             xerr_comb = pd.concat([pd.Series(xerr_agn).dropna(), pd.Series(xerr_inactive).dropna()])
@@ -507,6 +538,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
     if not compare:
 
+        
+
         # Handle all filename logic
         if rebin is not None and mask is not None:
             AGN_path = f"{base_AGN}/gas_analysis_summary_{rebin}pc_{mask}_{R_kpc}kpc.csv"
@@ -531,10 +564,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
         # ---- Load files ----
         fit_data_AGN = pd.read_csv(AGN_path)
-
-        print('fit data AGN') ## DELETE
-        display(fit_data_AGN)
-
         fit_data_inactive = pd.read_csv(inactive_path)
         if use_aux:
             if rebin is not None and mask is not None:
@@ -546,6 +575,83 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 use_aux = False
             if use_aux:
                 fit_data_aux = pd.read_csv(aux_path)
+
+
+        rebinx  = rebin  if rebinx  is None else rebinx
+        maskx   = mask   if maskx   is None else maskx
+        R_kpcx  = R_kpc  if R_kpcx  is None else R_kpcx
+
+        rebiny  = rebin  if rebiny  is None else rebiny
+        masky   = mask   if masky   is None else masky
+        R_kpcy  = R_kpc  if R_kpcy  is None else R_kpcy
+
+        if rebinx is not None and maskx is not None and R_kpcx is not None:
+            fit_data_AGN_x = pd.read_csv(f"{base_AGN}/gas_analysis_summary_{rebinx}pc_{maskx}_{R_kpcx}kpc.csv")
+            fit_data_inactive_x = pd.read_csv(f"{base_inactive}/gas_analysis_summary_{rebinx}pc_{maskx}_{R_kpcx}kpc.csv")
+            fit_data_aux_x = pd.read_csv(f"{base_aux}/gas_analysis_summary_{rebinx}pc_{maskx}_{R_kpcx}kpc.csv") if use_aux else None
+        elif not res_comp:
+            fit_data_AGN_x = pd.read_csv(f"{base_AGN}/gas_analysis_summary_{maskx}_{R_kpcx}kpc.csv")
+            fit_data_inactive_x = pd.read_csv(f"{base_inactive}/gas_analysis_summary_{maskx}_{R_kpcx}kpc.csv")
+            fit_data_aux_x = pd.read_csv(f"{base_aux}/gas_analysis_summary_{maskx}_{R_kpcx}kpc.csv") if use_aux else None
+        else:
+            fit_data_AGN_x = pd.read_csv(f"{base_AGN}/gas_analysis_summary_{maskx}_{R_kpcx}kpc_rescomp.csv")
+            fit_data_inactive_x = pd.read_csv(f"{base_inactive}/gas_analysis_summary_{maskx}_{R_kpcx}kpc_rescomp.csv")
+            fit_data_aux_x = pd.read_csv(f"{base_aux}/gas_analysis_summary_{maskx}_{R_kpcx}kpc_rescomp.csv") if use_aux else None
+
+        if rebiny is not None and masky is not None and R_kpcy is not None:
+            fit_data_AGN_y = pd.read_csv(f"{base_AGN}/gas_analysis_summary_{rebiny}pc_{masky}_{R_kpcy}kpc.csv")
+            fit_data_inactive_y = pd.read_csv(f"{base_inactive}/gas_analysis_summary_{rebiny}pc_{masky}_{R_kpcy}kpc.csv")
+            fit_data_aux_y = pd.read_csv(f"{base_aux}/gas_analysis_summary_{rebiny}pc_{masky}_{R_kpcy}kpc.csv") if use_aux else None
+        elif not res_comp:
+            fit_data_AGN_y = pd.read_csv(f"{base_AGN}/gas_analysis_summary_{masky}_{R_kpcy}kpc.csv")
+            fit_data_inactive_y = pd.read_csv(f"{base_inactive}/gas_analysis_summary_{masky}_{R_kpcy}kpc.csv")
+            fit_data_aux_y = pd.read_csv(f"{base_aux}/gas_analysis_summary_{masky}_{R_kpcy}kpc.csv") if use_aux else None
+        else:
+            fit_data_AGN_y = pd.read_csv(f"{base_AGN}/gas_analysis_summary_{masky}_{R_kpcy}kpc_rescomp.csv")
+            fit_data_inactive_y = pd.read_csv(f"{base_inactive}/gas_analysis_summary_{masky}_{R_kpcy}kpc_rescomp.csv")
+            fit_data_aux_y = pd.read_csv(f"{base_aux}/gas_analysis_summary_{masky}_{R_kpcy}kpc_rescomp.csv") if use_aux else None
+                
+
+        if any(x is not None for x in [rebinx, maskx, R_kpcx]):
+            # Merge on 'Galaxy' so that every row in main dataset gets the matching x_column
+            fit_data_AGN = fit_data_AGN.drop(columns=[x_column], errors='ignore').merge(
+                fit_data_AGN_x[['Galaxy', x_column]],
+                on='Galaxy',
+                how='left'
+            )
+            fit_data_inactive = fit_data_inactive.drop(columns=[x_column], errors='ignore').merge(
+                fit_data_inactive_x[['Galaxy', x_column]],
+                on='Galaxy',
+                how='left'
+            )
+            if use_aux:
+                fit_data_aux = fit_data_aux.drop(columns=[x_column], errors='ignore').merge(
+                    fit_data_aux_x[['Galaxy', x_column]],
+                    on='Galaxy',
+                    how='left'
+                )
+
+        if any(y is not None for y in [rebiny, masky, R_kpcy]):
+            # Merge on 'Galaxy' so that every row in main dataset gets the matching y_column
+            fit_data_AGN = fit_data_AGN.drop(columns=[y_column], errors='ignore').merge(
+                fit_data_AGN_y[['Galaxy', y_column]],
+                on='Galaxy',
+                how='left'
+            )
+            fit_data_inactive = fit_data_inactive.drop(columns=[y_column], errors='ignore').merge(
+                fit_data_inactive_y[['Galaxy', y_column]],
+                on='Galaxy',
+                how='left'
+            )
+            if use_aux:
+                fit_data_aux = fit_data_aux.drop(columns=[y_column], errors='ignore').merge(
+                    fit_data_aux_y[['Galaxy', y_column]],
+                    on='Galaxy',
+                    how='left'
+                )
+
+
+
         if use_cont:
 
             cont_AGN_path = f"{base_cont_AGN}/cont_analysis_summary_{R_kpc}kpc.csv"
@@ -566,7 +672,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 cont_data_inactive_clean = cont_data_inactive.drop(columns=list(overlap))
                 fit_data_inactive = pd.merge(fit_data_inactive, cont_data_inactive_clean, left_on='Galaxy', right_on='Galaxy',how='left')
             else:
-                print(f"WARNING: {cont_inactive_path} not found")
+                print(f"WARNING: {cont_inactive_path} not found")        
 
         df_combined['Name_clean'] = normalize_name(df_combined['Name'])
         llamatab['name_clean'] = normalize_name(llamatab['name'])
@@ -648,15 +754,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
         y_inactive = merged_inactive_clean[y_column]
         y_agn = merged_AGN_clean[y_column]
-
-        print(' -------------- after merging and cleaning: -------------')
-        print(x_column)
-        display(x_agn)
-        print(y_column)
-        display(y_agn)
-
-
-
 
         # --- Exclude names here ---
         if exclude_names is not None and isolate_names is None:
@@ -748,8 +845,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
         if use_aux:
             fit_data_aux_res = fit_data_aux.sort_values("Resolution (pc)", ascending=True)
-            fit_data_aux_maxres = fit_data_aux_res.drop_duplicates(subset="Name_clean", keep="last")
-            fit_data_aux_minres = fit_data_aux_res.drop_duplicates(subset="Name_clean", keep="first")
+            fit_data_aux_maxres = fit_data_aux_res.drop_duplicates(subset="Galaxy", keep="last")
+            fit_data_aux_minres = fit_data_aux_res.drop_duplicates(subset="Galaxy", keep="first")
 
         merged_AGN_clean_res = merged_AGN_clean.sort_values("Resolution (pc)", ascending=True)
         merged_AGN_clean_maxres = merged_AGN_clean_res.drop_duplicates(subset="Name_clean", keep="last")
@@ -835,14 +932,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if use_aux:
                 df_y_aux = apply_native_concentration(df_y_aux, y_column)
 
-        print('----------------after selecting resolution-------------------\n')
-
-        print(x_column)
-        display(df_x_agn)
-        print(y_column)
-        display(df_y_agn)
-        print('names')
-
 
         if res_comp:
             agn_plot = df_x_agn.copy()
@@ -863,14 +952,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         yerr_agn = get_errorbars(agn_plot, y_column)
         names_agn = agn_plot["Name_clean"].str.replace(" ", "", regex=False).values
 
-        print('----------------after align XY-------------------\n')
-        print(x_column)
-        display(x_agn)
-        print(y_column)
-        display(y_agn)
-        print('names')
-        display(names_agn)
-
         x_inactive = inactive_plot[x_column]
         y_inactive = inactive_plot[y_column]
         xerr_inactive = get_errorbars(inactive_plot, x_column)
@@ -882,7 +963,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             y_aux = aux_plot[y_column]
             xerr_aux = get_errorbars(aux_plot, x_column)
             yerr_aux = get_errorbars(aux_plot, y_column)
-            names_aux = aux_plot["Galaxy"].values
+            names_aux = aux_plot["Galaxy_clean"].values
         else:
             x_aux = y_aux = xerr_aux = yerr_aux = names_aux = None
 
@@ -1193,6 +1274,9 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if soloplot in (None, 'inactive'):
                 data_x.append(x_inactive)
                 data_y.append(y_inactive)
+            if use_aux:
+                data_x.append(x_aux)
+                data_y.append(y_aux)
             if soloplot is None and use_gb21:
                 data_x.append(x_gb21)
                 data_y.append(y_gb21)
@@ -1632,15 +1716,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 marker_AGN = 'o'
                 marker_inactive = 'o'
 
-
-            print('------------- before plotting -------------\n')
-            print(x_column)
-            display(x_agn)
-            print(y_column)
-            display(y_agn)
-            print('names')
-            display(names_agn)
-
             if soloplot in (None, 'AGN'):
                 ax_scatter.errorbar(
                     x_agn, y_agn,
@@ -2003,7 +2078,12 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             suffix = ''.join(parts)
             hist_path = (
                 f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/"
-                f"histograms/{mask}_{R_kpc}kpc/{suffix}_hist_{y_column}.png"
+                f"histograms/{masky}_{R_kpcy}kpc/{suffix}_hist_{y_column}.png"
+            )
+            if y_column =="flux (Jy km/s)":
+                    hist_path = (
+                f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/"
+                f"histograms/{masky}_{R_kpcy}kpc/{suffix}_hist_fluxjykms.png"
             )
 
             plt.tight_layout()
@@ -2022,7 +2102,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
         ############################### Standalone X histogram ###############################
 
-            hist_dir = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/histograms/{mask}_{R_kpc}kpc/"
+            hist_dir = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/histograms/{maskx}_{R_kpcx}kpc/"
             os.makedirs(hist_dir, exist_ok=True)
 
             fig_hist_x, ax_hist_x = plt.subplots(figsize=(6, 4))
@@ -2150,7 +2230,12 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             hist_x_path = (
                 f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/"
-                f"histograms/{mask}_{R_kpc}kpc/{suffix}_hist_{x_column}.png"
+                f"histograms/{maskx}_{R_kpcx}kpc/{suffix}_hist_{x_column}.png"
+            )
+            if x_column =="flux (Jy km/s)":
+                hist_x_path = (
+                f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/"
+                f"histograms/{maskx}_{R_kpcx}kpc/{suffix}_hist_fluxjykms.png"
             )
 
             plt.tight_layout()
@@ -2248,6 +2333,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             output_path = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/{mask}_{R_kpc}kpc/{suffix}_{x_column}_vs_{y_column}.png'
             if x_column == 'log L′ CO':
                 output_path = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/{mask}_{R_kpc}kpc/{suffix}_LCO_singledish_vs_LCO_ALMA.png'
+            if y_column =="flux (Jy km/s)":
+                output_path = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/{mask}_{R_kpc}kpc/{suffix}_{x_column}_vs_fluxjykms.png'
+            if x_column =="flux (Jy km/s)":
+                output_path = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/{mask}_{R_kpc}kpc/{suffix}_fluxjykms_vs_{y_column}.png'
 
             plt.savefig(output_path)
             print(f"Saved plot to: {output_path}")
@@ -2349,9 +2438,11 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ax.set_ylabel("Number of pairs")
                 # ax.set_title(f"Distribution of {y_column} differences across matched pairs\n(N={valid_pairs})")
                 ax.legend()
-                outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{mask}_{R_kpc}kpc/'
+                outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{masky}_{R_kpcy}kpc/'
                 os.makedirs(outputdir, exist_ok=True)
-                output_path = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{mask}_{R_kpc}kpc/{y_column}_pair_differences.png'
+                output_path = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{masky}_{R_kpcy}kpc/{y_column}_pair_differences.png'
+                if y_column =="flux (Jy km/s)":
+                    output_path = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{masky}_{R_kpcy}kpc/fluxjykms_pair_differences.png'
                 plt.savefig(output_path)
                 print(f"Saved matched-pairs plot to: {output_path}")
                 plt.close(fig)
@@ -3026,11 +3117,11 @@ for mask in masks:
 
 #         # ############### CAS with resolution #############
 
-        plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
-        plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
-        plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
-        plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
-        plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        # plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        # plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        # plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        # plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        # plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
 
 #         # ############### CAS with Gas mass #############
 
@@ -3055,6 +3146,10 @@ for mask in masks:
 #         ############# L'CO comparison with Ros18 #####################
 
 #         plot_llama_property('log L′ CO',"L'CO_JCMT (K km s pc2)",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True, logy=True,square=True,best_fit=False,mask=mask,R_kpc=R_kpc,comb_llama=True, exclude_names=None,yhist=False)
+
+        ############# Flux (jy) comparison with extra arrays (aux) #####################
+
+        plot_llama_property('flux (Jy km/s)',"Asymmetry",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,comb_llama=False, use_aux=True, nativex=True, isolate_names=['NGC 3351','NGC 4254','NGC 1365'], yhist=False, rebiny=120)
 
 
 #     ############# CAS WISDOM, PHANGS coplot   #############
