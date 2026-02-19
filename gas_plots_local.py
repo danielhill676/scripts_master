@@ -159,11 +159,20 @@ def build_ratio_vector(
     matched = lookup.reindex(names)  # safe alignment
     return matched.values
 
+def _keep_highest_resolution(df):
+    if 'Resolution (pc)' not in df.columns:
+        return df  # fail-safe
+
+    return (
+        df.sort_values('Resolution (pc)', ascending=False)
+          .drop_duplicates(subset='Galaxy', keep='first')
+    )
+
 
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, use_gb21=False, soloplot=None, exclude_names=None, isolate_names=None, logx=False, logy=False,  #see archived_comp_samp_build for rebuilding PHANGS WIS SIM GB21
                         background_image=None, manual_limits=None, square=False, best_fit=False, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False,
                         comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False, which_compare=None, use_aux=False, use_cont = False,nativex=False,nativey=False,
-                        yhist=True,res_comp=False,rebinx=None,rebiny=None, maskx=None, masky=None, R_kpcx=None, R_kpcy=None, ratiox = None, ratioy = None):
+                        yhist=True,res_comp=False,rebinx=None,rebiny=None, maskx=None, masky=None, R_kpcx=None, R_kpcy=None, ratiox = None, ratioy = None, force_names=False, x_ref=None, y_ref=None):
     """possible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -611,6 +620,18 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             fit_data_inactive_y = pd.read_csv(f"{base_inactive}/gas_analysis_summary_{masky}_{R_kpcy}kpc_rescomp.csv")
             fit_data_aux_y = pd.read_csv(f"{base_aux}/gas_analysis_summary_{masky}_{R_kpcy}kpc_rescomp.csv") if use_aux else None
                 
+        if rebinx is not None:
+            fit_data_AGN_x = _keep_highest_resolution(fit_data_AGN_x)
+            fit_data_inactive_x = _keep_highest_resolution(fit_data_inactive_x)
+            if use_aux:
+                fit_data_aux_x = _keep_highest_resolution(fit_data_aux_x)
+
+        if rebiny is not None:
+            fit_data_AGN_y = _keep_highest_resolution(fit_data_AGN_y)
+            fit_data_inactive_y = _keep_highest_resolution(fit_data_inactive_y)
+            if use_aux:
+                fit_data_aux_y = _keep_highest_resolution(fit_data_aux_y)
+
 
         if any(x is not None for x in [rebinx, maskx, R_kpcx]):
             # Merge on 'Galaxy' so that every row in main dataset gets the matching x_column
@@ -631,6 +652,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     how='left'
                 )
 
+
         if any(y is not None for y in [rebiny, masky, R_kpcy]):
             # Merge on 'Galaxy' so that every row in main dataset gets the matching y_column
             fit_data_AGN = fit_data_AGN.drop(columns=[y_column], errors='ignore').merge(
@@ -649,6 +671,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     on='Galaxy',
                     how='left'
                 )
+
+
 
 
 
@@ -1009,6 +1033,83 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             y_sim = sim_clean[y_column]
             names_sim = sim_clean["Name"].values
 
+
+            #################################### Ratio handling #############################################
+
+        def _build_ratio_lookup(df, value_col, name_col, aux_mode=False):
+            """
+            Returns a Series indexed by normalized galaxy name.
+            Compatible with vectorised normalize_name().
+            """
+            df = df.copy()
+
+            if aux_mode:
+                # Strip suffix before normalization (vectorised)
+                base_names = df[name_col].str.rsplit("_", n=1).str[0].str.upper()
+                df["_norm_name"] = normalize_name(base_names)
+            else:
+                df["_norm_name"] = normalize_name(df[name_col])
+
+            return df.set_index("_norm_name")[value_col]
+
+
+        def _apply_ratio(values, names, ref_lookup):
+            """
+            Align names vectorised and divide safely.
+            """
+            norm_names = normalize_name(pd.Series(names))
+            ref_vals = ref_lookup.reindex(norm_names)
+
+            return values / ref_vals.values
+
+
+        def _get_ratio_reference(ratio_key):
+            if ratio_key == 'aux' and use_aux:
+                return fit_data_aux, "Galaxy", True
+            elif ratio_key == 'wis' and use_wis:
+                return wis_clean, "Name", False
+            elif ratio_key == 'gb21' and use_gb21:
+                return GB21_clean, "Name", False
+            elif ratio_key == 'phangs' and use_phangs:
+                return phangs_clean, "Name", False
+            elif ratio_key == 'sim' and use_sim:
+                return sim_clean, "Name", False
+            else:
+                return None, None, False
+
+
+
+        # ---------------- X ratio ----------------
+        if ratiox is not None:
+            ref_df, ref_name_col, aux_mode = _get_ratio_reference(ratiox)
+
+            if ref_df is not None:
+                ref_lookup = _build_ratio_lookup(ref_df, x_column, ref_name_col, aux_mode)
+
+                x_agn = _apply_ratio(x_agn, names_agn, ref_lookup)
+                x_inactive = _apply_ratio(x_inactive, names_inactive, ref_lookup)
+
+                if use_aux and x_aux is not None:
+                    x_aux = _apply_ratio(x_aux, names_aux, ref_lookup)
+
+
+        # ---------------- Y ratio ----------------
+        if ratioy is not None:
+            ref_df, ref_name_col, aux_mode = _get_ratio_reference(ratioy)
+
+            if ref_df is not None:
+                ref_lookup = _build_ratio_lookup(ref_df, y_column, ref_name_col, aux_mode)
+
+                y_agn = _apply_ratio(y_agn, names_agn, ref_lookup)
+                y_inactive = _apply_ratio(y_inactive, names_inactive, ref_lookup)
+
+                if use_aux and y_aux is not None:
+                    y_aux = _apply_ratio(y_aux, names_aux, ref_lookup)
+
+
+
+        ###############################################################################################
+
         ############################################################ Special handling for L' CO comparison with ROS+18 ############################################################
 
         if x_column == 'log L′ CO':
@@ -1205,8 +1306,12 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     return None, None
                 if x is None or y is None or len(x) < 3 or len(y) < 3:
                     return None, None
-                rho, p = spearmanr(x, y, nan_policy='omit')
-                return float(rho), float(p)
+                try:
+                    rho, p = spearmanr(x, y, nan_policy='omit')
+                    return float(rho), float(p)
+                except Exception as e:
+                    print(f"Error computing Spearman correlation: {e}")
+                    return None, None
 
             # Compute spearman values for each group
             rho_agn, p_agn = safe_spearman(x_agn, y_agn, True)
@@ -1274,21 +1379,25 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if soloplot in (None, 'inactive'):
                 data_x.append(x_inactive)
                 data_y.append(y_inactive)
-            if use_aux:
+            if use_aux and ratiox != 'aux' and ratioy != 'aux': 
                 data_x.append(x_aux)
                 data_y.append(y_aux)
-            if soloplot is None and use_gb21:
+            if soloplot is None and use_gb21 and ratiox != 'gb21' and ratioy != 'gb21':
                 data_x.append(x_gb21)
                 data_y.append(y_gb21)
-            if soloplot is None and use_wis:
+            if soloplot is None and use_wis and ratiox != 'wis' and ratioy != 'wis':
                 data_x.append(x_wis)
                 data_y.append(y_wis)
-            if soloplot is None and use_phangs:
+            if soloplot is None and use_phangs and ratiox != 'phangs' and ratioy != 'phangs':
                 data_x.append(x_phangs)
                 data_y.append(y_phangs)
-            if soloplot is None and use_sim:
+            if soloplot is None and use_sim and ratiox != 'sim' and ratioy != 'sim':
                 data_x.append(x_sim)
                 data_y.append(y_sim)
+            if y_ref is not None:
+                data_y.append(pd.Series([y_ref]))
+            if x_ref is not None:
+                data_x.append(pd.Series([x_ref]))
 
             all_x = pd.concat(data_x)
             all_y = pd.concat(data_y)
@@ -1542,6 +1651,43 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 except Exception as e:
                     print(f"Best-fit line failed: {e}")
 
+            ################################################### constant reference lines ###################################################
+
+            if y_ref is not None:
+                y_const = y_ref
+                if logy:
+                    y_const_plot = 10 ** y_const
+                else:
+                    y_const_plot = y_const
+
+                if ylower < y_const_plot < yupper:
+                    ax_scatter.axhline(
+                        y=y_const_plot,
+                        linestyle='--',
+                        color='black',
+                        linewidth=1.5,
+                        zorder=0,
+                        label=f"y={y_ref}"
+                    )
+
+            if x_ref is not None:
+                x_const = x_ref
+                if logx:
+                    x_const_plot = 10 ** x_const
+                else:
+                    x_const_plot = x_const
+
+                if xlower < x_const_plot < xupper:
+                    ax_scatter.axvline(
+                        x=x_const_plot,
+                        linestyle='--',
+                        color='black',
+                        linewidth=1.5,
+                        zorder=0,
+                        label=f"x={x_ref}"
+                    )
+
+
             ############################### Plot scatter points ##############################
 
             def connect_resolution_series(ax, x, y, names, res_pc, color='gray', alpha=0.4, lw=1.0, zorder=1):
@@ -1739,6 +1885,9 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     shared_names_agn = [x if x in names_phangs else None for x in names_agn]
                     for x, y, name in zip(x_agn, y_agn, shared_names_agn):
                         ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+                elif comb_llama and force_names:
+                    for x, y, name in zip(x_agn, y_agn, names_agn):
+                        ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
                 
                 if res_comp:
                     # resolution in pc, aligned with AGN arrays
@@ -1810,6 +1959,9 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     shared_names_inactive = [x if x in names_phangs else None for x in names_inactive]
                     for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
                         ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
+                elif comb_llama and force_names:
+                    for x, y, name in zip(x_inactive, y_inactive, names_inactive):
+                        ax_scatter.text(float(x + 0.005), float(y), name, fontsize=7, color='black', zorder=10)
                 if res_comp:
                     # resolution in pc, aligned with AGN arrays
                     res_pc_inactive = df_y_inactive["Resolution (pc)"].values  # adjust column name if needed
@@ -1839,7 +1991,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             
     ############################## Plot comparison samples ##############################
 
-            if soloplot is None and use_gb21:
+            if soloplot is None and use_gb21 and ratiox != 'gb21' and ratioy != 'gb21':
                 ax_scatter.scatter(
                 x_gb21, y_gb21,
                 marker='o', color='green', label='GB21', s=36, alpha=0.8, edgecolors='none'
@@ -1861,7 +2013,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     lw=1.5
                 )
 
-            if soloplot is None and use_wis:
+            if soloplot is None and use_wis and ratiox != 'wis' and ratioy != 'wis':
                 ax_scatter.scatter(
                 x_wis, y_wis,
                 marker='^', color='purple', label='WIS', s=56, alpha=0.8, edgecolors='none'
@@ -1874,7 +2026,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     for x, y, name in zip(x_wis, y_wis, shared_names_wis):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='indigo', zorder=10)
 
-            if soloplot is None and use_phangs:        
+            if soloplot is None and use_phangs and ratiox != 'phangs' and ratioy != 'phangs':        
                 ax_scatter.scatter(
                 x_phangs, y_phangs,
                 marker='D', color='orange', label='PHANGS', s=36, alpha=0.8, edgecolors='none'
@@ -1886,7 +2038,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     for x, y, name in zip(x_phangs, y_phangs, shared_names_phangs):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='darkorange', zorder=10)
 
-            if soloplot is None and use_sim:
+            if soloplot is None and use_sim and ratiox != 'sim' and ratioy != 'sim':
                 ax_scatter.scatter(
                 x_sim, y_sim,
                 marker='X', color='brown', label='Simulations', s=36, alpha=0.8, edgecolors='none'
@@ -1900,8 +2052,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     for x, y, name in zip(x_sim, y_sim, shared_names_sim):
                         ax_scatter.text(float(x), float(y), name, fontsize=7, color='saddlebrown', zorder=10)
 
-            if use_aux:
-                print(x_aux, y_aux, names_aux)
+            if use_aux and ratiox != 'aux' and ratioy != 'aux':
                 ax_scatter.scatter(
                 x_aux, y_aux,
                 marker='*', color='cyan', label='wis/phangs pipeline', s=100, alpha=0.9, edgecolors='black', linewidths=0.5
@@ -1942,12 +2093,16 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ############################### Scatter labels ###############################
             if x_column == 'log L′ CO':
                 ax_scatter.set_xlabel(f"Single-dish L′ CO (K km s pc$^2$)")
-            else:
+            elif ratiox is None:
                 ax_scatter.set_xlabel(x_column)
+            else:
+                ax_scatter.set_xlabel(f"{x_column} / {ratiox} {x_column}")
             if y_column == "L'CO_JCMT (K km s pc2)" or y_column == "L'CO_APEX (K km s pc2)":
                 ax_scatter.set_ylabel(f"ALMA L′ CO (K km s pc$^2$)")
-            else:
+            elif ratioy is None:
                 ax_scatter.set_ylabel(y_column)
+            else:
+                ax_scatter.set_ylabel(f"{y_column} / {ratioy} {y_column}")
             ax_scatter.grid(True)
             leg = ax_scatter.legend(loc=legend_loc)
             leg.set_zorder(30)
@@ -2075,6 +2230,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 parts.append('_comb')
             if rebin is not None:
                 parts.append(f'_{rebin}pc')
+            if ratioy is not None:
+                parts.append(f'_ratio_{ratioy}')
             suffix = ''.join(parts)
             hist_path = (
                 f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/"
@@ -2226,6 +2383,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 parts.append('_nativex')
             if nativey is not None:
                 parts.append('_nativey')
+            if ratiox is not None:
+                parts.append(f'_ratio_{ratiox}')
             suffix = ''.join(parts)
 
             hist_x_path = (
@@ -2327,6 +2486,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 parts.append('_nativex')
             if nativey:
                 parts.append('_nativey')
+            if ratiox is not None:
+                parts.append(f'_ratiox_{ratiox}')
+            if ratioy is not None:
+                parts.append(f'_ratioy_{ratioy}')
             suffix = ''.join(parts)
             outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/{mask}_{R_kpc}kpc/'
             os.makedirs(outputdir, exist_ok=True)
@@ -2617,6 +2780,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     parts.append('_sim')
                 if comb_llama:
                     parts.append('_comb')
+                if ratiox is not None:
+                    parts.append(f'_ratiox_{ratiox}')
+                if ratioy is not None:
+                    parts.append(f'_ratioy_{ratioy}')
                 suffix = ''.join(parts)
                 outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/{mask}_{R_kpc}kpc/'
                 os.makedirs(outputdir, exist_ok=True)
@@ -3149,8 +3316,10 @@ for mask in masks:
 
         ############# Flux (jy) comparison with extra arrays (aux) #####################
 
-        plot_llama_property('flux (Jy km/s)',"Asymmetry",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,comb_llama=False, use_aux=True, nativex=True, isolate_names=['NGC 3351','NGC 4254','NGC 1365'], yhist=False, rebiny=120)
-
+        plot_llama_property('flux (Jy km/s)',"Asymmetry",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc, use_aux=True, nativex=True, yhist=False, rebiny=120, ratiox ='aux', ratioy='aux',isolate_names=['NGC 3351','NGC 4254','NGC 1365'],comb_llama = True, force_names=True,y_ref=1)
+        plot_llama_property('flux (Jy km/s)',"Gini",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc, use_aux=True, nativex=True, yhist=False, rebiny=120, ratiox ='aux', ratioy='aux',isolate_names=['NGC 3351','NGC 4254','NGC 1365'],comb_llama = True, force_names=True,y_ref=1)
+        plot_llama_property('flux (Jy km/s)',"Smoothness",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc, use_aux=True, nativex=True, yhist=False, rebiny=120, ratiox ='aux', ratioy='aux',isolate_names=['NGC 3351','NGC 4254','NGC 1365'],comb_llama = True, force_names=True,y_ref=1)
+        plot_llama_property('flux (Jy km/s)',"clumping_factor",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc, use_aux=True, nativex=True, yhist=False, rebiny=120, ratiox ='aux', ratioy='aux',isolate_names=['NGC 3351','NGC 4254','NGC 1365'],comb_llama = True, force_names=True,y_ref=1)
 
 #     ############# CAS WISDOM, PHANGS coplot   #############
 
