@@ -28,6 +28,7 @@ from astroquery.simbad import Simbad
 simbad = Simbad()
 from astroquery.vizier import Vizier
 from scipy.ndimage import gaussian_filter
+from astropy.convolution import convolve, Gaussian2DKernel
 
 np.seterr(all='ignore')
 co32 = False
@@ -1146,11 +1147,37 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
         if res is not None and smooth_factor > 1:
             pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
+            # sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
+            # sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
+
+            # image_copy = gaussian_filter(image_copy, sigma=sigma_kernel_pix)
+            # error_map_copy = gaussian_filter(error_map_copy, sigma=sigma_kernel_pix)
+
+
             sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
             sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
 
-            image_copy = gaussian_filter(image_copy, sigma=sigma_kernel_pix)
-            error_map_copy = gaussian_filter(error_map_copy, sigma=sigma_kernel_pix)
+            kernel = Gaussian2DKernel(sigma_kernel_pix)
+
+            kernel.normalize()
+
+            image_copy = convolve(
+                image_copy,
+                kernel,
+                boundary='extend',
+                normalize_kernel=False,
+                nan_treatment=None,
+                preserve_nan=False
+            )
+
+            error_map_copy = convolve(
+                error_map_copy,
+                kernel,
+                boundary='extend',
+                normalize_kernel=False,
+                nan_treatment=None,
+                preserve_nan=False
+            )
 
             beam_scale_pc_copy = res
             BMAJ_new = beam_scale_pc_copy / (pc_per_arcsec * 3600)
@@ -1169,11 +1196,36 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         smooth_factor = rebin / native_res
         if rebin is not None and smooth_factor > 1:
             pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
-            sigma_kernel_pc = np.sqrt(rebin**2 - native_res**2)
+            # sigma_kernel_pc = np.sqrt(rebin**2 - native_res**2)
+            # sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
+
+            # image_rb = gaussian_filter(image_untrimmed, sigma=sigma_kernel_pix)
+            # error_rb = gaussian_filter(error_map_untrimmed, sigma=sigma_kernel_pix)
+
+            sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
             sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
 
-            image_rb = gaussian_filter(image_untrimmed, sigma=sigma_kernel_pix)
-            error_rb = gaussian_filter(error_map_untrimmed, sigma=sigma_kernel_pix)
+            kernel = Gaussian2DKernel(sigma_kernel_pix)
+
+            kernel.normalize()
+
+            image_rb = convolve(
+                image_untrimmed,
+                kernel,
+                boundary='extend',
+                normalize_kernel=False,
+                nan_treatment=None,
+                preserve_nan=False
+            )
+
+            error_rb = convolve(
+                error_map_untrimmed,
+                kernel,
+                boundary='extend',
+                normalize_kernel=False,
+                nan_treatment=None,
+                preserve_nan=False
+            )
 
             BMAJ_rb = rebin / (pc_per_arcsec * 3600)
             BMIN_rb = BMAJ_rb
