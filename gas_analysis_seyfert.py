@@ -28,7 +28,8 @@ from astroquery.simbad import Simbad
 simbad = Simbad()
 from astroquery.vizier import Vizier
 from scipy.ndimage import gaussian_filter
-from astropy.convolution import convolve, Gaussian2DKernel
+from astropy.convolution import convolve, Gaussian2DKernel, Box2DKernel
+
 
 np.seterr(all='ignore')
 co32 = False
@@ -291,21 +292,64 @@ def asymmetry_single(image, mask, **kwargs):
 
 def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, **kwargs):
     smoothing_sigma_pc = 500
+
+    # Convert physical scale to pixels
     smoothing_sigma = (smoothing_sigma_pc / pc_per_arcsec) / pixel_scale_arcsec
     size = max(1, int(round(smoothing_sigma)))
+
+    # Build normalized box kernel
+    kernel = Box2DKernel(size)
+    kernel.normalize()  # ensure sum(kernel) = 1
+
+    # Prepare data
     image_filled = np.nan_to_num(image, nan=0.0)
     valid_mask = (~mask) & np.isfinite(image)
-    smooth_image = uniform_filter(image_filled, size=size, mode='reflect')
-    smooth_mask = uniform_filter(valid_mask.astype(float), size=size, mode='reflect')
+    weight_map = valid_mask.astype(float)
+
+    # Convolve image and weights
+    smooth_image = convolve(
+        image_filled,
+        kernel,
+        boundary='extend',
+        normalize_kernel=False,
+        nan_treatment='fill',
+        fill_value=0.0,
+        preserve_nan=False
+    )
+
+    smooth_weight = convolve(
+        weight_map,
+        kernel,
+        boundary='extend',
+        normalize_kernel=False,
+        nan_treatment='fill',
+        fill_value=0.0,
+        preserve_nan=False
+    )
+
+    # Renormalize by effective weights
     with np.errstate(invalid='ignore', divide='ignore'):
-        image_smooth = smooth_image / smooth_mask
-    image_smooth[smooth_mask == 0] = np.nan
-    valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(image_smooth)
+        image_smooth = smooth_image / smooth_weight
+
+    image_smooth[smooth_weight == 0] = np.nan
+
+    # Valid pixels for smoothness calculation
+    valid_smooth = (
+        (~mask)
+        & np.isfinite(image)
+        & np.isfinite(image_smooth)
+    )
+
     if np.sum(valid_smooth) == 0:
         return np.nan
+
     diff_smooth = np.abs(image[valid_smooth] - image_smooth[valid_smooth])
     total_flux = np.abs(image[valid_smooth])
-    return np.sum(diff_smooth) / np.sum(total_flux) if np.sum(total_flux) > 0 else np.nan
+
+    if np.sum(total_flux) == 0:
+        return np.nan
+
+    return np.sum(diff_smooth) / np.sum(total_flux)
 
 def concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec, **kwargs):
     y, x = np.indices(image.shape)
@@ -966,7 +1010,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 ##############################################################################
 
     if res_comp:
-        if name not in ['NGC3351','NGC4254','NGC6814','NGC7582','MCG630']: # these are the 5 highest resolution targets
+        if name not in ['NGC4254']:#['NGC3351','NGC4254','NGC6814','NGC7582','MCG630']: # these are the 5 highest resolution targets
             return
 
 
@@ -1166,18 +1210,21 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 kernel,
                 boundary='extend',
                 normalize_kernel=False,
-                nan_treatment=None,
+                nan_treatment='fill',
+                fill_value=0.0,
                 preserve_nan=False
             )
-
+            print('image smoothed')
             error_map_copy = convolve(
                 error_map_copy,
                 kernel,
                 boundary='extend',
                 normalize_kernel=False,
-                nan_treatment=None,
+                nan_treatment='fill',
+                fill_value=0.0,
                 preserve_nan=False
             )
+            print('error map smoothed')
 
             beam_scale_pc_copy = res
             BMAJ_new = beam_scale_pc_copy / (pc_per_arcsec * 3600)
@@ -1214,19 +1261,21 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 kernel,
                 boundary='extend',
                 normalize_kernel=False,
-                nan_treatment=None,
+                nan_treatment='fill',
+                fill_value=0.0,
                 preserve_nan=False
             )
-
+            print('image smoothed')
             error_rb = convolve(
                 error_map_untrimmed,
                 kernel,
                 boundary='extend',
                 normalize_kernel=False,
-                nan_treatment=None,
+                nan_treatment='fill',
+                fill_value=0.0,
                 preserve_nan=False
             )
-
+            print('error map smoothed')
             BMAJ_rb = rebin / (pc_per_arcsec * 3600)
             BMIN_rb = BMAJ_rb
 
