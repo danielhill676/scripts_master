@@ -665,7 +665,7 @@ def exp_profile(r, Sigma0, rs):
 
 # ----------------- Moment map plotting ------------------
 
-def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, flux_mask, aperture=None, norm_type='linear', res_src='native'): 
+def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, flux_mask, aperture=None, norm_type='linear', res_src='native',normalise_norm=False): 
     # Initialise plot
     fontsize = 35 * R_kpc
     plt.rcParams.update({'font.size': fontsize})
@@ -679,12 +679,20 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     linewith = 2 * R_kpc
     add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='lime',borderpad=2,fill=True,linewidth=linewith)
 
+    vmin = np.nanmin(image.data)
+    vmax = np.nanmax(image.data)
+    if not normalise_norm:
+        colourbar_list.append([vmin, vmax])
+    if normalise_norm:
+        vmin = np.nanmin(colourbar_list)
+        vmax = np.nanmax(colourbar_list)
+
     # fig.tight_layout()
     if np.isfinite(image.data).any():
         if norm_type == 'sqrt':
-            norm = simple_norm(image.data, 'sqrt', vmin=np.nanmin(image.data), vmax=np.nanmax(image.data))
+            norm = simple_norm(image.data, 'sqrt', vmin=vmin, vmax=vmax)
         elif norm_type == 'linear':
-            norm = simple_norm(image.data, 'linear', vmin=0, vmax=np.nanmax(image.data))
+            norm = simple_norm(image.data, 'linear', vmin=0, vmax=vmax)
         else:
             raise ValueError(f"Unknown norm_type: {norm_type}")
     else:
@@ -1903,7 +1911,7 @@ print(len(df_pairs), "matched pairs constructed.")
 
 llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
 
-
+colourbar_list = []
 
 # ------------------ Main ------------------
 
