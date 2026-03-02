@@ -424,9 +424,12 @@ path_AGN = f"{base_AGN}/gas_analysis_summary_{m}_{r}kpc.csv"
 path_inactive = f"{base_inactive}/gas_analysis_summary_{m}_{r}kpc.csv"
 aux_path = f"{base_aux}/gas_analysis_summary_{m}_{r}kpc.csv"
 
+
 fit_data_AGN = pd.read_csv(path_AGN)
 fit_data_inactive = pd.read_csv(path_inactive)
 fit_data_aux = pd.read_csv(aux_path)
+
+
 
 wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df.csv")
 phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_df.csv")

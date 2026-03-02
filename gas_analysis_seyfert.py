@@ -290,66 +290,22 @@ def asymmetry_single(image, mask, **kwargs):
     total = np.abs(image[valid_mask])
     return np.sum(diff) / np.sum(total) if np.sum(total) > 0 else np.nan
 
-def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, **kwargs):
-    smoothing_sigma_pc = 500
-
-    # Convert physical scale to pixels
-    smoothing_sigma = (smoothing_sigma_pc / pc_per_arcsec) / pixel_scale_arcsec
-    size = max(1, int(round(smoothing_sigma)))
-
-    # Build normalized box kernel
-    kernel = Box2DKernel(size)
-    kernel.normalize()  # ensure sum(kernel) = 1
-
-    # Prepare data
-    image_filled = np.nan_to_num(image, nan=0.0)
-    valid_mask = (~mask) & np.isfinite(image)
-    weight_map = valid_mask.astype(float)
-
-    # Convolve image and weights
-    smooth_image = convolve(
-        image_filled,
-        kernel,
-        boundary='extend',
-        normalize_kernel=False,
-        nan_treatment='fill',
-        fill_value=0.0,
-        preserve_nan=False
-    )
-
-    smooth_weight = convolve(
-        weight_map,
-        kernel,
-        boundary='extend',
-        normalize_kernel=False,
-        nan_treatment='fill',
-        fill_value=0.0,
-        preserve_nan=False
-    )
-
-    # Renormalize by effective weights
-    with np.errstate(invalid='ignore', divide='ignore'):
-        image_smooth = smooth_image / smooth_weight
-
-    image_smooth[smooth_weight == 0] = np.nan
-
-    # Valid pixels for smoothness calculation
-    valid_smooth = (
-        (~mask)
-        & np.isfinite(image)
-        & np.isfinite(image_smooth)
-    )
-
-    if np.sum(valid_smooth) == 0:
-        return np.nan
-
-    diff_smooth = np.abs(image[valid_smooth] - image_smooth[valid_smooth])
-    total_flux = np.abs(image[valid_smooth])
-
-    if np.sum(total_flux) == 0:
-        return np.nan
-
-    return np.sum(diff_smooth) / np.sum(total_flux)
+	
+def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, **kwargs): 
+    smoothing_sigma_pc = 500 
+    smoothing_sigma = (smoothing_sigma_pc / pc_per_arcsec) / pixel_scale_arcsec 
+    size = max(1, int(round(smoothing_sigma))) 
+    image_filled = np.nan_to_num(image, nan=0.0) 
+    valid_mask = (~mask) & np.isfinite(image) 
+    smooth_image = uniform_filter(image_filled, size=size, mode='constant',cval=0.0) 
+    smooth_mask = uniform_filter(valid_mask.astype(float), size=size, mode='constant',cval=0.0) 
+    with np.errstate(invalid='ignore', divide='ignore'): image_smooth = smooth_image / smooth_mask 
+    image_smooth[smooth_mask == 0] = np.nan 
+    valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(image_smooth) 
+    if np.sum(valid_smooth) == 0: return np.nan 
+    diff_smooth = np.abs(image[valid_smooth] - image_smooth[valid_smooth]) 
+    total_flux = np.abs(image[valid_smooth]) 
+    return np.sum(diff_smooth) / np.sum(total_flux) if np.sum(total_flux) > 0 else np.nan
 
 def concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec, **kwargs):
     y, x = np.indices(image.shape)
@@ -1062,6 +1018,13 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             error_map_untrimmed = error_map_untrimmed[:, :1600]
             mask_untrimmed = mask_untrimmed[:, :1600]
 
+        # ---------- NaN handling ----------
+    nan_pixels = np.isnan(image_untrimmed)
+    if nan_pixels.any():
+        image_untrimmed[nan_pixels] = 0.0
+        mask_untrimmed[nan_pixels] = False
+        error_map_untrimmed[nan_pixels] = np.nanmean(error_map_untrimmed)
+
     main_meta = resolve_galaxy_beam_scale(
     name=name,
     fits_file=mom0_file,
@@ -1191,40 +1154,40 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
         if res is not None and smooth_factor > 1:
             pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
-            # sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
-            # sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
-
-            # image_copy = gaussian_filter(image_copy, sigma=sigma_kernel_pix)
-            # error_map_copy = gaussian_filter(error_map_copy, sigma=sigma_kernel_pix)
-
-
             sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
             sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
 
-            kernel = Gaussian2DKernel(sigma_kernel_pix)
+            image_copy = gaussian_filter(image_copy, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
+            error_map_copy = gaussian_filter(error_map_copy, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
 
-            kernel.normalize()
 
-            image_copy = convolve(
-                image_copy,
-                kernel,
-                boundary='extend',
-                normalize_kernel=False,
-                nan_treatment='fill',
-                fill_value=0.0,
-                preserve_nan=False
-            )
-            print('image smoothed')
-            error_map_copy = convolve(
-                error_map_copy,
-                kernel,
-                boundary='extend',
-                normalize_kernel=False,
-                nan_treatment='fill',
-                fill_value=0.0,
-                preserve_nan=False
-            )
-            print('error map smoothed')
+            # sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
+            # sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
+
+            # kernel = Gaussian2DKernel(sigma_kernel_pix)
+
+            # kernel.normalize()
+
+            # image_copy = convolve(
+            #     image_copy,
+            #     kernel,
+            #     boundary='extend',
+            #     normalize_kernel=False,
+            #     nan_treatment='fill',
+            #     fill_value=0.0,
+            #     preserve_nan=False
+            # )
+            # print('image smoothed')
+            # error_map_copy = convolve(
+            #     error_map_copy,
+            #     kernel,
+            #     boundary='extend',
+            #     normalize_kernel=False,
+            #     nan_treatment='fill',
+            #     fill_value=0.0,
+            #     preserve_nan=False
+            # )
+            # print('error map smoothed')
 
             beam_scale_pc_copy = res
             BMAJ_new = beam_scale_pc_copy / (pc_per_arcsec * 3600)
@@ -1243,39 +1206,39 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         smooth_factor = rebin / native_res
         if rebin is not None and smooth_factor > 1:
             pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
-            # sigma_kernel_pc = np.sqrt(rebin**2 - native_res**2)
-            # sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
-
-            # image_rb = gaussian_filter(image_untrimmed, sigma=sigma_kernel_pix)
-            # error_rb = gaussian_filter(error_map_untrimmed, sigma=sigma_kernel_pix)
-
-            sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
+            sigma_kernel_pc = np.sqrt(rebin**2 - native_res**2)
             sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
 
-            kernel = Gaussian2DKernel(sigma_kernel_pix)
+            image_rb = gaussian_filter(image_untrimmed, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
+            error_rb = gaussian_filter(error_map_untrimmed, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
 
-            kernel.normalize()
+            # sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
+            # sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
 
-            image_rb = convolve(
-                image_untrimmed,
-                kernel,
-                boundary='extend',
-                normalize_kernel=False,
-                nan_treatment='fill',
-                fill_value=0.0,
-                preserve_nan=False
-            )
-            print('image smoothed')
-            error_rb = convolve(
-                error_map_untrimmed,
-                kernel,
-                boundary='extend',
-                normalize_kernel=False,
-                nan_treatment='fill',
-                fill_value=0.0,
-                preserve_nan=False
-            )
-            print('error map smoothed')
+            # kernel = Gaussian2DKernel(sigma_kernel_pix)
+
+            # kernel.normalize()
+
+            # image_rb = convolve(
+            #     image_untrimmed,
+            #     kernel,
+            #     boundary='extend',
+            #     normalize_kernel=False,
+            #     nan_treatment='fill',
+            #     fill_value=0.0,
+            #     preserve_nan=False
+            # )
+            # print('image smoothed')
+            # error_rb = convolve(
+            #     error_map_untrimmed,
+            #     kernel,
+            #     boundary='extend',
+            #     normalize_kernel=False,
+            #     nan_treatment='fill',
+            #     fill_value=0.0,
+            #     preserve_nan=False
+            # )
+            # print('error map smoothed')
             BMAJ_rb = rebin / (pc_per_arcsec * 3600)
             BMIN_rb = BMAJ_rb
 
@@ -1358,13 +1321,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         image[yp1:yp2, xp1:xp2] = image_untrimmed[y1i:y2i, x1i:x2i]
         error_map[yp1:yp2, xp1:xp2] = error_map_untrimmed[y1i:y2i, x1i:x2i]
         mask[yp1:yp2, xp1:xp2] = mask_untrimmed[y1i:y2i, x1i:x2i]
-
-        # ---------- NaN handling ----------
-        nan_pixels = np.isnan(image)
-        if nan_pixels.any():
-            image[nan_pixels] = 0.0
-            mask[nan_pixels] = False
-            error_map[nan_pixels] = np.nanmean(error_map)
 
         emission_pixels = np.count_nonzero(np.abs(image) > 1e-10)
         emission_fraction = emission_pixels / image.size
@@ -1958,38 +1914,38 @@ if __name__ == '__main__':
 
     # CO(2-1)
     print("Starting CO(2-1) analysis...")
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
 
     # # CO(3-2)
     co32 = True
     print("Starting CO(3-2) analysis...")
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
 
