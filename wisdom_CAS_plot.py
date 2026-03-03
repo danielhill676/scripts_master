@@ -47,7 +47,7 @@ def plot_llama_triptych(
     isolate_names=None,
     m='strict',
     r=1.5, comb_llama=False, 
-    which_compare = None
+    which_compare = None, native_res=False
 ):
 
     if xerr_cols is None:
@@ -74,15 +74,36 @@ def plot_llama_triptych(
         except:
             fit_data_aux = None
 
-        dfA = fit_data_AGN
-        dfI = fit_data_inactive
+        fit_data_AGN_res = fit_data_AGN.sort_values("Resolution (pc)", ascending=True)
+        fit_data_inactive_res = fit_data_inactive.sort_values("Resolution (pc)", ascending=True)
+        fit_data_aux_res = fit_data_aux.sort_values("Resolution (pc)", ascending=True) if fit_data_aux is not None else None
+
+        fit_data_AGN_maxres = fit_data_AGN_res.drop_duplicates(subset="Galaxy", keep="last")
+        fit_data_inactive_maxres = fit_data_inactive_res.drop_duplicates(subset="Galaxy", keep="last")
+        fit_data_aux_maxres = fit_data_aux_res.drop_duplicates(subset="Galaxy", keep="last") if fit_data_aux_res is not None else None
+
+        fit_data_AGN_minres = fit_data_AGN_res.drop_duplicates(subset="Galaxy", keep="first")
+        fit_data_inactive_minres = fit_data_inactive_res.drop_duplicates(subset="Galaxy", keep="first")
+        fit_data_aux_minres = fit_data_aux_res.drop_duplicates(subset="Galaxy", keep="first") if fit_data_aux_res is not None else None
+
+        if native_res:
+
+            dfA = fit_data_AGN_minres
+            dfI = fit_data_inactive_minres
+            df_aux = fit_data_aux_minres if fit_data_aux is not None else None
+        
+        else:
+
+            dfA = fit_data_AGN_maxres
+            dfI = fit_data_inactive_maxres
+            df_aux = fit_data_aux_maxres if fit_data_aux is not None else None
 
         # --------------------------------------------------
         # Prepare optional datasets
         # --------------------------------------------------
         optional_datasets = {}
-        if fit_data_aux is not None:
-            optional_datasets['Comparison-pipeline'] = fit_data_aux
+        if df_aux is not None:
+            optional_datasets['Comparison-pipeline'] = df_aux
         if wis_df is not None:
             wis_df = wis_df.copy()
             if 'Galaxy' not in wis_df.columns and 'Name' in wis_df.columns:
@@ -132,22 +153,30 @@ def plot_llama_triptych(
         # XY extraction helper
         # --------------------------------------------------
         def extract_xy(df, xcol, ycol):
-            sub = df[[xcol, ycol]].copy()
-            sub[xcol] = pd.to_numeric(sub[xcol], errors="coerce")
-            sub[ycol] = pd.to_numeric(sub[ycol], errors="coerce")
-            sub = sub.dropna(subset=[xcol, ycol])
+            # Get numeric values
+            x = pd.to_numeric(df[xcol], errors="coerce")
+            y = pd.to_numeric(df[ycol], errors="coerce")
 
-            x = sub[xcol].values
-            y = sub[ycol].values
+            # Get errorbars
+            xerr = get_errorbars(df, xcol)
+            yerr = get_errorbars(df, ycol)
 
-            # Automatic errorbar extraction
-            xerr_full = get_errorbars(df, xcol)
-            yerr_full = get_errorbars(df, ycol)
+            # Combine into DataFrame to filter NaNs consistently
+            tmp = pd.DataFrame({"x": x, "y": y})
+            if xerr is not None:
+                tmp["xerr"] = xerr
+            if yerr is not None:
+                tmp["yerr"] = yerr
 
-            xerr = xerr_full[sub.index] if xerr_full is not None else None
-            yerr = yerr_full[sub.index] if yerr_full is not None else None
+            tmp = tmp.dropna(subset=["x", "y"])
+
+            x = tmp["x"].values
+            y = tmp["y"].values
+            xerr = tmp["xerr"].values if "xerr" in tmp.columns else None
+            yerr = tmp["yerr"].values if "yerr" in tmp.columns else None
 
             return x, y, xerr, yerr
+
 
         # --------------------------------------------------
         # Prepare panels
@@ -240,7 +269,7 @@ def plot_llama_triptych(
                     alpha=0.85, color=color,
                     label=label if key == "left" else None
                 )
-            ax.grid(True)
+            ax.grid(False)
 
         # --------------------------------------------------
         # Shared limits
@@ -392,9 +421,12 @@ def plot_llama_triptych(
         outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/{m}_{r}kpc"
         if m == '120pc_flux90_strict':
             outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/flux90_strict_{r}kpc"
-        plt.savefig(f"{outfolder}/wisdom_CAS_triptych_{m}_{r}kpc.png", dpi=300)
+        plt.savefig(f"{outfolder}/wisdom_CAS_triptych_{m}_{r}kpc_native{native_res}.png", dpi=300)
         plt.show()
 
+###################################################################################################################################################################################################################################################################
+# COMPARISON OF MASK/APERTURE
+###################################################################################################################################################################################################################################################################
     else:
 
         compare_masks = which_compare[0]
@@ -473,7 +505,7 @@ def plot_llama_triptych(
 
             combined_df = pd.concat([dfA, dfI], ignore_index=True)
 
-            label = f"{m_i}_{r_i}kpc"
+            label = f"{m_i} mask and {r_i}kpc aperture"
             marker = markers[i]
             color = colours[i]
 
@@ -532,7 +564,7 @@ def plot_llama_triptych(
                         zorder=5
                     )
 
-            ax.grid(True)
+            ax.grid(False)
 
         # --------------------------------------------------
         # Histograms (color matched)
@@ -565,20 +597,63 @@ def plot_llama_triptych(
                         alpha=0.4, color=label_styles[label][1])
         ax_hist_x2.axis("off")
 
+        # --------------------------------------------------
+        # Labels + legend
+        # --------------------------------------------------
+        ax_left.set_xlabel(x_column1)
+        ax_left.set_ylabel(y_column1)
+        ax_bottom.set_xlabel(x_column3)
+        ax_bottom.set_ylabel(y_column3)
+
+        ax_top.set_xlabel("")
+        ax_top.set_ylabel("")
+        ax_top.tick_params(labelleft=False, labelbottom=False)
+
+        ax_empty = fig.add_subplot(gs[1, 0])
+        ax_empty.axis("off")
+        from matplotlib.lines import Line2D
+
+        # Create legend handles manually without error bars
+        legend_marker_sizes = {
+            "WISDOM": 8,
+            "PHANGS": 8
+        }
+
+        # All other labels (mask/radius combinations) use a larger size
+        for label in label_styles:
+            if label not in legend_marker_sizes:
+                legend_marker_sizes[label] = 12
+
+        legend_handles = []
+        for label, (marker, color) in label_styles.items():
+            msize = legend_marker_sizes.get(label, 8)
+            legend_handles.append(
+                Line2D([0], [0], marker=marker, color='w', label=label,
+                    markerfacecolor=color, markersize=msize)
+            )
+
+        ax_empty.legend(handles=legend_handles, loc="center", fontsize=12, frameon=False)
+
+
         plt.tight_layout()
-        plt.show()
+        outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/"
+        plt.savefig(f"{outfolder}/wisdom_CAS_triptych_comparison{which_compare}native{native_res}.png", dpi=300)
 
 
 
+base_AGN = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN"
+base_inactive = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive"
+base_aux = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/aux"
+
+wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df.csv")
+phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_df.csv")
 
 ################################################################### AGN vs inactive CAS triptych ###################################################################
 
 m = 'strict'
 r = 1.5
 
-base_AGN = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN"
-base_inactive = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive"
-base_aux = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/aux"
+
 
 plot_llama_triptych(
     x_column1='Gini', y_column1='Smoothness',
@@ -587,7 +662,17 @@ plot_llama_triptych(
 base_AGN=base_AGN, base_inactive=base_inactive,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
-    figsize=9, m = m, r = r
+    figsize=9, m = m, r = r, native_res=True
+)
+
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness',
+    x_column2='Asymmetry', y_column2='Smoothness',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, m = m, r = r, native_res=False
 )
 
 
@@ -596,8 +681,7 @@ base_AGN=base_AGN, base_inactive=base_inactive,
 m = '120pc_flux90_strict'
 r = 1.5
 
-wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df.csv")
-phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_df.csv")
+
 
 plot_llama_triptych(
     x_column1='Gini', y_column1='Smoothness',
@@ -608,7 +692,7 @@ base_AGN=base_AGN, base_inactive=base_inactive, base_aux=base_aux,
     phangs_df=phangs_df,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
-    figsize=9, m = m, r = r, comb_llama=True
+    figsize=9, m = m, r = r, comb_llama=True, native_res=True
 )
 
 ################################################################ comparison of mask and apertures ###################################################################
@@ -620,5 +704,26 @@ plot_llama_triptych(
 base_AGN=base_AGN, base_inactive=base_inactive,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict'],[0.3,1,1.5]]
+    figsize=9, comb_llama=True, which_compare=[['strict'],[0.3,1,1.5]], native_res=True
+)
+
+
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness',
+    x_column2='Asymmetry', y_column2='Smoothness',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True
+)
+
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness',
+    x_column2='Asymmetry', y_column2='Smoothness',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]], native_res=True
 )
