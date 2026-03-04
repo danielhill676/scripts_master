@@ -1000,6 +1000,13 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     
 ##############################################################################
 
+##############################################################################
+
+    if name not in ['NGC6814','NGC5506','NGC3175']:
+        return
+    
+##############################################################################
+
     if res_comp:
         if name not in ['NGC3351','NGC4254','NGC6814','NGC7582','MCG630']: # these are the 5 highest resolution targets
             return
@@ -1052,13 +1059,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             image_untrimmed = image_untrimmed[:, :1600]
             error_map_untrimmed = error_map_untrimmed[:, :1600]
             mask_untrimmed = mask_untrimmed[:, :1600]
-
-        # ---------- NaN handling ----------
-    nan_pixels = np.isnan(image_untrimmed)
-    if nan_pixels.any():
-        image_untrimmed[nan_pixels] = 0.0
-        mask_untrimmed[nan_pixels] = False
-        error_map_untrimmed[nan_pixels] = np.nanmean(error_map_untrimmed)
 
     main_meta = resolve_galaxy_beam_scale(
     name=name,
@@ -1122,6 +1122,12 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     mask[yp1:yp2, xp1:xp2] = mask_untrimmed[y1i:y2i, x1i:x2i]
 
 
+            # ---------- NaN handling ----------
+    nan_pixels = np.isnan(image)
+    if nan_pixels.any():
+        image[nan_pixels] = 0.0
+        mask[nan_pixels] = False
+        error_map[nan_pixels] = np.nanmean(error_map)
 
     if rebin is None and not res_comp:
 
