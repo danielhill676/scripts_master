@@ -29,6 +29,8 @@ simbad = Simbad()
 from astroquery.vizier import Vizier
 from scipy.ndimage import gaussian_filter
 from astropy.convolution import convolve, Gaussian2DKernel, Box2DKernel
+from astropy.stats import sigma_clipped_stats
+
 
 
 np.seterr(all='ignore')
@@ -297,13 +299,13 @@ def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, **kwargs):
     size = max(1, int(round(smoothing_sigma))) 
     image_filled = np.nan_to_num(image, nan=0.0) 
     valid_mask = (~mask) & np.isfinite(image) 
-    smooth_image = uniform_filter(image_filled, size=size, mode='constant',cval=0.0) 
-    smooth_mask = uniform_filter(valid_mask.astype(float), size=size, mode='constant',cval=0.0) 
-    with np.errstate(invalid='ignore', divide='ignore'): image_smooth = smooth_image / smooth_mask 
+    smooth_image = uniform_filter(image_filled, size=size, mode='constant',cval=0.0) # Nans replaced with 0 reduce the smoothed values of emission pixels
+    smooth_mask = uniform_filter(valid_mask.astype(float), size=size, mode='constant',cval=0.0) # Smoothing the mask will cancel out this effect
+    with np.errstate(invalid='ignore', divide='ignore'): image_smooth = smooth_image / smooth_mask # this normalises back up those pixels, avoiding divide-by-zero errs
     image_smooth[smooth_mask == 0] = np.nan 
-    valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(image_smooth) 
+    valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(image_smooth) # use the original mask plus any new Nan just in case
     if np.sum(valid_smooth) == 0: return np.nan 
-    diff_smooth = np.abs(image[valid_smooth] - image_smooth[valid_smooth]) 
+    diff_smooth = np.abs(image[valid_smooth] - image_smooth[valid_smooth]) # original image and smoothed image use orginal mask
     total_flux = np.abs(image[valid_smooth]) 
     return np.sum(diff_smooth) / np.sum(total_flux) if np.sum(total_flux) > 0 else np.nan
 
@@ -665,7 +667,7 @@ def exp_profile(r, Sigma0, rs):
 
 # ----------------- Moment map plotting ------------------
 
-def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, flux_mask, aperture=None, norm_type='linear', res_src='native',normalise_norm=False): 
+def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, flux_mask, aperture=None, norm_type='sqrt', res_src='native',normalise_norm=False): 
     # Initialise plot
     fontsize = 35 * R_kpc
     plt.rcParams.update({'font.size': fontsize})
@@ -678,14 +680,20 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     add_scalebar(ax,1/3600,label="1''",corner='top left',color='lime',borderpad=2,size_vertical=0.5)
     linewith = 2 * R_kpc
     add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='lime',borderpad=2,fill=True,linewidth=linewith)
-    print('normalise norm:', normalise_norm)
-    vmin = np.nanmin(image.data)
-    vmax = np.nanmax(image.data)
-    if not normalise_norm:
+
+    mean, median, std = sigma_clipped_stats(
+    image.data,
+    sigma=3.0,
+    maxiters=5,
+    cenfunc='median')
+
+    vmin = std
+    vmax = np.nanpercentile(image.data, 99.5)
+
+    if not normalise_norm and res_src in ['native','rebin']:
         colourbar_list.append(vmin)
         colourbar_list.append(vmax)
-    if normalise_norm:
-        print('colourbar list',colourbar_list)
+    if normalise_norm and res_src in ['native','rebin']:
         vmin = np.nanmin(colourbar_list)
         vmax = np.nanmax(colourbar_list)
 
@@ -694,7 +702,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
         if norm_type == 'sqrt':
             norm = simple_norm(image.data, 'sqrt', vmin=vmin, vmax=vmax)
         elif norm_type == 'linear':
-            norm = simple_norm(image.data, 'linear', vmin=0, vmax=vmax)
+            norm = simple_norm(image.data, 'linear', vmin=vmin, vmax=vmax)
         else:
             raise ValueError(f"Unknown norm_type: {norm_type}")
     else:
@@ -740,11 +748,11 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     plt.close(fig)
 
     if normalise_norm:
-        cbar_fig, cbar_ax = plt.subplots(figsize=(3, figsize*4))  # narrow vertical bar
+        cbar_fig, cbar_ax = plt.subplots(figsize=(3, figsize*4.5))  # narrow vertical bar
         norm_for_cbar = simple_norm(image.data, norm_type, vmin=vmin, vmax=vmax)
         cb = plt.colorbar(plt.cm.ScalarMappable(norm=norm_for_cbar, cmap='RdBu_r'),
                           cax=cbar_ax, orientation='vertical')
-        cb.set_label('Surface density (M☉pc⁻²)', fontsize=fontsize)
+        cb.set_label('Surface density (M☉pc⁻²)', fontsize=fontsize*1.5)
         plt.savefig('/data/c3040163/llama/alma/gas_analysis_results'+ f'/colourbar_{R_kpc}_{rebin}_{flux_mask}.png', bbox_inches='tight', pad_inches=0)
         plt.close(cbar_fig)
         
@@ -1073,12 +1081,47 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     pc_per_arcsec = main_meta["pc_per_arcsec"]
     header = main_meta["header"]
 
+    R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
     jy_per_K = float(header.get("JYTOK", 0))
+    pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
+    pixel_area_pc2 = pixel_scale_pc**2
 
     beam_scales_pc = [beam_scale_pc]
     beam_scale_labels = [name]
 
-    print(RA,DEC)
+
+    gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
+    wcs_full = WCS(header)
+
+    ny, nx = image_untrimmed.shape
+    try:
+        cx, cy = gal_cen.to_pixel(wcs_full)
+        cx, cy = int(cx), int(cy)
+    except Exception as e:
+        print(f"WARNING: WCS conversion failed for {name}: {e}")
+        cx, cy = nx // 2, ny // 2
+
+    target_size = 2 * R_pixel
+    nx_full, ny_full = nx, ny
+
+    x1, x2 = cx - R_pixel, cx + R_pixel
+    y1, y2 = cy - R_pixel, cy + R_pixel
+
+    image = np.full((target_size, target_size), np.nan)
+    error_map = np.full_like(image, np.nan)
+    mask = np.ones_like(image, dtype=bool)
+
+    x1i, x2i = max(0, x1), min(nx_full, x2)
+    y1i, y2i = max(0, y1), min(ny_full, y2)
+
+    xp1, xp2 = x1i - x1, x1i - x1 + (x2i - x1i)
+    yp1, yp2 = y1i - y1, y1i - y1 + (y2i - y1i)
+
+    image[yp1:yp2, xp1:xp2] = image_untrimmed[y1i:y2i, x1i:x2i]
+    error_map[yp1:yp2, xp1:xp2] = error_map_untrimmed[y1i:y2i, x1i:x2i]
+    mask[yp1:yp2, xp1:xp2] = mask_untrimmed[y1i:y2i, x1i:x2i]
+
+
 
     if rebin is None and not res_comp:
 
@@ -1170,8 +1213,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     # ---------- smoothing ----------
     for src, res in res_list:
 
-        image_copy = image_untrimmed.copy()
-        error_map_copy = error_map_untrimmed.copy()
+        image_copy = image.copy()
+        error_map_copy = error_map.copy()
         beam_scale_pc_copy = native_res
 
         BMAJ_new = BMAJ
@@ -1183,38 +1226,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
             sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
             sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
-
             image_copy = gaussian_filter(image_copy, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
             error_map_copy = gaussian_filter(error_map_copy, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
-
-
-            # sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
-            # sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
-
-            # kernel = Gaussian2DKernel(sigma_kernel_pix)
-
-            # kernel.normalize()
-
-            # image_copy = convolve(
-            #     image_copy,
-            #     kernel,
-            #     boundary='extend',
-            #     normalize_kernel=False,
-            #     nan_treatment='fill',
-            #     fill_value=0.0,
-            #     preserve_nan=False
-            # )
-            # print('image smoothed')
-            # error_map_copy = convolve(
-            #     error_map_copy,
-            #     kernel,
-            #     boundary='extend',
-            #     normalize_kernel=False,
-            #     nan_treatment='fill',
-            #     fill_value=0.0,
-            #     preserve_nan=False
-            # )
-            # print('error map smoothed')
 
             beam_scale_pc_copy = res
             BMAJ_new = beam_scale_pc_copy / (pc_per_arcsec * 3600)
@@ -1236,36 +1249,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             sigma_kernel_pc = np.sqrt(rebin**2 - native_res**2)
             sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
 
-            image_rb = gaussian_filter(image_untrimmed, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
-            error_rb = gaussian_filter(error_map_untrimmed, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
-
-            # sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
-            # sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
-
-            # kernel = Gaussian2DKernel(sigma_kernel_pix)
-
-            # kernel.normalize()
-
-            # image_rb = convolve(
-            #     image_untrimmed,
-            #     kernel,
-            #     boundary='extend',
-            #     normalize_kernel=False,
-            #     nan_treatment='fill',
-            #     fill_value=0.0,
-            #     preserve_nan=False
-            # )
-            # print('image smoothed')
-            # error_rb = convolve(
-            #     error_map_untrimmed,
-            #     kernel,
-            #     boundary='extend',
-            #     normalize_kernel=False,
-            #     nan_treatment='fill',
-            #     fill_value=0.0,
-            #     preserve_nan=False
-            # )
-            # print('error map smoothed')
+            image_rb = gaussian_filter(image, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
+            error_rb = gaussian_filter(error_map, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
             BMAJ_rb = rebin / (pc_per_arcsec * 3600)
             BMIN_rb = BMAJ_rb
 
@@ -1286,8 +1271,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     rows = []
 
     for img_idx, (
-            image_untrimmed,
-            error_map_untrimmed,
+            image,
+            error_map,
             BMAJ,
             BMIN,
             res_pc,
@@ -1296,58 +1281,20 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
         beam_scale_pc = res_pc
         R_21, R_31, alpha_CO = 0.65, 0.32, 4.35
-        R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
-
-        pixel_scale_arcsec = np.abs(header.get("CDELT1", 0)) * 3600
-        pixel_area_arcsec2 = pixel_scale_arcsec**2
         beam_arcsec = np.sqrt(np.abs(BMAJ * BMIN)) * 3600
         beam_area_arcsec2 = (np.pi/(4*np.log(2)))*(BMAJ*3600)*(BMIN*3600)
         pc_per_arcsec = (D_Mpc * 1e6) / 206265
         beam_scale_pc = beam_arcsec * pc_per_arcsec
         beam_area_pc2 = beam_area_arcsec2 * pc_per_arcsec**2
-        pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
-        pixel_area_pc2 = pixel_scale_pc**2
         pixels_per_beam = beam_area_arcsec2/pixel_area_arcsec2
 
-        print(name,beam_scale_pc,'pc res')
-        print('beam_area_arcsec2', beam_area_arcsec2,'arcsec2')
-        print('beam_area_pc2', beam_area_pc2,'pc2')
-        print('LCO factor using omega_beam (should be equal to beam_area_pc2)',beam_area_arcsec2*23.5*D_Mpc**2)
-        print('LCO factor from using physical pixel size',pixel_area_pc2*pixels_per_beam)
-        print('JYTOK=',jy_per_K)
-        print('flux factor', 1/(pixels_per_beam*jy_per_K))
-
-
-        gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
-        wcs_full = WCS(header)
-
-        ny, nx = image_untrimmed.shape
-        try:
-            cx, cy = gal_cen.to_pixel(wcs_full)
-            cx, cy = int(cx), int(cy)
-        except Exception as e:
-            print(f"WARNING: WCS conversion failed for {name}: {e}")
-            cx, cy = nx // 2, ny // 2
-
-        target_size = 2 * R_pixel
-        nx_full, ny_full = nx, ny
-
-        x1, x2 = cx - R_pixel, cx + R_pixel
-        y1, y2 = cy - R_pixel, cy + R_pixel
-
-        image = np.full((target_size, target_size), np.nan)
-        error_map = np.full_like(image, np.nan)
-        mask = np.ones_like(image, dtype=bool)
-
-        x1i, x2i = max(0, x1), min(nx_full, x2)
-        y1i, y2i = max(0, y1), min(ny_full, y2)
-
-        xp1, xp2 = x1i - x1, x1i - x1 + (x2i - x1i)
-        yp1, yp2 = y1i - y1, y1i - y1 + (y2i - y1i)
-
-        image[yp1:yp2, xp1:xp2] = image_untrimmed[y1i:y2i, x1i:x2i]
-        error_map[yp1:yp2, xp1:xp2] = error_map_untrimmed[y1i:y2i, x1i:x2i]
-        mask[yp1:yp2, xp1:xp2] = mask_untrimmed[y1i:y2i, x1i:x2i]
+        print(f'processing {name}, beam_scale_pc: {beam_scale_pc}, pc res')
+        # print('beam_area_arcsec2', beam_area_arcsec2,'arcsec2')
+        # print('beam_area_pc2', beam_area_pc2,'pc2')
+        # print('LCO factor using omega_beam (should be equal to beam_area_pc2)',beam_area_arcsec2*23.5*D_Mpc**2)
+        # print('LCO factor from using physical pixel size',pixel_area_pc2*pixels_per_beam)
+        # print('JYTOK=',jy_per_K)
+        # print('flux factor', 1/(pixels_per_beam*jy_per_K))
 
         emission_pixels = np.count_nonzero(np.abs(image) > 1e-10)
         emission_fraction = emission_pixels / image.size
@@ -1390,21 +1337,22 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         mass_surface_density_map = mass_map / pixel_area_pc2
         mass_surface_density_map_nd = NDData(data=mass_surface_density_map, wcs=wcs_trimmed)
 
+        
 
         # ---------- Plot ----------
         if isolate is None or 'plot' in isolate:
+            norm_type = 'sqrt' if normalise_norm else 'linear'
             plot_moment_map(
                 mass_surface_density_map_nd, output_dir, name,
                 BMAJ, BMIN, R_kpc, rebin,
                 PHANGS_mask, flux_mask,
-                aperture=aperture_to_plot, res_src=res_src, normalise_norm=normalise_norm
+                aperture=aperture_to_plot, res_src=res_src, norm_type=norm_type, normalise_norm=normalise_norm
             )
 
         if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']):
 
             # Generate Monte-Carlo images (full set)
-            N_MC = 1000
-            images_mc = generate_random_images(image, error_map, n_iter=N_MC)
+            N_MC = 2000
 
             # ---- PARALLEL MC PROCESSING HERE ----
             dtype = image.dtype  # e.g. np.float64
@@ -1562,9 +1510,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         else:
             sigma0, rs = np.nan, np.nan
         
-        print('L\'CO=',round(LCO, 3))
-        print("flux Jykm/s=",round(SCOdv,3))
-
 
         # ---------- assemble row ----------
         rows.append({
@@ -1940,7 +1885,6 @@ print(len(df_pairs), "matched pairs constructed.")
 
 llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
 
-colourbar_list = [0.0, 23.844463348388672, 0.0, 13.729519844055176, 0.0, 0.6186873316764832, -0.0833947211501982, 0.7565471529942485, 0.0, 169.186279296875, 0.0, 81.96588134765625, 0.0, 503.44219970703125, 0.0, 490.87872314453125, 0.0, 449.8900146484375, 0.0, 294.0622863769531, 0.0, 272.93426513671875, -0.0060547152534127235, 1.4285415410995483, -0.027725540101528168, 0.1900196373462677, 0.0, 977.6436157226562, 0.0, 215.0819854736328, 0.0, 235.15155029296875, 0.0, 547.0530395507812, 0.0, 302.3802795410156, 0.0, 2794.553466796875, 0.0, 1617.9188232421875, 0.0, 0.0, 0.0, 1405.4541015625, 0.0, 216.26358032226562, 0.0, 0.0, 0.0, 0.0, 0.0, 739.7212524414062, 0.0, 39.91537857055664, 0.0, 402.9554138183594, 0.0, 136.9947967529297, 0.0, 6.273231506347656, 0.0, 1509.100830078125, 0.0, 620.2693481445312, 0.0, 552.6951904296875, 0.0, 540.5527954101562, 0.0, 1774.8084716796875, 0.0, 271.2580871582031, 0.0, 707.4338989257812, 0.0, 150.84176635742188, 0.0, 1160.509521484375, 0.0, 332.614013671875, 0.0, 1525.9647216796875, 0.0, 106.37776184082031, 0.0, 132.68637084960938, 0.0, 29.198348999023438, 0.0, 194.44876098632812, 0.0, 72.1232681274414, 0.0, 71.6910400390625, 0.0, 23.00506591796875, 0.0, 10.950300216674805, 0.0, 147.1460723876953, 0.0, 55.73286056518555, 0.0, 42.8271484375, 0.0, 223.9855499267578, 0.0, 127.77916717529297, 0.0, 176.0049591064453, 0.0, 0.0, 0.0, 4653.59228515625, 0.0, 1022.4072875976562, 0.0, 846.5011596679688, 0.0, 23.443605422973633, 0.0, 582.0967407226562, 0.0, 280.8864440917969, 0.0, 107.4163818359375, 0.0, 535.9974975585938, 0.0, 1571.9254150390625, 0.0, 379.54071044921875, 0.0, 325.4033203125, 0.0, 316.1787414550781, 0.0, 250.0497589111328, 0.0, 205.8060760498047, 0.0, 74.765869140625, 0.0, 445.071533203125, 0.0, 289.95843505859375, 0.0, 267.40838623046875, 0.0, 162.72372436523438, 0.0, 142.94168090820312, 0.0, 43.05058670043945, 0.0, 49.0329704284668, 0.0, 2645.263916015625, 0.0, 1002.55517578125, 0.0, 946.3436279296875, 0.0, 487.0328369140625, 0.0, 543.59716796875, 0.0, 346.6418762207031]
 
 
 # ------------------ Main ------------------
@@ -1948,7 +1892,7 @@ colourbar_list = [0.0, 23.844463348388672, 0.0, 13.729519844055176, 0.0, 0.61868
 if __name__ == '__main__':
     llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
     base_output_dir = '/data/c3040163/llama/alma/gas_analysis_results'
-    isolate = 'plot' #                                     "gini":  ["Gini", "Gini_err"],
+    isolate = None #                                     "gini":  ["Gini", "Gini_err"],
                                                         # "asym":  ["Asymmetry", "Asymmetry_err"],
                                                         # "smooth":["Smoothness", "Smoothness_err"],
                                                         # "conc":  ["Concentration", "Concentration_err"],
@@ -1961,8 +1905,8 @@ if __name__ == '__main__':
                                                         # "plot":  []
 
     # CO(2-1)
-    print("Starting CO(2-1) analysis...")
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    # print("Starting CO(2-1) analysis...")
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
@@ -1979,9 +1923,9 @@ if __name__ == '__main__':
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
 
     # # CO(3-2)
-    co32 = True
-    print("Starting CO(3-2) analysis...")
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    # co32 = True
+    # print("Starting CO(3-2) analysis...")
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
@@ -1991,12 +1935,16 @@ if __name__ == '__main__':
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
-
+    
+    isolate = 'plot'
+    colourbar_list = []
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=False)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=False)
     print(colourbar_list)
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)

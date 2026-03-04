@@ -7,56 +7,94 @@ from matplotlib.markers import MarkerStyle
 from matplotlib.transforms import Affine2D
 from astropy.table import Table
 from matplotlib import rcParams
+from matplotlib.gridspec import GridSpec
+
 
 llamatab = Table.read('/Users/administrator/Astro/LLAMA/llama_main_properties.fits', format='fits')
 llamatab.sort('D [Mpc]')
 llamatab_inactive = llamatab[llamatab['type'] == 'i']
 llamatab_AGN = llamatab[llamatab['type'] != 'i']
 
-def figure_maker(fig_y,fig_x,cols,rows,path,fig_title,type,m0=True,R_kpc=1.5,rebin=None,mask='strict',norm = False):
-    
+def figure_maker(
+    fig_y, fig_x, cols, rows, path, fig_title, type,
+    m0=True, R_kpc=1.5, rebin=None, mask='strict',
+    norm=False, colourbar=False
+):
+
     fig = plt.figure(figsize=(fig_x, fig_y), constrained_layout=True)
-    ax = []
+
+    if colourbar:
+        gs = GridSpec(rows, cols + 1, figure=fig,
+                      width_ratios=[1]*cols + [0.25])
+    else:
+        gs = GridSpec(rows, cols, figure=fig)
 
     if type == 'AGN':
         table = llamatab_AGN
     else:
         table = llamatab_inactive
 
+    plot_index = 0
+
     for i in range(len(table)):
-        if table['id'][i] == 'IC4653' or table['id'][i] == 'NGC5128':
+
+        if table['id'][i] in ['IC4653', 'NGC5128']:
             continue
 
-        if m0 == True and rebin is None:
-            subplot_path = path + f'/{R_kpc}_no_rebin_{mask}_' + f"{table['id'][i]}_native"
-            
-        if m0 == False and rebin is None:
-            subplot_path = path + f'/0.3_no_rebin_' + f"{table['id'][i]}_native" 
-                
-        if m0 == True and rebin is not None:
-            subplot_path = path + f'/{R_kpc}_{rebin}_{mask}_' + f"{table['id'][i]}"
-                
-        if m0 == False and rebin is not None:
-            subplot_path = path + f'/{R_kpc}_{rebin}_' + f"{table['id'][i]}" 
+        row = plot_index // cols
+        col = plot_index % cols
 
-        if norm == True:
+        ax = fig.add_subplot(gs[row, col])
+
+        # --- Build file path ---
+        if m0 and rebin is None:
+            subplot_path = path + f'/{R_kpc}_no_rebin_{mask}_{table["id"][i]}_native'
+        elif not m0 and rebin is None:
+            subplot_path = path + f'/0.3_no_rebin_{table["id"][i]}_native'
+        elif m0 and rebin is not None:
+            subplot_path = path + f'/{R_kpc}_{rebin}_{mask}_{table["id"][i]}'
+        else:
+            subplot_path = path + f'/{R_kpc}_{rebin}_{table["id"][i]}'
+
+        if norm:
             subplot_path += '_norm'
+
         subplot_path += '.png'
+
         subplot = mpimg.imread(subplot_path)
-        axi = fig.add_subplot(rows, cols, i + 1)
-        ax.append(axi)
 
-        axi.imshow(subplot)
-        axi.axis('off')
-        axi.set_title(table['name'][i], fontsize=11, pad=1)
+        ax.imshow(subplot)
+        ax.axis('off')
+        ax.set_title(table['name'][i], fontsize=11, pad=1)
 
-        
-    fig.subplots_adjust(left=0, bottom=0, right=2, top=2, wspace=0, hspace=0.310)
-    if m0==False:
-        fig.subplots_adjust(left=0, bottom=0, right=12, top=2, wspace=0, hspace=0)
-    rcParams.update({'figure.autolayout': True})
-    plt.savefig('/Users/administrator/Astro/LLAMA/ALMA/'+f'{fig_title}.png',bbox_inches='tight',pad_inches=0.0,format='png')
-    fig.suptitle(fig_title,y=0.99)
+        plot_index += 1
+
+    # ---------------------------------------
+    # Add colourbar spanning all rows
+    # ---------------------------------------
+    if colourbar:
+
+        flux_flag = True if mask == 'flux90_strict' else False
+        colourbar_path = '/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits' + f'/colourbar_{R_kpc}_{rebin}_{flux_flag}.png'
+
+        cbar_img = mpimg.imread(colourbar_path)
+
+        cbar_ax = fig.add_subplot(gs[:, -1])  # span all rows, last column
+        cbar_ax.imshow(cbar_img)
+        cbar_ax.axis('off')
+
+    #fig.suptitle(fig_title, y=0.99)
+
+    plt.savefig(
+        '/Users/administrator/Astro/LLAMA/ALMA/' + f'{fig_title}.png',
+        bbox_inches='tight',
+        pad_inches=0.2,
+        format='png'
+    )
+
+    plt.close(fig)
+
+
     
 # fig_x = 12
 # fig_y = 10
@@ -65,8 +103,8 @@ fig_y = 10
 cols = 5
 rows = 4
 
-figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots','Moment 0 maps for LLAMA AGN, normalised','AGN',norm=True)
-figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots','Moment 0 maps for LLAMA Inactive galaxies, normalised','inactive',norm=True)
+figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots','Moment 0 maps for LLAMA AGN, normalised','AGN',norm=True,colourbar=True)
+figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots','Moment 0 maps for LLAMA Inactive galaxies, normalised','inactive',norm=True,colourbar=True)
 
 # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots','120pc beam Moment 0 maps for LLAMA AGN','AGN',rebin=120,mask='strict')
 # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots','120pc beam Moment 0 maps for LLAMA Inactive galaxies','inactive',rebin=120,mask='strict')

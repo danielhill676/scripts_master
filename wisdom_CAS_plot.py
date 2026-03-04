@@ -47,7 +47,7 @@ def plot_llama_triptych(
     isolate_names=None,
     m='strict',
     r=1.5, comb_llama=False, 
-    which_compare = None, native_res=False
+    which_compare = None, native_res=False, colours_list=None, markers_list = None
 ):
 
     if xerr_cols is None:
@@ -251,7 +251,14 @@ def plot_llama_triptych(
             if opt in datasets_for_plotting:
                 label_styles[opt] = default_label_styles[opt]
 
-
+        if colours_list is not None:
+            for label in label_styles:
+                if label in colours_list:
+                    label_styles[label] = (label_styles[label][0], colours_list[label])
+        if markers_list is not None:
+            for label in label_styles:
+                if label in markers_list:
+                    label_styles[label] = (markers_list[label], label_styles[label][1])
 
         # --------------------------------------------------
         # Scatter + errorbars
@@ -435,12 +442,21 @@ def plot_llama_triptych(
         if not comb_llama:
             raise ValueError("comb_llama must be True when using which_compare.")
 
-        colours = ['red', 'blue', 'green', 'orange', 'purple', 'brown','pink', 'gray', 'olive', 'cyan', 'magenta', 'yellow', 'teal', 'navy', 'maroon', 'lime', 'coral', 'gold', 'indigo', 'violet', 'turquoise', 'salmon', 'plum', 'orchid']
-        markers = ['o', 's', '^', 'D', 'v', 'P', 'X', '*', '<', '>', 'H', '+', '1', '2', '3', '4', '|', '_', '.', ',', '8', 'p', 'h']
+        # Default pools (only used if not overridden)
+        default_colours = ['red', 'blue', 'green', 'orange', 'purple', 'brown',
+                        'pink', 'gray', 'olive', 'cyan', 'magenta', 'yellow']
+        default_markers = ['o', 's', '^', 'D', 'v', 'P', 'X', '*', '<', '>']
 
-        n = len(compare_masks) * len(compare_radii)
-        colours = colours[:n]
-        markers = markers[:n]
+        # if colours_list is not None:
+        #     colours = [colours_list.get(label, default) for label, default in zip(compare_masks, colours)]
+        # if markers_list is not None:
+        #     markers = [markers_list.get(label, default) for label, default in zip(compare_masks, markers)]
+
+        # n = len(compare_masks) * len(compare_radii)
+        # colours = colours[:n]
+        # markers = markers[:n]
+
+        label_styles = {}
 
         # --------------------------------------------------
         # Layout (create once)
@@ -504,12 +520,33 @@ def plot_llama_triptych(
             dfI = pd.read_csv(path_inactive)
 
             combined_df = pd.concat([dfA, dfI], ignore_index=True)
-
             label = f"{m_i} mask and {r_i}kpc aperture"
-            marker = markers[i]
-            color = colours[i]
 
-            label_styles[label] = (marker, color)
+            # ---------------------------
+            # Colour selection
+            # ---------------------------
+            if colours_list is not None:
+                if label not in colours_list:
+                    raise ValueError(
+                        f"Missing colour for label '{label}' in colours_list"
+                    )
+                colour = colours_list[label]
+            else:
+                colour = default_colours[i % len(default_colours)]
+
+            # ---------------------------
+            # Marker selection
+            # ---------------------------
+            if markers_list is not None:
+                if label not in markers_list:
+                    raise ValueError(
+                        f"Missing marker for label '{label}' in markers_list"
+                    )
+                marker = markers_list[label]
+            else:
+                marker = default_markers[i % len(default_markers)]
+
+            label_styles[label] = (marker, colour)
 
             for key, xcol, ycol in [
                 ("left", x_column1, y_column1),
@@ -655,45 +692,45 @@ r = 1.5
 
 
 
-plot_llama_triptych(
-    x_column1='Gini', y_column1='Smoothness',
-    x_column2='Asymmetry', y_column2='Smoothness',
-    x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, m = m, r = r, native_res=True
-)
+# plot_llama_triptych(
+#     x_column1='Gini', y_column1='Smoothness',
+#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column3='Asymmetry', y_column3='Gini',
+# base_AGN=base_AGN, base_inactive=base_inactive,
+#     log_axes={'x_shared': False, 'y_shared': False},
+#     bins=10,
+#     figsize=9, m = m, r = r, native_res=True
+# )
 
-plot_llama_triptych(
-    x_column1='Gini', y_column1='Smoothness',
-    x_column2='Asymmetry', y_column2='Smoothness',
-    x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, m = m, r = r, native_res=False
-)
-
-
-################################################################ AGN vs inactive CAS triptych wis phangs comparison ###################################################################
-
-m = '120pc_flux90_strict'
-r = 1.5
+# plot_llama_triptych(
+#     x_column1='Gini', y_column1='Smoothness',
+#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column3='Asymmetry', y_column3='Gini',
+# base_AGN=base_AGN, base_inactive=base_inactive,
+#     log_axes={'x_shared': False, 'y_shared': False},
+#     bins=10,
+#     figsize=9, m = m, r = r, native_res=False
+# )
 
 
+# ################################################################ AGN vs inactive CAS triptych wis phangs comparison ###################################################################
 
-plot_llama_triptych(
-    x_column1='Gini', y_column1='Smoothness',
-    x_column2='Asymmetry', y_column2='Smoothness',
-    x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive, base_aux=base_aux,
-    wis_df=wis_df,
-    phangs_df=phangs_df,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, m = m, r = r, comb_llama=True, native_res=True
-)
+# m = '120pc_flux90_strict'
+# r = 1.5
+
+
+
+# plot_llama_triptych(
+#     x_column1='Gini', y_column1='Smoothness',
+#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column3='Asymmetry', y_column3='Gini',
+# base_AGN=base_AGN, base_inactive=base_inactive, base_aux=base_aux,
+#     wis_df=wis_df,
+#     phangs_df=phangs_df,
+#     log_axes={'x_shared': False, 'y_shared': False},
+#     bins=10,
+#     figsize=9, m = m, r = r, comb_llama=True, native_res=True
+#)
 
 ################################################################ comparison of mask and apertures ###################################################################
 
@@ -704,8 +741,15 @@ plot_llama_triptych(
 base_AGN=base_AGN, base_inactive=base_inactive,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict'],[0.3,1,1.5]], native_res=True
-)
+    figsize=9, comb_llama=True, which_compare=[['strict'],[0.3,1,1.5]], native_res=True, colours_list={
+  "strict mask and 0.3kpc aperture": "darkmagenta",
+  "strict mask and 1kpc aperture": "mediumvioletred",
+  "strict mask and 1.5kpc aperture": "crimson"
+}, markers_list={
+  "strict mask and 0.3kpc aperture": "D",
+  "strict mask and 1kpc aperture": "v",
+  "strict mask and 1.5kpc aperture": "p"
+})
 
 
 plot_llama_triptych(
@@ -715,9 +759,12 @@ plot_llama_triptych(
 base_AGN=base_AGN, base_inactive=base_inactive,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True
-)
-
+    figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, colours_list=  {"strict mask and 1.5kpc aperture": "darkcyan",
+  "broad mask and 1.5kpc aperture": "darkorange"
+}, markers_list={
+  "strict mask and 1.5kpc aperture": "D",
+  "broad mask and 1.5kpc aperture": "v",
+})
 plot_llama_triptych(
     x_column1='Gini', y_column1='Smoothness',
     x_column2='Asymmetry', y_column2='Smoothness',
@@ -725,5 +772,12 @@ plot_llama_triptych(
 base_AGN=base_AGN, base_inactive=base_inactive,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]], native_res=True
-)
+    figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]], native_res=True, colours_list={
+  "strict mask and 1.5kpc aperture": "seagreen",
+  "120pc_strict mask and 1.5kpc aperture": "mediumblue",
+  "120pc_flux90_strict mask and 1.5kpc aperture": "firebrick"
+}, markers_list={
+  "strict mask and 1.5kpc aperture": "D",
+  "120pc_strict mask and 1.5kpc aperture": "v",
+  "120pc_flux90_strict mask and 1.5kpc aperture": "p"
+})
