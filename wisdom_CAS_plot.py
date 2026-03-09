@@ -47,7 +47,8 @@ def plot_llama_triptych(
     isolate_names=None,
     m='strict',
     r=1.5, comb_llama=False, 
-    which_compare = None, native_res=False, colours_list=None, markers_list = None
+    which_compare = None, native_res=False, colours_list=None, markers_list = None, hist=True,
+    axis_limits=None, square_aspect=True
 ):
 
     if xerr_cols is None:
@@ -200,9 +201,9 @@ def plot_llama_triptych(
             panels[key]["xcol"] = xcol
             panels[key]["ycol"] = ycol
 
-        # --------------------------------------------------
-        # Layout
-        # --------------------------------------------------
+        # ----------------------------
+        # Create independent axes
+        # ----------------------------
         fig = plt.figure(figsize=(figsize*1.5, figsize))
         gs = gridspec.GridSpec(
             2, 3,
@@ -213,14 +214,64 @@ def plot_llama_triptych(
         )
 
         ax_left = fig.add_subplot(gs[0, 0])
-        ax_top = fig.add_subplot(gs[0, 1], sharey=ax_left)
-        ax_bottom = fig.add_subplot(gs[1, 1], sharex=ax_top)
-
-        ax_hist_y1 = fig.add_subplot(gs[0, 2], sharey=ax_top)
-        ax_hist_y3 = fig.add_subplot(gs[1, 2], sharey=ax_bottom)
-        ax_hist_x2 = ax_top.inset_axes([0, 1.02, 1, 0.25], sharex=ax_top)
-
+        ax_top = fig.add_subplot(gs[0, 1])
+        ax_bottom = fig.add_subplot(gs[1, 1])
         axes = {"left": ax_left, "top": ax_top, "bottom": ax_bottom}
+
+        # ----------------------------
+        # Apply axis limit overrides first
+        # ----------------------------
+        if axis_limits is not None:
+            for panel_name, ax in axes.items():
+                if panel_name in axis_limits:
+                    limits = axis_limits[panel_name]
+                    if "x" in limits:
+                        ax.set_xlim(limits["x"])
+                    if "y" in limits:
+                        ax.set_ylim(limits["y"])
+
+        # ----------------------------
+        # Compute data ranges for each panel
+        # ----------------------------
+        panel_ranges = {}
+        for key, ax in axes.items():
+            x0, x1 = ax.get_xlim()
+            y0, y1 = ax.get_ylim()
+            panel_ranges[key] = {"x": (x0, x1), "y": (y0, y1), "dx": x1 - x0, "dy": y1 - y0}
+
+        # ----------------------------
+        # Force square aspect per panel
+        # ----------------------------
+        for key, ax in axes.items():
+            r = panel_ranges[key]
+            dx, dy = r["dx"], r["dy"]
+
+            if dx > dy:
+                center = 0.5 * (r["y"][0] + r["y"][1])
+                half = dx / 2
+                ax.set_ylim(center - half, center + half)
+            else:
+                center = 0.5 * (r["x"][0] + r["x"][1])
+                half = dy / 2
+                ax.set_xlim(center - half, center + half)
+
+        # ----------------------------
+        # Adjust GridSpec widths/heights to match data ranges so panels touch
+        # ----------------------------
+        # Width ratios = left dx : top dx : fixed histogram width
+        left_dx = axes["left"].get_xlim()[1] - axes["left"].get_xlim()[0]
+        top_dx = axes["top"].get_xlim()[1] - axes["top"].get_xlim()[0]
+        gs.set_width_ratios([left_dx, top_dx, 0.25])
+
+        # Height ratios = top dy : bottom dy
+        top_dy = axes["top"].get_ylim()[1] - axes["top"].get_ylim()[0]
+        bottom_dy = axes["bottom"].get_ylim()[1] - axes["bottom"].get_ylim()[0]
+        gs.set_height_ratios([top_dy, bottom_dy])
+
+        if hist:
+            ax_hist_y1 = fig.add_subplot(gs[0, 2], sharey=ax_top)
+            ax_hist_y3 = fig.add_subplot(gs[1, 2], sharey=ax_bottom)
+            ax_hist_x2 = ax_top.inset_axes([0, 1.02, 1, 0.25], sharex=ax_top)
 
         # --------------------------------------------------
         # Markers and colors
@@ -278,46 +329,63 @@ def plot_llama_triptych(
                 )
             ax.grid(False)
 
-        # --------------------------------------------------
-        # Shared limits
-        # --------------------------------------------------
-        def combined_limits(arrays, log=False, pad=0.05):
-            data = np.concatenate([a for a in arrays if len(a) > 0])
-            if log:
-                data = data[data > 0]
-            if len(data) == 0:
-                return None
-            vmin, vmax = np.nanmin(data), np.nanmax(data)
-            delta = vmax - vmin
-            return vmin - pad*delta, vmax + pad*delta
+        # # --------------------------------------------------
+        # # Shared limits
+        # # --------------------------------------------------
+        # def combined_limits(arrays, log=False, pad=0.05):
+        #     data = np.concatenate([a for a in arrays if len(a) > 0])
+        #     if log:
+        #         data = data[data > 0]
+        #     if len(data) == 0:
+        #         return None
+        #     vmin, vmax = np.nanmin(data), np.nanmax(data)
+        #     delta = vmax - vmin
+        #     return vmin - pad*delta, vmax + pad*delta
 
-        # y1 == y2
-        y_shared = combined_limits([
-            panels["left"][label][1] for label in label_styles
-        ] + [
-            panels["top"][label][1] for label in label_styles
-        ], log_axes.get("y_shared", False))
-        if y_shared:
-            ax_left.set_ylim(y_shared)
-            ax_top.set_ylim(y_shared)
+        # # y1 == y2
+        # y_shared = combined_limits([
+        #     panels["left"][label][1] for label in label_styles
+        # ] + [
+        #     panels["top"][label][1] for label in label_styles
+        # ], log_axes.get("y_shared", False))
+        # if y_shared:
+        #     ax_left.set_ylim(y_shared)
+        #     ax_top.set_ylim(y_shared)
 
-        # x2 == x3
-        x_shared = combined_limits([
-            panels["top"][label][0] for label in label_styles
-        ] + [
-            panels["bottom"][label][0] for label in label_styles
-        ], log_axes.get("x_shared", False))
-        if x_shared:
-            ax_top.set_xlim(x_shared)
-            ax_bottom.set_xlim(x_shared)
+        # # x2 == x3
+        # x_shared = combined_limits([
+        #     panels["top"][label][0] for label in label_styles
+        # ] + [
+        #     panels["bottom"][label][0] for label in label_styles
+        # ], log_axes.get("x_shared", False))
+        # if x_shared:
+        #     ax_top.set_xlim(x_shared)
+        #     ax_bottom.set_xlim(x_shared)
 
-        # Independent limits
-        ax_left.set_xlim(combined_limits([
-            panels["left"][label][0] for label in label_styles
-        ]))
-        ax_bottom.set_ylim(combined_limits([
-            panels["bottom"][label][1] for label in label_styles
-        ]))
+        # # Independent limits
+        # ax_left.set_xlim(combined_limits([
+        #     panels["left"][label][0] for label in label_styles
+        # ]))
+        # ax_bottom.set_ylim(combined_limits([
+        #     panels["bottom"][label][1] for label in label_styles
+        # ]))
+        
+        # # --------------------------------------------------
+        # # Axis limit overrides
+        # # --------------------------------------------------
+
+        # if axis_limits is not None:
+        #     for panel_name, ax in axes.items():
+        #         if panel_name in axis_limits:
+        #             limits = axis_limits[panel_name]
+
+        #             if "x" in limits:
+        #                 ax.set_xlim(limits["x"])
+
+        #             if "y" in limits:
+        #                 ax.set_ylim(limits["y"])
+
+
 
         # --------------------------------------------------
         # Log scaling
@@ -331,6 +399,8 @@ def plot_llama_triptych(
                 ax.set_xscale("log")
             if log_axes.get(ycol, False):
                 ax.set_yscale("log")
+
+
 
         # --------------------------------------------------
         # Excluded tick marks
@@ -350,40 +420,46 @@ def plot_llama_triptych(
         # --------------------------------------------------
         # Histograms
         # --------------------------------------------------
-        # Determine which datasets to include in histograms
-        if comb_llama:
-            hist_labels = ['LLAMA combined']
-        else:
-            hist_labels = ['LLAMA AGN', 'LLAMA inactive']
-        
-        include_opts = ['WISDOM', 'PHANGS']
 
-        for opt in include_opts:
-            if opt in panels['top']:
-                hist_labels.append(opt)
+        if hist:
 
-        # y1 histogram
-        y_all_top = np.concatenate([panels["top"][label][1] for label in hist_labels])
-        bins_y1 = np.histogram_bin_edges(y_all_top, bins=bins)
-        for label in hist_labels:
-            ax_hist_y1.hist(panels["top"][label][1], bins=bins_y1, orientation='horizontal',
-                            alpha=0.4, color=label_styles[label][1])
-        ax_hist_y1.axis("off")
+            # Determine which datasets to include in histograms
+            if comb_llama:
+                hist_labels = ['LLAMA combined']
+            else:
+                hist_labels = ['LLAMA AGN', 'LLAMA inactive']
+            
+            include_opts = ['WISDOM', 'PHANGS']
 
-        # y3 histogram
-        y_all_bottom = np.concatenate([panels["bottom"][label][1] for label in hist_labels])
-        bins_y3 = np.histogram_bin_edges(y_all_bottom, bins=bins)
-        for label in hist_labels:
-            ax_hist_y3.hist(panels["bottom"][label][1], bins=bins_y3, orientation='horizontal',
-                            alpha=0.4, color=label_styles[label][1])
-        ax_hist_y3.axis("off")
+            for opt in include_opts:
+                if opt in panels['top']:
+                    hist_labels.append(opt)
 
-        # x2 histogram
-        x_all_top = np.concatenate([panels["top"][label][0] for label in hist_labels])
-        bins_x2 = np.histogram_bin_edges(x_all_top, bins=bins)
-        for label in hist_labels:
-            ax_hist_x2.hist(panels["top"][label][0], bins=bins_x2, alpha=0.4, color=label_styles[label][1])
-        ax_hist_x2.axis("off")
+            # y1 histogram
+            y_all_top = np.concatenate([panels["top"][label][1] for label in hist_labels])
+            bins_y1 = np.histogram_bin_edges(y_all_top, bins=bins)
+            for label in hist_labels:
+                ax_hist_y1.hist(panels["top"][label][1], bins=bins_y1, orientation='horizontal',
+                                alpha=0.4, color=label_styles[label][1])
+            ax_hist_y1.axis("off")
+
+            # y3 histogram
+            y_all_bottom = np.concatenate([panels["bottom"][label][1] for label in hist_labels])
+            bins_y3 = np.histogram_bin_edges(y_all_bottom, bins=bins)
+            for label in hist_labels:
+                ax_hist_y3.hist(panels["bottom"][label][1], bins=bins_y3, orientation='horizontal',
+                                alpha=0.4, color=label_styles[label][1])
+            ax_hist_y3.axis("off")
+
+            # x2 histogram
+            x_all_top = np.concatenate([panels["top"][label][0] for label in hist_labels])
+            bins_x2 = np.histogram_bin_edges(x_all_top, bins=bins)
+            for label in hist_labels:
+                ax_hist_x2.hist(panels["top"][label][0], bins=bins_x2, alpha=0.4, color=label_styles[label][1])
+            ax_hist_x2.axis("off")
+
+
+
 
 
         # --------------------------------------------------
@@ -424,7 +500,6 @@ def plot_llama_triptych(
         ax_empty.legend(handles=legend_handles, loc="center", fontsize=18, frameon=False)
 
 
-        plt.tight_layout()
         outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/{m}_{r}kpc"
         if m == '120pc_flux90_strict':
             outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/flux90_strict_{r}kpc"
@@ -447,37 +522,20 @@ def plot_llama_triptych(
                         'pink', 'gray', 'olive', 'cyan', 'magenta', 'yellow']
         default_markers = ['o', 's', '^', 'D', 'v', 'P', 'X', '*', '<', '>']
 
-        # if colours_list is not None:
-        #     colours = [colours_list.get(label, default) for label, default in zip(compare_masks, colours)]
-        # if markers_list is not None:
-        #     markers = [markers_list.get(label, default) for label, default in zip(compare_masks, markers)]
-
-        # n = len(compare_masks) * len(compare_radii)
-        # colours = colours[:n]
-        # markers = markers[:n]
 
         label_styles = {}
 
-        # --------------------------------------------------
-        # Layout (create once)
-        # --------------------------------------------------
+        # ----------------------------
+        # Step 1: Create axes (no sharex/sharey)
+        # ----------------------------
         fig = plt.figure(figsize=(figsize*1.5, figsize))
-        gs = gridspec.GridSpec(
-            2, 3,
-            width_ratios=[1, 1, 0.25],
-            height_ratios=[1, 1],
-            wspace=0,
-            hspace=0
-        )
-
+        gs = gridspec.GridSpec(2, 3,
+                                width_ratios=[1, 1, 0.25],
+                                height_ratios=[1, 1],
+                                wspace=0, hspace=0)
         ax_left = fig.add_subplot(gs[0, 0])
-        ax_top = fig.add_subplot(gs[0, 1], sharey=ax_left)
-        ax_bottom = fig.add_subplot(gs[1, 1], sharex=ax_top)
-
-        ax_hist_y1 = fig.add_subplot(gs[0, 2], sharey=ax_top)
-        ax_hist_y3 = fig.add_subplot(gs[1, 2], sharey=ax_bottom)
-        ax_hist_x2 = ax_top.inset_axes([0, 1.02, 1, 0.25], sharex=ax_top)
-
+        ax_top = fig.add_subplot(gs[0, 1])
+        ax_bottom = fig.add_subplot(gs[1, 1])
         axes = {"left": ax_left, "top": ax_top, "bottom": ax_bottom}
 
         # --------------------------------------------------
@@ -583,9 +641,9 @@ def plot_llama_triptych(
                 ax.errorbar(
                     x, y,
                     xerr=xerr, yerr=yerr,
-                    fmt=marker, markersize=6,
+                    fmt=marker, markersize=7,
                     capsize=2, elinewidth=1,
-                    alpha=0.25, color=color,
+                    alpha=0.20, color=color,
                     label=label if key == "left" else None
                 )
 
@@ -595,7 +653,7 @@ def plot_llama_triptych(
                         np.nanmean(x),
                         np.nanmean(y),
                         marker=marker,
-                        s=145,
+                        s=175,
                         color=color,
                         edgecolor='black',
                         zorder=5
@@ -606,33 +664,75 @@ def plot_llama_triptych(
         # --------------------------------------------------
         # Histograms (color matched)
         # --------------------------------------------------
-        hist_labels = list(label_styles.keys())
 
-        y_all_top = np.concatenate([panels["top"][l][1] for l in hist_labels])
-        bins_y1 = np.histogram_bin_edges(y_all_top, bins=bins)
+        if hist:
 
-        for label in hist_labels:
-            ax_hist_y1.hist(panels["top"][label][1], bins=bins_y1,
-                        orientation='horizontal', alpha=0.4,
-                        color=label_styles[label][1])
-        ax_hist_y1.axis("off")
+            hist_labels = list(label_styles.keys())
 
-        y_all_bottom = np.concatenate([panels["bottom"][l][1] for l in hist_labels])
-        bins_y3 = np.histogram_bin_edges(y_all_bottom, bins=bins)
+            y_all_top = np.concatenate([panels["top"][l][1] for l in hist_labels])
+            bins_y1 = np.histogram_bin_edges(y_all_top, bins=bins)
 
-        for label in hist_labels:
-            ax_hist_y3.hist(panels["bottom"][label][1], bins=bins_y3,
-                        orientation='horizontal', alpha=0.4,
-                        color=label_styles[label][1])
-        ax_hist_y3.axis("off")
+            for label in hist_labels:
+                ax_hist_y1.hist(panels["top"][label][1], bins=bins_y1,
+                            orientation='horizontal', alpha=0.4,
+                            color=label_styles[label][1])
+            ax_hist_y1.axis("off")
 
-        x_all_top = np.concatenate([panels["top"][l][0] for l in hist_labels])
-        bins_x2 = np.histogram_bin_edges(x_all_top, bins=bins)
+            y_all_bottom = np.concatenate([panels["bottom"][l][1] for l in hist_labels])
+            bins_y3 = np.histogram_bin_edges(y_all_bottom, bins=bins)
 
-        for label in hist_labels:
-            ax_hist_x2.hist(panels["top"][label][0], bins=bins_x2,
-                        alpha=0.4, color=label_styles[label][1])
-        ax_hist_x2.axis("off")
+            for label in hist_labels:
+                ax_hist_y3.hist(panels["bottom"][label][1], bins=bins_y3,
+                            orientation='horizontal', alpha=0.4,
+                            color=label_styles[label][1])
+            ax_hist_y3.axis("off")
+
+            x_all_top = np.concatenate([panels["top"][l][0] for l in hist_labels])
+            bins_x2 = np.histogram_bin_edges(x_all_top, bins=bins)
+
+            for label in hist_labels:
+                ax_hist_x2.hist(panels["top"][label][0], bins=bins_x2,
+                            alpha=0.4, color=label_styles[label][1])
+            ax_hist_x2.axis("off")
+
+
+        # Step 3: Apply user axis limits
+        panel_ranges = {}
+        for key, ax in axes.items():
+            # Apply strict user limits first
+            if axis_limits is not None and key in axis_limits:
+                limits = axis_limits[key]
+                if "x" in limits:
+                    ax.set_xlim(limits["x"])
+                if "y" in limits:
+                    ax.set_ylim(limits["y"])
+
+            # Compute current spans
+            x0, x1 = ax.get_xlim()
+            y0, y1 = ax.get_ylim()
+            dx, dy = x1 - x0, y1 - y0
+
+            # Make square without shrinking user limits
+            if dx > dy:
+                dy_new = max(dy, dx)  # expand y to match dx
+                center_y = 0.5*(y0 + y1)
+                ax.set_ylim(center_y - dy_new/2, center_y + dy_new/2)
+                dy = dy_new
+            else:
+                dx_new = max(dx, dy)  # expand x to match dy
+                center_x = 0.5*(x0 + x1)
+                ax.set_xlim(center_x - dx_new/2, center_x + dx_new/2)
+                dx = dx_new
+
+            panel_ranges[key] = {"x": ax.get_xlim(), "y": ax.get_ylim(), "dx": dx, "dy": dy}
+
+            # Ensure square aspect
+            ax.set_aspect('equal', adjustable='box')
+
+        # Step 4: Update GridSpec ratios so panels touch
+        gs.set_width_ratios([panel_ranges["left"]["dx"], panel_ranges["top"]["dx"], 0.25])
+        gs.set_height_ratios([panel_ranges["top"]["dy"], panel_ranges["bottom"]["dy"]])
+
 
         # --------------------------------------------------
         # Labels + legend
@@ -672,7 +772,7 @@ def plot_llama_triptych(
         ax_empty.legend(handles=legend_handles, loc="center", fontsize=12, frameon=False)
 
 
-        plt.tight_layout()
+        fig.tight_layout()
         outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/"
         plt.savefig(f"{outfolder}/wisdom_CAS_triptych_comparison{which_compare}native{native_res}.png", dpi=300)
 
@@ -684,6 +784,12 @@ base_aux = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/aux"
 
 wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df.csv")
 phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_df.csv")
+
+axis_limits={
+    "left": {"x": (0.1,1.0), "y": (-0.1,3.5)},
+    "top": {"x": (-0.1,2.1)},
+    "bottom": {"y": (0.1,1)}
+}
 
 ################################################################### AGN vs inactive CAS triptych ###################################################################
 
@@ -742,42 +848,43 @@ base_AGN=base_AGN, base_inactive=base_inactive,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
     figsize=9, comb_llama=True, which_compare=[['strict'],[0.3,1,1.5]], native_res=True, colours_list={
-  "strict mask and 0.3kpc aperture": "darkmagenta",
-  "strict mask and 1kpc aperture": "mediumvioletred",
-  "strict mask and 1.5kpc aperture": "crimson"
+  "strict mask and 0.3kpc aperture": "midnightblue",
+  "strict mask and 1kpc aperture": "lime",
+  "strict mask and 1.5kpc aperture": "orangered"
 }, markers_list={
   "strict mask and 0.3kpc aperture": "D",
-  "strict mask and 1kpc aperture": "v",
+  "strict mask and 1kpc aperture": "s",
   "strict mask and 1.5kpc aperture": "p"
-})
+}, hist=False, axis_limits=axis_limits, square_aspect=True)
 
 
-plot_llama_triptych(
-    x_column1='Gini', y_column1='Smoothness',
-    x_column2='Asymmetry', y_column2='Smoothness',
-    x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, colours_list=  {"strict mask and 1.5kpc aperture": "darkcyan",
-  "broad mask and 1.5kpc aperture": "darkorange"
-}, markers_list={
-  "strict mask and 1.5kpc aperture": "D",
-  "broad mask and 1.5kpc aperture": "v",
-})
-plot_llama_triptych(
-    x_column1='Gini', y_column1='Smoothness',
-    x_column2='Asymmetry', y_column2='Smoothness',
-    x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]], native_res=True, colours_list={
-  "strict mask and 1.5kpc aperture": "seagreen",
-  "120pc_strict mask and 1.5kpc aperture": "mediumblue",
-  "120pc_flux90_strict mask and 1.5kpc aperture": "firebrick"
-}, markers_list={
-  "strict mask and 1.5kpc aperture": "D",
-  "120pc_strict mask and 1.5kpc aperture": "v",
-  "120pc_flux90_strict mask and 1.5kpc aperture": "p"
-})
+# plot_llama_triptych(
+#     x_column1='Gini', y_column1='Smoothness',
+#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column3='Asymmetry', y_column3='Gini',
+# base_AGN=base_AGN, base_inactive=base_inactive,
+#     log_axes={'x_shared': False, 'y_shared': False},
+#     bins=10,
+#     figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, colours_list=  {"strict mask and 1.5kpc aperture": "darkcyan",
+#   "broad mask and 1.5kpc aperture": "darkorange"
+# }, markers_list={
+#   "strict mask and 1.5kpc aperture": "D",
+#   "broad mask and 1.5kpc aperture": "s",
+# }, hist=False )
+
+# plot_llama_triptych(
+#     x_column1='Gini', y_column1='Smoothness',
+#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column3='Asymmetry', y_column3='Gini',
+# base_AGN=base_AGN, base_inactive=base_inactive,
+#     log_axes={'x_shared': False, 'y_shared': False},
+#     bins=10,
+#     figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict','120pc_flux90_strict'],[1.5]], native_res=True, colours_list={
+#   "strict mask and 1.5kpc aperture": "seagreen",
+#   "120pc_strict mask and 1.5kpc aperture": "mediumblue",
+#   "120pc_flux90_strict mask and 1.5kpc aperture": "firebrick"
+# }, markers_list={
+#   "strict mask and 1.5kpc aperture": "D",
+#   "120pc_strict mask and 1.5kpc aperture": "s",
+#   "120pc_flux90_strict mask and 1.5kpc aperture": "p"
+# }, hist=False )
