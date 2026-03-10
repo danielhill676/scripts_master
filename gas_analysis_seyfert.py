@@ -271,7 +271,6 @@ def process_mc_chunk_shm(
 
 def gini_single(image, mask, **kwargs):
     valid_data = image[~mask & np.isfinite(image)].flatten()
-    valid_data = valid_data[valid_data >= 0]
     if len(valid_data) == 0:
         return np.nan
     sorted_vals = np.sort(valid_data)
@@ -280,7 +279,8 @@ def gini_single(image, mask, **kwargs):
     if total == 0:
         return 0.0
     index = np.arange(1, n + 1)
-    return (2 * np.sum(index * sorted_vals) / (n * total)) - (n + 1) / n
+    mean = total / n
+    return (1/(mean*n*(n-1)) * np.sum((2*index - n - 1) * sorted_vals))
 
 def asymmetry_single(image, mask, **kwargs):
     image_rot = np.rot90(image, 2)
@@ -300,7 +300,7 @@ def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=
     image_filled = np.nan_to_num(image, nan=0.0) 
     valid_mask = (~mask) & np.isfinite(image) 
     smooth_image = uniform_filter(image_filled, size=size, mode='constant',cval=0.0) # Nans replaced with 0 reduce the smoothed values of emission pixels
-    if flux_mask:
+    if not flux_mask: 
         smooth_mask = uniform_filter(valid_mask.astype(float), size=size, mode='constant',cval=0.0) # Smoothing the mask will cancel out this effect
         with np.errstate(invalid='ignore', divide='ignore'): smooth_image = smooth_image / smooth_mask # this normalises back up those pixels, avoiding divide-by-zero errs
     valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(smooth_image)
@@ -687,7 +687,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     maxiters=5,
     cenfunc='median')
 
-    vmin = std
+    vmin = 2 * std
     vmax = np.nanpercentile(image.data, 99.5)
 
     if not normalise_norm and res_src in ['native','rebin']:
@@ -752,6 +752,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
         norm_for_cbar = simple_norm(image.data, norm_type, vmin=vmin, vmax=vmax)
         cb = plt.colorbar(plt.cm.ScalarMappable(norm=norm_for_cbar, cmap='RdBu_r'),
                           cax=cbar_ax, orientation='vertical')
+        cb.set_ticks(np.linspace(vmin, vmax, 5))
         cb.set_label('Surface density (M☉pc⁻²)', fontsize=fontsize*1.5)
         plt.savefig('/data/c3040163/llama/alma/gas_analysis_results'+ f'/colourbar_{R_kpc}_{rebin}_{flux_mask}.png', bbox_inches='tight', pad_inches=0)
         plt.close(cbar_fig)
@@ -1321,7 +1322,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 flux_mask_90, flux_aperture_90, R_90 = make_projected_region_mask(
                     image.shape, R_kpc * f * 1.42 , pc_per_arcsec, pixel_scale_arcsec, PA, I
                 )
-                flux_90 = np.nansum(image[flux_mask_90 & ~mask])
+                flux_90 = np.nansum(image[~flux_mask_90 & ~mask])
                 ratio = flux_90 / total_flux if total_flux > 0 else 0.0
                 f -= 0.001
 
@@ -1911,40 +1912,39 @@ if __name__ == '__main__':
                                                         # "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
                                                         # "plot":  []
     colourbar_list = []
-    #process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    #process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    colourbar_list = []
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # colourbar_list = []
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
-
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
 
 
     
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
     
     isolate = 'plot'
     colourbar_list = []

@@ -51,7 +51,10 @@ def plot_moment_map_debug(image, title,flux_mask=False):
         title += '_flux_mask'
     if rebin is not None:
         title += f'_{rebin}pc'
-    plt.savefig(output_dir + f'/{name}_{title}.png', bbox_inches='tight', pad_inches=0.1)
+    path = output_dir + f'/{name}' + f'/{name}_{title}.png'
+    if not os.path.exists(os.path.dirname(path)):
+        os.makedirs(os.path.dirname(path))
+    plt.savefig(path, bbox_inches='tight', pad_inches=0.1)
     plt.close(fig)
 
 
@@ -97,6 +100,21 @@ def asymmetry_debug(image, mask, **kwargs):
     total = image[valid_mask]
     print('A=',np.sum(diff) / np.sum(total) if np.sum(total) > 0 else np.nan)
 
+
+
+def gini_debug(image, mask, **kwargs):
+    valid_data = image[~mask & np.isfinite(image)].flatten()
+    if len(valid_data) == 0:
+        return np.nan
+    sorted_vals = np.sort(valid_data)
+    n = len(sorted_vals)
+    total = np.sum(sorted_vals)
+    if total == 0:
+        return 0.0
+    index = np.arange(1, n + 1)
+    mean = total / n
+    print('G=', 1/(mean*n*(n-1)) * np.sum((2*index - n - 1) * sorted_vals))
+
 #################### arguments ####################
 R_kpc = 1.5
 co32 = False
@@ -104,19 +122,31 @@ flux_mask = True
 normalise_norm = False
 output_dir = '/Users/administrator/Astro/LLAMA/ALMA/AGN/PHANGS_m0_for_test/outputs'
 res_src = 'native'
-rebin = 120
+rebin = None
 PHANGS_mask = 'strict'
 ##################################################
+#INPUT FILE #
+
+
+subdir = '/Users/administrator/Astro/LLAMA/ALMA/AGN/PHANGS_m0_for_test/'
+name = 'NGC5506'
+
+file = '/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0/ngc3351_12m+7m+tp_co21_strict_mom0.fits'
+
+##################################################
+
+
 if rebin == None:
-    file = '/Users/administrator/Astro/LLAMA/ALMA/AGN/PHANGS_m0_for_test/NGC5506_12m_co21_strict_mom0.fits'
+    file = file
 elif rebin == 120:
-    file = '/Users/administrator/Astro/LLAMA/ALMA/AGN/PHANGS_m0_for_test/NGC5506_12m_co21_120pc_strict_mom0.fits'
+    file = file.replace('_strict_mom0.fits', '_120pc_strict_mom0.fits')
 else:    raise ValueError("Unsupported rebin value. Use None or 120.")
 
 base = os.path.basename(file)
 extension = os.path.splitext(base)[1]
 
 name = base.split("_12m")[0]
+name = 'NGC3351'
 
 print(f'running {name} with R={R_kpc}kpc, rebin={rebin}, flux_mask={flux_mask}')
 
@@ -209,8 +239,9 @@ if flux_mask == True:
         flux_mask_90, flux_aperture_90, R_90 = gas_analysis_seyfert.make_projected_region_mask(
             image.shape, R_kpc * f * 1.42 , pc_per_arcsec, pixel_scale_arcsec, PA, I
         )
-        flux_90 = np.nansum(image[flux_mask_90 & ~mask])
+        flux_90 = np.nansum(image[~flux_mask_90 & ~mask])
         ratio = flux_90 / total_flux if total_flux > 0 else 0.0
+        print(ratio)
         f -= 0.001
 
     print(
@@ -239,3 +270,4 @@ gas_analysis_seyfert.plot_moment_map(
 
 smoothness_debug(image, mask, pc_per_arcsec=pc_per_arcsec, pixel_scale_arcsec=pixel_scale_arcsec, flux_mask=flux_mask)
 asymmetry_debug(image, mask)
+gini_debug(image, mask)
