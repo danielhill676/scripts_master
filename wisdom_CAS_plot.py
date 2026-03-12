@@ -1,780 +1,300 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib import gridspec
 import itertools
 
-def strip_units(colname):
-    return colname.split("[")[0].strip()
-
-def get_errorbars(df, colname):
-    """
-    Return symmetric error bars if a matching column exists, else None.
-    Expects '<colname>_err' column (or matching after stripping units).
-    """
-    err_col = f"{colname}_err"
-    if err_col in df.columns:
-        err = pd.to_numeric(df[err_col], errors="coerce")
-        return err.values
-
-    base = strip_units(colname)
-    possible_err = [
-        c for c in df.columns
-        if strip_units(c).lower() == f"{base}_err".lower()
-    ]
-
-    if possible_err:
-        err = pd.to_numeric(df[possible_err[0]], errors="coerce")
-        return err.values
-
-    return None
 
 def plot_llama_triptych(
     x_column1, y_column1,
     x_column2, y_column2,
     x_column3, y_column3,
-    fit_data_AGN=None,
-    base_AGN=None,
-    base_inactive=None, base_aux=None,
+    base_AGN,
+    base_inactive,
+    compare_masks,
+    compare_radii,
     wis_df=None,
     phangs_df=None,
-    xerr_cols=None,
-    yerr_cols=None,
-    log_axes=None,
-    bins=8,
-    figsize=9,
-    exclude_names=None,
-    isolate_names=None,
-    m='strict',
-    r=1.5, comb_llama=False, 
-    which_compare = None, native_res=False, colours_list=None, markers_list = None, hist=True,
-    axis_limits=None, square_aspect=True
+    axis_limits=None,
+    colours_list=None,
+    markers_list=None,
+    hist=False,
+    bins=20,
+    figsize=6
 ):
 
-    if xerr_cols is None:
-        xerr_cols = {}
-    if yerr_cols is None:
-        yerr_cols = {}
-    if log_axes is None:
-        log_axes = {}
+    # --------------------------------------------------
+    # helpers
+    # --------------------------------------------------
+
+    def get_errorbars(df, col):
+        lo = col + "_err_lo"
+        hi = col + "_err_hi"
+        if lo in df.columns and hi in df.columns:
+            return np.vstack([df[lo].values, df[hi].values])
+        return None
 
 
-    if which_compare is None:
+    def extract_xy(df, xcol, ycol):
 
-        # --------------------------------------------------
-        # Use fit_data as primary dataset if df is None
-        # --------------------------------------------------
-        path_AGN = f"{base_AGN}/gas_analysis_summary_{m}_{r}kpc.csv"
-        path_inactive = f"{base_inactive}/gas_analysis_summary_{m}_{r}kpc.csv"
-        aux_path = f"{base_aux}/gas_analysis_summary_{m}_{r}kpc.csv"
+        sub = df[[xcol, ycol]].copy()
+        sub[xcol] = pd.to_numeric(sub[xcol], errors="coerce")
+        sub[ycol] = pd.to_numeric(sub[ycol], errors="coerce")
+        sub = sub.dropna(subset=[xcol, ycol])
 
-        fit_data_AGN = pd.read_csv(path_AGN)
-        fit_data_inactive = pd.read_csv(path_inactive)
-        try:
-            fit_data_aux = pd.read_csv(aux_path)
-        except:
-            fit_data_aux = None
+        x = sub[xcol].values
+        y = sub[ycol].values
 
-        fit_data_AGN_res = fit_data_AGN.sort_values("Resolution (pc)", ascending=True)
-        fit_data_inactive_res = fit_data_inactive.sort_values("Resolution (pc)", ascending=True)
-        fit_data_aux_res = fit_data_aux.sort_values("Resolution (pc)", ascending=True) if fit_data_aux is not None else None
+        xerr_full = get_errorbars(df, xcol)
+        yerr_full = get_errorbars(df, ycol)
 
-        fit_data_AGN_maxres = fit_data_AGN_res.drop_duplicates(subset="Galaxy", keep="last")
-        fit_data_inactive_maxres = fit_data_inactive_res.drop_duplicates(subset="Galaxy", keep="last")
-        fit_data_aux_maxres = fit_data_aux_res.drop_duplicates(subset="Galaxy", keep="last") if fit_data_aux_res is not None else None
+        xerr = xerr_full[:, sub.index] if xerr_full is not None else None
+        yerr = yerr_full[:, sub.index] if yerr_full is not None else None
 
-        fit_data_AGN_minres = fit_data_AGN_res.drop_duplicates(subset="Galaxy", keep="first")
-        fit_data_inactive_minres = fit_data_inactive_res.drop_duplicates(subset="Galaxy", keep="first")
-        fit_data_aux_minres = fit_data_aux_res.drop_duplicates(subset="Galaxy", keep="first") if fit_data_aux_res is not None else None
+        return x, y, xerr, yerr
 
-        if native_res:
 
-            dfA = fit_data_AGN_minres
-            dfI = fit_data_inactive_minres
-            df_aux = fit_data_aux_minres if fit_data_aux is not None else None
-        
+    # --------------------------------------------------
+    # panel structure
+    # --------------------------------------------------
+
+    panels = {"left": {}, "top": {}, "bottom": {}}
+
+    label_styles = {}
+
+    default_colours = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    default_markers = ["o", "s", "D", "^", "v", "P"]
+
+
+    # --------------------------------------------------
+    # load datasets
+    # --------------------------------------------------
+
+    for i, (m_i, r_i) in enumerate(itertools.product(compare_masks, compare_radii)):
+
+        path_AGN = f"{base_AGN}/gas_analysis_summary_{m_i}_{r_i}kpc.csv"
+        path_inactive = f"{base_inactive}/gas_analysis_summary_{m_i}_{r_i}kpc.csv"
+
+        dfA = pd.read_csv(path_AGN)
+        dfI = pd.read_csv(path_inactive)
+
+        combined_df = pd.concat([dfA, dfI], ignore_index=True)
+
+        label = f"{m_i} mask and {r_i}kpc aperture"
+
+        if colours_list:
+            colour = colours_list[label]
         else:
+            colour = default_colours[i % len(default_colours)]
 
-            dfA = fit_data_AGN_maxres
-            dfI = fit_data_inactive_maxres
-            df_aux = fit_data_aux_maxres if fit_data_aux is not None else None
-
-        # --------------------------------------------------
-        # Prepare optional datasets
-        # --------------------------------------------------
-        optional_datasets = {}
-        if df_aux is not None:
-            optional_datasets['Comparison-pipeline'] = df_aux
-        if wis_df is not None:
-            wis_df = wis_df.copy()
-            if 'Galaxy' not in wis_df.columns and 'Name' in wis_df.columns:
-                wis_df['Galaxy'] = wis_df['Name']
-            optional_datasets['WISDOM'] = wis_df
-        if phangs_df is not None:
-            phangs_df = phangs_df.copy()
-            if 'Galaxy' not in phangs_df.columns and 'Name' in phangs_df.columns:
-                phangs_df['Galaxy'] = phangs_df['Name']
-            optional_datasets['PHANGS'] = phangs_df
-
-        # --------------------------------------------------
-        # Name filtering (acts on Galaxy column)
-        # --------------------------------------------------
-        excluded = {"left": {"x": [], "y": []},
-                    "bottom": {"x": [], "y": []}}
-
-        datasets_for_filtering = {"LLAMA AGN": dfA, "LLAMA inactive": dfI, **optional_datasets}
-
-        if exclude_names is not None and isolate_names is None:
-            exclude_norm = [n.strip().upper() for n in exclude_names]
-
-            for label, df in datasets_for_filtering.items():
-                mask = df["Galaxy"].str.strip().str.upper().isin(exclude_norm)
-
-                # Store excluded values for left & bottom panels
-                for panel_key, (xcol, ycol) in {
-                    "left": (x_column1, y_column1),
-                    "bottom": (x_column3, y_column3)
-                }.items():
-                    excluded[panel_key]["x"].extend(
-                        pd.to_numeric(df.loc[mask, xcol], errors="coerce").dropna().values
-                    )
-                    excluded[panel_key]["y"].extend(
-                        pd.to_numeric(df.loc[mask, ycol], errors="coerce").dropna().values
-                    )
-
-                # Remove excluded rows
-                datasets_for_filtering[label] = df[~mask]
-
-            dfA = datasets_for_filtering["LLAMA AGN"]
-            dfI = datasets_for_filtering["LLAMA inactive"]
-            for k in optional_datasets:
-                optional_datasets[k] = datasets_for_filtering[k]
-
-        # --------------------------------------------------
-        # XY extraction helper
-        # --------------------------------------------------
-        def extract_xy(df, xcol, ycol):
-            # Get numeric values
-            x = pd.to_numeric(df[xcol], errors="coerce")
-            y = pd.to_numeric(df[ycol], errors="coerce")
-
-            # Get errorbars
-            xerr = get_errorbars(df, xcol)
-            yerr = get_errorbars(df, ycol)
-
-            # Combine into DataFrame to filter NaNs consistently
-            tmp = pd.DataFrame({"x": x, "y": y})
-            if xerr is not None:
-                tmp["xerr"] = xerr
-            if yerr is not None:
-                tmp["yerr"] = yerr
-
-            tmp = tmp.dropna(subset=["x", "y"])
-
-            x = tmp["x"].values
-            y = tmp["y"].values
-            xerr = tmp["xerr"].values if "xerr" in tmp.columns else None
-            yerr = tmp["yerr"].values if "yerr" in tmp.columns else None
-
-            return x, y, xerr, yerr
-
-
-        # --------------------------------------------------
-        # Prepare panels
-        # --------------------------------------------------
-        datasets_for_plotting = {"LLAMA AGN": dfA, "LLAMA inactive": dfI, **optional_datasets}
-        panels = {}
-        for key, xcol, ycol in [
-            ("left", x_column1, y_column1),
-            ("top", x_column2, y_column2),
-            ("bottom", x_column3, y_column3)
-        ]:
-            panels[key] = {}
-            for label, df in datasets_for_plotting.items():
-                panels[key][label] = extract_xy(df, xcol, ycol)
-
-            # --- Add LLAMA combined if needed ---
-            if comb_llama:
-                combined_df = pd.concat([dfA, dfI], ignore_index=True)
-                panels[key]['LLAMA combined'] = extract_xy(combined_df, xcol, ycol)
-
-            panels[key]["xcol"] = xcol
-            panels[key]["ycol"] = ycol
-
-        # ----------------------------
-        # Create independent axes
-        # ----------------------------
-        fig = plt.figure(figsize=(figsize*1.5, figsize))
-        gs = gridspec.GridSpec(
-            2, 3,
-            width_ratios=[1, 1, 0.25],
-            height_ratios=[1, 1],
-            wspace=0,
-            hspace=0
-        )
-
-        ax_left = fig.add_subplot(gs[0, 0])
-        ax_top = fig.add_subplot(gs[0, 1])
-        ax_bottom = fig.add_subplot(gs[1, 1])
-        axes = {"left": ax_left, "top": ax_top, "bottom": ax_bottom}
-
-        # ----------------------------
-        # Apply axis limit overrides first
-        # ----------------------------
-        if axis_limits is not None:
-            for panel_name, ax in axes.items():
-                if panel_name in axis_limits:
-                    limits = axis_limits[panel_name]
-                    if "x" in limits:
-                        ax.set_xlim(limits["x"])
-                    if "y" in limits:
-                        ax.set_ylim(limits["y"])
-
-        # ----------------------------
-        # Compute data ranges for each panel
-        # ----------------------------
-        panel_ranges = {}
-        for key, ax in axes.items():
-            x0, x1 = ax.get_xlim()
-            y0, y1 = ax.get_ylim()
-            panel_ranges[key] = {"x": (x0, x1), "y": (y0, y1), "dx": x1 - x0, "dy": y1 - y0}
-
-        # ----------------------------
-        # Force square aspect per panel
-        # ----------------------------
-        for key, ax in axes.items():
-            r = panel_ranges[key]
-            dx, dy = r["dx"], r["dy"]
-
-            if dx > dy:
-                center = 0.5 * (r["y"][0] + r["y"][1])
-                half = dx / 2
-                ax.set_ylim(center - half, center + half)
-            else:
-                center = 0.5 * (r["x"][0] + r["x"][1])
-                half = dy / 2
-                ax.set_xlim(center - half, center + half)
-
-        # ----------------------------
-        # Adjust GridSpec widths/heights to match data ranges so panels touch
-        # ----------------------------
-        # Width ratios = left dx : top dx : fixed histogram width
-        left_dx = axes["left"].get_xlim()[1] - axes["left"].get_xlim()[0]
-        top_dx = axes["top"].get_xlim()[1] - axes["top"].get_xlim()[0]
-        gs.set_width_ratios([left_dx, top_dx, 0.25])
-
-        # Height ratios = top dy : bottom dy
-        top_dy = axes["top"].get_ylim()[1] - axes["top"].get_ylim()[0]
-        bottom_dy = axes["bottom"].get_ylim()[1] - axes["bottom"].get_ylim()[0]
-        gs.set_height_ratios([top_dy, bottom_dy])
-
-        if hist:
-            ax_hist_y1 = fig.add_subplot(gs[0, 2], sharey=ax_top)
-            ax_hist_y3 = fig.add_subplot(gs[1, 2], sharey=ax_bottom)
-            ax_hist_x2 = ax_top.inset_axes([0, 1.02, 1, 0.25], sharex=ax_top)
-
-        # --------------------------------------------------
-        # Markers and colors
-        # --------------------------------------------------
-
-
-        default_label_styles = {
-            "LLAMA AGN": ("s", 'red'),
-            "LLAMA inactive": ("v", 'blue'),
-            "Comparison-pipeline": ("*", "cyan"),
-            "WISDOM": ("^", "indigo"),
-            "PHANGS": ("D", "orange")
-        }
-
-        # Build label_styles
-        label_styles = {}
-
-        if comb_llama:
-            label_styles['LLAMA combined'] = ('o', 'black')  # Combined AGN+inactive
+        if markers_list:
+            marker = markers_list[label]
         else:
-            if 'LLAMA AGN' in datasets_for_plotting:
-                label_styles['LLAMA AGN'] = default_label_styles['LLAMA AGN']
-            if 'LLAMA inactive' in datasets_for_plotting:
-                label_styles['LLAMA inactive'] = default_label_styles['LLAMA inactive']
+            marker = default_markers[i % len(default_markers)]
 
-        # Always add optional datasets
-        for opt in ['Comparison-pipeline', 'WISDOM', 'PHANGS']:
-            if opt in datasets_for_plotting:
-                label_styles[opt] = default_label_styles[opt]
+        label_styles[label] = (marker, colour)
 
-        if colours_list is not None:
-            for label in label_styles:
-                if label in colours_list:
-                    label_styles[label] = (label_styles[label][0], colours_list[label])
-        if markers_list is not None:
-            for label in label_styles:
-                if label in markers_list:
-                    label_styles[label] = (markers_list[label], label_styles[label][1])
-
-        # --------------------------------------------------
-        # Scatter + errorbars
-        # --------------------------------------------------
-        for key in panels:
-            ax = axes[key]
-            pdata = panels[key]
-            for label, (marker, color) in label_styles.items():
-                x, y, xerr, yerr = pdata[label]
-                ax.errorbar(
-                    x, y,
-                    xerr=xerr, yerr=yerr,
-                    fmt=marker, markersize=6,
-                    capsize=2, elinewidth=1,
-                    alpha=0.85, color=color,
-                    label=label if key == "left" else None
-                )
-            ax.grid(False)
-
-        # # --------------------------------------------------
-        # # Shared limits
-        # # --------------------------------------------------
-        # def combined_limits(arrays, log=False, pad=0.05):
-        #     data = np.concatenate([a for a in arrays if len(a) > 0])
-        #     if log:
-        #         data = data[data > 0]
-        #     if len(data) == 0:
-        #         return None
-        #     vmin, vmax = np.nanmin(data), np.nanmax(data)
-        #     delta = vmax - vmin
-        #     return vmin - pad*delta, vmax + pad*delta
-
-        # # y1 == y2
-        # y_shared = combined_limits([
-        #     panels["left"][label][1] for label in label_styles
-        # ] + [
-        #     panels["top"][label][1] for label in label_styles
-        # ], log_axes.get("y_shared", False))
-        # if y_shared:
-        #     ax_left.set_ylim(y_shared)
-        #     ax_top.set_ylim(y_shared)
-
-        # # x2 == x3
-        # x_shared = combined_limits([
-        #     panels["top"][label][0] for label in label_styles
-        # ] + [
-        #     panels["bottom"][label][0] for label in label_styles
-        # ], log_axes.get("x_shared", False))
-        # if x_shared:
-        #     ax_top.set_xlim(x_shared)
-        #     ax_bottom.set_xlim(x_shared)
-
-        # # Independent limits
-        # ax_left.set_xlim(combined_limits([
-        #     panels["left"][label][0] for label in label_styles
-        # ]))
-        # ax_bottom.set_ylim(combined_limits([
-        #     panels["bottom"][label][1] for label in label_styles
-        # ]))
-        
-        # # --------------------------------------------------
-        # # Axis limit overrides
-        # # --------------------------------------------------
-
-        # if axis_limits is not None:
-        #     for panel_name, ax in axes.items():
-        #         if panel_name in axis_limits:
-        #             limits = axis_limits[panel_name]
-
-        #             if "x" in limits:
-        #                 ax.set_xlim(limits["x"])
-
-        #             if "y" in limits:
-        #                 ax.set_ylim(limits["y"])
+        panels["left"][label] = extract_xy(combined_df, x_column1, y_column1)
+        panels["top"][label] = extract_xy(combined_df, x_column2, y_column2)
+        panels["bottom"][label] = extract_xy(combined_df, x_column3, y_column3)
 
 
+    # --------------------------------------------------
+    # optional external samples
+    # --------------------------------------------------
 
-        # --------------------------------------------------
-        # Log scaling
-        # --------------------------------------------------
-        for key in panels:
-            ax = axes[key]
-            xcol = panels[key]["xcol"]
-            ycol = panels[key]["ycol"]
+    for opt_label, opt_df, marker, colour in [
+        ("WISDOM", wis_df, "^", "indigo"),
+        ("PHANGS", phangs_df, "D", "orange"),
+    ]:
 
-            if log_axes.get(xcol, False):
-                ax.set_xscale("log")
-            if log_axes.get(ycol, False):
-                ax.set_yscale("log")
+        if opt_df is not None:
 
+            label_styles[opt_label] = (marker, colour)
 
-
-        # --------------------------------------------------
-        # Excluded tick marks
-        # --------------------------------------------------
-        if exclude_names is not None:
-            for panel_key, ax in [("left", ax_left), ("bottom", ax_bottom)]:
-                xlower, xupper = ax.get_xlim()
-                ylower, yupper = ax.get_ylim()
-
-                for x_val in excluded[panel_key]["x"]:
-                    ax.plot([x_val], [ylower], marker='|', color='gray', markersize=10,
-                            linestyle='None', alpha=0.7, clip_on=False)
-                for y_val in excluded[panel_key]["y"]:
-                    ax.plot([xlower], [y_val], marker='_', color='gray', markersize=10,
-                            linestyle='None', alpha=0.7, clip_on=False)
-
-        # --------------------------------------------------
-        # Histograms
-        # --------------------------------------------------
-
-        if hist:
-
-            # Determine which datasets to include in histograms
-            if comb_llama:
-                hist_labels = ['LLAMA combined']
-            else:
-                hist_labels = ['LLAMA AGN', 'LLAMA inactive']
-            
-            include_opts = ['WISDOM', 'PHANGS']
-
-            for opt in include_opts:
-                if opt in panels['top']:
-                    hist_labels.append(opt)
-
-            # y1 histogram
-            y_all_top = np.concatenate([panels["top"][label][1] for label in hist_labels])
-            bins_y1 = np.histogram_bin_edges(y_all_top, bins=bins)
-            for label in hist_labels:
-                ax_hist_y1.hist(panels["top"][label][1], bins=bins_y1, orientation='horizontal',
-                                alpha=0.4, color=label_styles[label][1])
-            ax_hist_y1.axis("off")
-
-            # y3 histogram
-            y_all_bottom = np.concatenate([panels["bottom"][label][1] for label in hist_labels])
-            bins_y3 = np.histogram_bin_edges(y_all_bottom, bins=bins)
-            for label in hist_labels:
-                ax_hist_y3.hist(panels["bottom"][label][1], bins=bins_y3, orientation='horizontal',
-                                alpha=0.4, color=label_styles[label][1])
-            ax_hist_y3.axis("off")
-
-            # x2 histogram
-            x_all_top = np.concatenate([panels["top"][label][0] for label in hist_labels])
-            bins_x2 = np.histogram_bin_edges(x_all_top, bins=bins)
-            for label in hist_labels:
-                ax_hist_x2.hist(panels["top"][label][0], bins=bins_x2, alpha=0.4, color=label_styles[label][1])
-            ax_hist_x2.axis("off")
+            panels["left"][opt_label] = extract_xy(opt_df, x_column1, y_column1)
+            panels["top"][opt_label] = extract_xy(opt_df, x_column2, y_column2)
+            panels["bottom"][opt_label] = extract_xy(opt_df, x_column3, y_column3)
 
 
+    labels = list(label_styles.keys())
 
 
+    # --------------------------------------------------
+    # determine panel limits (square)
+    # --------------------------------------------------
 
-        # --------------------------------------------------
-        # Labels + legend
-        # --------------------------------------------------
-        ax_left.set_xlabel(x_column1)
-        ax_left.set_ylabel(y_column1)
-        ax_bottom.set_xlabel(x_column3)
-        ax_bottom.set_ylabel(y_column3)
+    def compute_limits(key):
 
-        ax_top.set_xlabel("")
-        ax_top.set_ylabel("")
-        ax_top.tick_params(labelleft=False, labelbottom=False)
+        x = np.concatenate([panels[key][l][0] for l in labels])
+        y = np.concatenate([panels[key][l][1] for l in labels])
 
-        ax_empty = fig.add_subplot(gs[1, 0])
-        ax_empty.axis("off")
-        from matplotlib.lines import Line2D
+        xmin, xmax = np.nanmin(x), np.nanmax(x)
+        ymin, ymax = np.nanmin(y), np.nanmax(y)
 
-        # Create legend handles manually without error bars
+        if axis_limits and key in axis_limits:
+            lim = axis_limits[key]
+            if "x" in lim: xmin, xmax = lim["x"]
+            if "y" in lim: ymin, ymax = lim["y"]
 
-        legend_marker_sizes = {
-        "LLAMA AGN": 8,
-        "LLAMA inactive": 12,
-        "LLAMA combined": 8,
-        "WISDOM": 8,
-        "PHANGS": 8,
-        "Comparison-pipeline": 14   # make it bigger
-    }
-        
-        legend_handles = []
-        for label, (marker, color) in label_styles.items():
-            msize = legend_marker_sizes.get(label, 8)
-            legend_handles.append(
-                Line2D([0], [0], marker=marker, color='w', label=label,
-                    markerfacecolor=color, markersize=msize)
+        dx = xmax - xmin
+        dy = ymax - ymin
+
+        if dx > dy:
+            c = 0.5 * (ymin + ymax)
+            ymin, ymax = c - dx/2, c + dx/2
+        else:
+            c = 0.5 * (xmin + xmax)
+            xmin, xmax = c - dy/2, c + dy/2
+
+        return xmin, xmax, ymin, ymax
+
+
+    limits = {k: compute_limits(k) for k in panels}
+
+
+    # --------------------------------------------------
+    # geometry
+    # --------------------------------------------------
+
+    dx_left = limits["left"][1] - limits["left"][0]
+    dx_top = limits["top"][1] - limits["top"][0]
+
+    dy_top = limits["top"][3] - limits["top"][2]
+    dy_bottom = limits["bottom"][3] - limits["bottom"][2]
+
+    total_w = dx_left + dx_top
+    total_h = dy_top + dy_bottom
+
+    # relative panel sizes
+    w_left = dx_left / total_w
+    w_top = dx_top / total_w
+
+    h_top = dy_top / total_h
+    h_bottom = dy_bottom / total_h
+
+    # --------------------------------------------------
+    # create figure
+    # --------------------------------------------------
+
+    fig = plt.figure(figsize=(figsize, figsize))
+
+    # small margin so nothing touches frame
+    margin = 0.08
+
+    usable_w = 1 - margin*2
+    usable_h = 1 - margin*2
+
+    # scaled panel sizes
+    w_left *= usable_w
+    w_top *= usable_w
+
+    h_top *= usable_h
+    h_bottom *= usable_h
+
+    # panel positions
+    x_left = margin
+    x_top = margin + w_left
+
+    y_bottom = margin
+    y_top = margin + h_bottom
+
+    # --------------------------------------------------
+    # create axes
+    # --------------------------------------------------
+
+    ax_left = fig.add_axes([x_left, y_top, w_left, h_top])
+    ax_top = fig.add_axes([x_top, y_top, w_top, h_top])
+    ax_bottom = fig.add_axes([x_top, y_bottom, w_top, h_bottom])
+
+
+    axes = {"left": ax_left, "top": ax_top, "bottom": ax_bottom}
+
+    # --------------------------------------------------
+    # apply limits
+    # --------------------------------------------------
+
+    for key, ax in axes.items():
+
+        xmin, xmax, ymin, ymax = limits[key]
+
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+
+        ax.set_aspect("equal", adjustable="box")
+
+        ax.grid(False)
+
+
+    # --------------------------------------------------
+    # scatter plotting
+    # --------------------------------------------------
+
+    for label, (marker, colour) in label_styles.items():
+
+        for key, ax in axes.items():
+
+            x, y, xerr, yerr = panels[key][label]
+
+            ax.errorbar(
+                x, y,
+                xerr=xerr, yerr=yerr,
+                fmt=marker,
+                markersize=7,
+                capsize=2,
+                alpha=0.2,
+                color=colour,
+                label=label if key == "left" else None
             )
 
-        ax_empty.legend(handles=legend_handles, loc="center", fontsize=18, frameon=False)
+            if len(x) > 0:
 
-
-        outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/{m}_{r}kpc"
-        if m == '120pc_flux90_strict':
-            outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/flux90_strict_{r}kpc"
-        plt.savefig(f"{outfolder}/wisdom_CAS_triptych_{m}_{r}kpc_native{native_res}.png", dpi=300)
-        plt.show()
-
-###################################################################################################################################################################################################################################################################
-# COMPARISON OF MASK/APERTURE
-###################################################################################################################################################################################################################################################################
-    else:
-
-        compare_masks = which_compare[0]
-        compare_radii = which_compare[1]
-
-        if not comb_llama:
-            raise ValueError("comb_llama must be True when using which_compare.")
-
-        # Default pools (only used if not overridden)
-        default_colours = ['red', 'blue', 'green', 'orange', 'purple', 'brown',
-                        'pink', 'gray', 'olive', 'cyan', 'magenta', 'yellow']
-        default_markers = ['o', 's', '^', 'D', 'v', 'P', 'X', '*', '<', '>']
-
-
-        label_styles = {}
-
-        # ----------------------------
-        # Step 1: Create axes (no sharex/sharey)
-        # ----------------------------
-        fig = plt.figure(figsize=(figsize*1.5, figsize))
-        gs = gridspec.GridSpec(2, 3,
-                                width_ratios=[1, 1, 0.25],
-                                height_ratios=[1, 1],
-                                wspace=0, hspace=0)
-        ax_left = fig.add_subplot(gs[0, 0])
-        ax_top = fig.add_subplot(gs[0, 1])
-        ax_bottom = fig.add_subplot(gs[1, 1])
-        axes = {"left": ax_left, "top": ax_top, "bottom": ax_bottom}
-
-        # --------------------------------------------------
-        # Prepare panels structure ONCE
-        # --------------------------------------------------
-        panels = {
-            "left": {},
-            "top": {},
-            "bottom": {}
-        }
-
-        def extract_xy(df, xcol, ycol):
-            sub = df[[xcol, ycol]].copy()
-            sub[xcol] = pd.to_numeric(sub[xcol], errors="coerce")
-            sub[ycol] = pd.to_numeric(sub[ycol], errors="coerce")
-            sub = sub.dropna(subset=[xcol, ycol])
-
-            x = sub[xcol].values
-            y = sub[ycol].values
-
-            xerr_full = get_errorbars(df, xcol)
-            yerr_full = get_errorbars(df, ycol)
-
-            xerr = xerr_full[sub.index] if xerr_full is not None else None
-            yerr = yerr_full[sub.index] if yerr_full is not None else None
-
-            return x, y, xerr, yerr
-
-        # --------------------------------------------------
-        # Load each mask/radius and store as its own label
-        # --------------------------------------------------
-        label_styles = {}
-
-        for i, (m_i, r_i) in enumerate(itertools.product(compare_masks, compare_radii)):
-
-            path_AGN = f"{base_AGN}/gas_analysis_summary_{m_i}_{r_i}kpc.csv"
-            path_inactive = f"{base_inactive}/gas_analysis_summary_{m_i}_{r_i}kpc.csv"
-
-            dfA = pd.read_csv(path_AGN)
-            dfI = pd.read_csv(path_inactive)
-
-            combined_df = pd.concat([dfA, dfI], ignore_index=True)
-            label = f"{m_i} mask and {r_i}kpc aperture"
-
-            # ---------------------------
-            # Colour selection
-            # ---------------------------
-            if colours_list is not None:
-                if label not in colours_list:
-                    raise ValueError(
-                        f"Missing colour for label '{label}' in colours_list"
-                    )
-                colour = colours_list[label]
-            else:
-                colour = default_colours[i % len(default_colours)]
-
-            # ---------------------------
-            # Marker selection
-            # ---------------------------
-            if markers_list is not None:
-                if label not in markers_list:
-                    raise ValueError(
-                        f"Missing marker for label '{label}' in markers_list"
-                    )
-                marker = markers_list[label]
-            else:
-                marker = default_markers[i % len(default_markers)]
-
-            label_styles[label] = (marker, colour)
-
-            for key, xcol, ycol in [
-                ("left", x_column1, y_column1),
-                ("top", x_column2, y_column2),
-                ("bottom", x_column3, y_column3)
-            ]:
-                panels[key][label] = extract_xy(combined_df, xcol, ycol)
-                panels[key]["xcol"] = xcol
-                panels[key]["ycol"] = ycol
-
-        # --------------------------------------------------
-        # Add PHANGS / WISDOM once
-        # --------------------------------------------------
-        for opt_label, opt_df, marker, color in [
-            ("WISDOM", wis_df, "^", "indigo"),
-            ("PHANGS", phangs_df, "D", "orange")
-        ]:
-            if opt_df is not None:
-                label_styles[opt_label] = (marker, color)
-                for key in panels:
-                    xcol = panels[key]["xcol"]
-                    ycol = panels[key]["ycol"]
-                    panels[key][opt_label] = extract_xy(opt_df, xcol, ycol)
-
-        # --------------------------------------------------
-        # Scatter plotting
-        # --------------------------------------------------
-        for key in panels:
-            ax = axes[key]
-            pdata = panels[key]
-
-            for label, (marker, color) in label_styles.items():
-                x, y, xerr, yerr = pdata[label]
-                ax.errorbar(
-                    x, y,
-                    xerr=xerr, yerr=yerr,
-                    fmt=marker, markersize=7,
-                    capsize=2, elinewidth=1,
-                    alpha=0.20, color=color,
-                    label=label if key == "left" else None
+                ax.scatter(
+                    np.nanmean(x),
+                    np.nanmean(y),
+                    marker=marker,
+                    s=175,
+                    color=colour,
+                    edgecolor="black",
+                    zorder=5
                 )
 
-                # mean marker
-                if len(x) > 0:
-                    ax.scatter(
-                        np.nanmean(x),
-                        np.nanmean(y),
-                        marker=marker,
-                        s=175,
-                        color=color,
-                        edgecolor='black',
-                        zorder=5
-                    )
 
-            ax.grid(False)
+    # --------------------------------------------------
+    # histograms
+    # --------------------------------------------------
 
-        # --------------------------------------------------
-        # Histograms (color matched)
-        # --------------------------------------------------
+    if hist:
 
-        if hist:
+        ax_hist_x = ax_top.inset_axes([0, 1.02, 1, 0.25])
+        ax_hist_y1 = ax_top.inset_axes([1.02, 0, 0.25, 1])
+        ax_hist_y2 = ax_bottom.inset_axes([1.02, 0, 0.25, 1])
 
-            hist_labels = list(label_styles.keys())
+        x_all = np.concatenate([panels["top"][l][0] for l in labels])
+        bins_x = np.histogram_bin_edges(x_all, bins=bins)
 
-            y_all_top = np.concatenate([panels["top"][l][1] for l in hist_labels])
-            bins_y1 = np.histogram_bin_edges(y_all_top, bins=bins)
+        y_top_all = np.concatenate([panels["top"][l][1] for l in labels])
+        bins_y1 = np.histogram_bin_edges(y_top_all, bins=bins)
 
-            for label in hist_labels:
-                ax_hist_y1.hist(panels["top"][label][1], bins=bins_y1,
-                            orientation='horizontal', alpha=0.4,
-                            color=label_styles[label][1])
-            ax_hist_y1.axis("off")
+        y_bot_all = np.concatenate([panels["bottom"][l][1] for l in labels])
+        bins_y2 = np.histogram_bin_edges(y_bot_all, bins=bins)
 
-            y_all_bottom = np.concatenate([panels["bottom"][l][1] for l in hist_labels])
-            bins_y3 = np.histogram_bin_edges(y_all_bottom, bins=bins)
+        for label, (_, colour) in label_styles.items():
 
-            for label in hist_labels:
-                ax_hist_y3.hist(panels["bottom"][label][1], bins=bins_y3,
-                            orientation='horizontal', alpha=0.4,
-                            color=label_styles[label][1])
-            ax_hist_y3.axis("off")
+            ax_hist_x.hist(panels["top"][label][0], bins=bins_x, color=colour, alpha=0.4)
+            ax_hist_y1.hist(panels["top"][label][1], bins=bins_y1,
+                            orientation="horizontal", color=colour, alpha=0.4)
+            ax_hist_y2.hist(panels["bottom"][label][1], bins=bins_y2,
+                            orientation="horizontal", color=colour, alpha=0.4)
 
-            x_all_top = np.concatenate([panels["top"][l][0] for l in hist_labels])
-            bins_x2 = np.histogram_bin_edges(x_all_top, bins=bins)
-
-            for label in hist_labels:
-                ax_hist_x2.hist(panels["top"][label][0], bins=bins_x2,
-                            alpha=0.4, color=label_styles[label][1])
-            ax_hist_x2.axis("off")
+        ax_hist_x.axis("off")
+        ax_hist_y1.axis("off")
+        ax_hist_y2.axis("off")
 
 
-        # Step 3: Apply user axis limits
-        panel_ranges = {}
-        for key, ax in axes.items():
-            # Apply strict user limits first
-            if axis_limits is not None and key in axis_limits:
-                limits = axis_limits[key]
-                if "x" in limits:
-                    ax.set_xlim(limits["x"])
-                if "y" in limits:
-                    ax.set_ylim(limits["y"])
+    ax_left.legend(frameon=False)
 
-            # Compute current spans
-            x0, x1 = ax.get_xlim()
-            y0, y1 = ax.get_ylim()
-            dx, dy = x1 - x0, y1 - y0
+    return fig, axes
 
-            # Make square without shrinking user limits
-            if dx > dy:
-                dy_new = max(dy, dx)  # expand y to match dx
-                center_y = 0.5*(y0 + y1)
-                ax.set_ylim(center_y - dy_new/2, center_y + dy_new/2)
-                dy = dy_new
-            else:
-                dx_new = max(dx, dy)  # expand x to match dy
-                center_x = 0.5*(x0 + x1)
-                ax.set_xlim(center_x - dx_new/2, center_x + dx_new/2)
-                dx = dx_new
-
-            panel_ranges[key] = {"x": ax.get_xlim(), "y": ax.get_ylim(), "dx": dx, "dy": dy}
-
-            # Ensure square aspect
-            ax.set_aspect('equal', adjustable='box')
-
-        # Step 4: Update GridSpec ratios so panels touch
-        gs.set_width_ratios([panel_ranges["left"]["dx"], panel_ranges["top"]["dx"], 0.25])
-        gs.set_height_ratios([panel_ranges["top"]["dy"], panel_ranges["bottom"]["dy"]])
-
-
-        # --------------------------------------------------
-        # Labels + legend
-        # --------------------------------------------------
-        ax_left.set_xlabel(x_column1)
-        ax_left.set_ylabel(y_column1)
-        ax_bottom.set_xlabel(x_column3)
-        ax_bottom.set_ylabel(y_column3)
-
-        ax_top.set_xlabel("")
-        ax_top.set_ylabel("")
-        ax_top.tick_params(labelleft=False, labelbottom=False)
-
-        ax_empty = fig.add_subplot(gs[1, 0])
-        ax_empty.axis("off")
-        from matplotlib.lines import Line2D
-
-        # Create legend handles manually without error bars
-        legend_marker_sizes = {
-            "WISDOM": 8,
-            "PHANGS": 8
-        }
-
-        # All other labels (mask/radius combinations) use a larger size
-        for label in label_styles:
-            if label not in legend_marker_sizes:
-                legend_marker_sizes[label] = 12
-
-        legend_handles = []
-        for label, (marker, color) in label_styles.items():
-            msize = legend_marker_sizes.get(label, 8)
-            legend_handles.append(
-                Line2D([0], [0], marker=marker, color='w', label=label,
-                    markerfacecolor=color, markersize=msize)
-            )
-
-        ax_empty.legend(handles=legend_handles, loc="center", fontsize=12, frameon=False)
-
-
-        fig.tight_layout()
-        outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/"
-        plt.savefig(f"{outfolder}/wisdom_CAS_triptych_comparison{which_compare}native{native_res}.png", dpi=300)
 
 
 
@@ -840,23 +360,29 @@ r = 1.5
 
 ################################################################ comparison of mask and apertures ###################################################################
 
-plot_llama_triptych(
+fig, axes = plot_llama_triptych(
     x_column1='Gini', y_column1='Smoothness',
     x_column2='Asymmetry', y_column2='Smoothness',
     x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict'],[0.3,1,1.5]], native_res=True, colours_list={
+    base_AGN=base_AGN,
+    base_inactive=base_inactive,
+    compare_masks=['strict'],
+    compare_radii=[0.3,1,1.5],
+    wis_df=None,
+    phangs_df=None,
+    axis_limits=axis_limits,
+    colours_list={
   "strict mask and 0.3kpc aperture": "midnightblue",
   "strict mask and 1kpc aperture": "lime",
   "strict mask and 1.5kpc aperture": "orangered"
-}, markers_list={
+},  markers_list={
   "strict mask and 0.3kpc aperture": "D",
   "strict mask and 1kpc aperture": "s",
   "strict mask and 1.5kpc aperture": "p"
-}, hist=False, axis_limits=axis_limits, square_aspect=True)
+}, hist=False, bins=10, figsize=30
+)
 
+plt.show()
 
 # plot_llama_triptych(
 #     x_column1='Gini', y_column1='Smoothness',
