@@ -7,6 +7,10 @@ from skimage.transform import rotate
 import warnings
 from astropy.utils.exceptions import AstropyUserWarning
 
+#### Dan's addition #####
+
+from metric_debug_utils import plot_moment_map_debug
+
 
 class cas_molecules:
     def __init__(self,image,inc,pa,xc,yc,cellsize,scale=0):
@@ -17,7 +21,8 @@ class cas_molecules:
         self.xc=xc
         self.yc=yc
         self.smooth_scale=scale
-        self.rad_array=dist_ellipse(self.image.shape, self.xc, self.yc, 1/np.cos(np.deg2rad(self.inc)), pa=self.pa+90) # (Dan) This is building the elliptical aperture
+        # self.rad_array=dist_ellipse(self.image.shape, self.xc, self.yc, 1/np.cos(np.deg2rad(self.inc)), pa=self.pa+90) # (Dan) This is building the elliptical aperture
+        self.rad_array=dist_ellipse(self.image.shape, image.shape[0]/2, image.shape[1]/2, 1/np.cos(np.deg2rad(self.inc)), pa=self.pa+90) # (Dan) This is building the elliptical aperture
         
         ### create flux vs radius
         flatim=self.image.flatten()
@@ -113,8 +118,24 @@ class cas_molecules:
         for r80 in r80s:
             image1=image.copy()
             image1[self.rad_array>r80]=0 # (Dan) Anything outside f90 radius is set to 0
-            imagerot=rotate(image1,180,center=(self.xc,self.yc))
+            #### Dan's addition ####
+            if r80 == r80s[1]:  # only plot for the middle one to avoid too many plots
+                plot_moment_map_debug(image1, 'davis original image', flux_mask=None,R_kpc = R_kpc, snmask=sn_mask, rebin=rebin, output_dir=output_dir, name=name)
+            ########################
+            # imagerot=rotate(image1,180,center=(self.xc,self.yc))
+            imagerot=rotate(image1,180,center=(image1.shape[0]/2,image1.shape[1]/2)) # (Dan) centre weren't right
+            #### Dan's addition ####
+            if r80 == r80s[1]:
+                plot_moment_map_debug(imagerot, 'davis rotated image', flux_mask=None,R_kpc = R_kpc, snmask=sn_mask, rebin=rebin, output_dir=output_dir, name=name)
+            ########################
             asyms.append(np.nansum(np.abs(image1-imagerot))/np.nansum(np.abs(image1))) # (Dan) yeah this is the same
+            #### Dan's addition ####
+            if r80 == r80s[1]:
+                diff = np.abs(image1-imagerot)
+                diff.reshape(image1.shape)
+                plot_moment_map_debug(diff, 'davis diff assym', flux_mask=None,R_kpc = R_kpc, snmask=sn_mask, rebin=rebin, output_dir=output_dir, name=name)
+            ########################
+            
         return asyms[1],np.sqrt(np.prod(np.abs(asyms[1]-[asyms[0],asyms[2]])))
         
 
@@ -127,7 +148,15 @@ class cas_molecules:
             image1[self.rad_array>r80]=0 # (Dan) again, anything outside f90 radius is set to 0
             #smoothed_image = convolve_fft(image, Box2DKernel(np.round(image.shape[0]/6.)))
             smoothed_image = convolve_fft(image1, Box2DKernel(np.round(self.smooth_scale))) # (Dan) using astropy convolve 2d box
+            #### Dan's addition ####
+            if r80 == r80s[1]:  # only plot for the middle one to avoid too many plots
+                plot_moment_map_debug(smoothed_image, 'davis smoothed image', flux_mask=None,R_kpc = R_kpc, snmask=sn_mask, rebin=rebin, output_dir=output_dir, name=name)
+            ########################
             resid=image1-smoothed_image
+            #### Dan's addition ####
+            if r80 == r80s[1]:
+                plot_moment_map_debug(resid, 'davis smoothness diff', flux_mask=None,R_kpc = R_kpc, snmask=sn_mask, rebin=rebin, output_dir=output_dir, name=name)
+            ########################
             smooths.append(np.nansum(np.abs(resid[(resid>0)]))/np.nansum(np.abs(image1))) # (Dan) rejects negative diff
             
         
@@ -169,5 +198,11 @@ class cas_molecules:
         return g,m_20,c,a,s,meangasden,egini,ea,es,meangasden_nozero,r90
         
         
-        
+R_kpc=1.5
+sn_mask = False
+flux_mask = False
+rebin = None
+norm = False
+output_dir = '/Users/administrator/Astro/LLAMA/ALMA/AGN/PHANGS_m0_for_test/outputs'
+name = 'NGC7172'
             

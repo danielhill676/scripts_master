@@ -33,33 +33,7 @@ gas_analysis_seyfert.colourbar_list = colourbar_list
 
 import cas_molecules
 
-def plot_moment_map_debug(image, title,flux_mask=False): 
-    # Initialise plot
-    fontsize = 35 * R_kpc
-    plt.rcParams.update({'font.size': fontsize})
-    figsize = 18 * R_kpc
-    fig = plt.figure(figsize=(figsize , figsize),constrained_layout=True)
-    ax = fig.add_subplot(111)
-    ax.margins(x=0,y=0)
-    ax.set_axis_off()
-
-    im=plt.imshow(image.data,origin='lower',cmap='RdBu_r')
-    im.axes.get_xaxis().set_visible(False)
-    im.axes.get_yaxis().set_visible(False)
-    plt.colorbar(im, fraction=0.046, pad=0.04, label=None)
-    plt.title(title)
-    if flux_mask:
-        title += '_flux_mask'
-    if snmask:
-        title += '_snmask'
-    if rebin is not None:
-        title += f'_{rebin}pc'
-    path = output_dir + f'/{name}' + f'/{name}_{title}.png'
-    if not os.path.exists(os.path.dirname(path)):
-        os.makedirs(os.path.dirname(path))
-    plt.savefig(path, bbox_inches='tight', pad_inches=0.1)
-    plt.close(fig)
-
+from metric_debug_utils import plot_moment_map_debug
 
 
 def smoothness_debug(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=False, **kwargs):
@@ -70,78 +44,78 @@ def smoothness_debug(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=F
     image_filled = np.nan_to_num(image, nan=0.0) 
     valid_mask = (~mask) & np.isfinite(image) 
     smooth_image = uniform_filter(image_filled, size=size, mode='constant',cval=0.0) # Nans replaced with 0 reduce the smoothed values of emission pixels
-    plot_moment_map_debug(smooth_image, 'smoothed image', flux_mask=flux_mask)
+    plot_moment_map_debug(smooth_image, 'smoothed image', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     # if not flux_mask:
         # smooth_mask = uniform_filter(valid_mask.astype(float), size=size, mode='constant',cval=0.0) # Smoothing the mask will cancel out this effect
         # plot_moment_map_debug(smooth_mask, 'smoothed mask', flux_mask=flux_mask)
         # with np.errstate(invalid='ignore', divide='ignore'): smooth_image = smooth_image / smooth_mask # this normalises back up those pixels, avoiding divide-by-zero errs
     valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(smooth_image)
-    plot_moment_map_debug(valid_smooth, 'valid smooth', flux_mask=flux_mask)
+    plot_moment_map_debug(valid_smooth, 'valid smooth', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     if np.sum(valid_smooth) == 0: return np.nan 
     diff_smooth = image[valid_smooth] - smooth_image[valid_smooth] # original image and smoothed image use orginal mask
     full = np.full(image.shape, np.nan)   # empty image
     full[valid_smooth] = diff_smooth              # place values back
-    plot_moment_map_debug(full, 'smooth difference image', flux_mask=flux_mask)
+    plot_moment_map_debug(full, 'smooth difference image', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     total_flux = np.sum(image[valid_smooth])
-    print('S=',np.sum(diff_smooth) / total_flux if total_flux > 0 else np.nan)
+    print('S=',np.sum(diff_smooth[(diff_smooth>0)]) / total_flux if total_flux > 0 else np.nan)
 
 def smoothness_debug_maskfirst(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=False, **kwargs):
-    plot_moment_map_debug(image, 'original image', flux_mask=flux_mask)
+    plot_moment_map_debug(image, 'original image', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     smoothing_sigma_pc = 500 
     smoothing_sigma = (smoothing_sigma_pc / pc_per_arcsec) / pixel_scale_arcsec 
     size = max(1, int(round(smoothing_sigma))) 
     valid_mask = (~mask) & np.isfinite(image)
-    plot_moment_map_debug(valid_mask, 'valid mask', flux_mask=flux_mask)
+    plot_moment_map_debug(valid_mask, 'valid mask', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     valid_image = np.full_like(image, np.nan)
     valid_image[valid_mask] = image[valid_mask]
-    plot_moment_map_debug(valid_image, 'valid image', flux_mask=flux_mask)
+    plot_moment_map_debug(valid_image, 'valid image', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     smooth_image = uniform_filter(valid_image, size=size, mode='constant',cval=0.0) 
 
-    plot_moment_map_debug(smooth_image, 'smoothed image', flux_mask=flux_mask)
+    plot_moment_map_debug(smooth_image, 'smoothed image', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     # if not flux_mask:
     #     smooth_mask = uniform_filter(valid_mask.astype(float), size=size, mode='constant',cval=0.0) # Smoothing the mask will cancel out this effect
     #     plot_moment_map_debug(smooth_mask, 'smoothed mask', flux_mask=flux_mask)
     #     with np.errstate(invalid='ignore', divide='ignore'): smooth_image = smooth_image / smooth_mask # this normalises back up those pixels, avoiding divide-by-zero errs
     valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(smooth_image)
-    plot_moment_map_debug(valid_smooth, 'valid smooth', flux_mask=flux_mask)
+    plot_moment_map_debug(valid_smooth, 'valid smooth', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     if np.sum(valid_smooth) == 0: return np.nan 
     diff_smooth = image[valid_smooth] - smooth_image[valid_smooth] # original image and smoothed image use orginal mask
     full = np.full(image.shape, np.nan)   # empty image
     full[valid_smooth] = diff_smooth              # place values back
-    plot_moment_map_debug(full, 'smooth difference image', flux_mask=flux_mask)
+    plot_moment_map_debug(full, 'smooth difference image', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     total_flux = np.sum(image[valid_smooth])
     print('S=',np.sum(diff_smooth) / total_flux if total_flux > 0 else np.nan)
     
 
 
 def asymmetry_debug(image, mask, **kwargs):
-    plot_moment_map_debug(image, 'original image',flux_mask=flux_mask)
+    plot_moment_map_debug(image, 'original image',flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     image_rot = np.rot90(image, 2)
-    plot_moment_map_debug(image_rot, 'rotated image',flux_mask=flux_mask)
+    plot_moment_map_debug(image_rot, 'rotated image',flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     mask_rot = np.rot90(mask, 2)
-    plot_moment_map_debug(mask, 'valid mask assym', flux_mask=flux_mask)
+    plot_moment_map_debug(mask, 'valid mask assym', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     if np.sum(~mask) == 0 or np.sum(~mask_rot) == 0:
         return np.nan
     diff = abs(image[~mask] - image_rot[~mask_rot])
     valid = (~mask) & (~mask_rot)
     full = np.full(image.shape, np.nan)   # empty image
     full[valid] = np.abs(image[valid] - image_rot[valid])
-    plot_moment_map_debug(full, 'assym difference image', flux_mask=flux_mask)
+    plot_moment_map_debug(full, 'assym difference image', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     total = image[~mask]
     print('A=',np.sum(diff) / np.sum(total) if np.sum(total) > 0 else np.nan)
 
 def asymmetry_debug_mask_after(image, mask, **kwargs):
-    plot_moment_map_debug(image, 'original image',flux_mask=flux_mask)
+    plot_moment_map_debug(image, 'original image',flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     image_rot = np.rot90(image, 2)
-    plot_moment_map_debug(image_rot, 'rotated image',flux_mask=flux_mask)
+    plot_moment_map_debug(image_rot, 'rotated image',flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     #mask_rot = np.rot90(mask, 2)
-    plot_moment_map_debug(mask, 'valid mask assym', flux_mask=flux_mask)
+    plot_moment_map_debug(mask, 'valid mask assym', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     if np.sum(~mask) == 0:
         return np.nan
     diff = abs(image- image_rot)
     full = np.full(image.shape, np.nan)   # empty image
     full[~mask] = diff[~mask]            # place values back
-    plot_moment_map_debug(full, 'assym difference image alt', flux_mask=flux_mask)
+    plot_moment_map_debug(full, 'assym difference image alt', flux_mask=flux_mask,R_kpc = R_kpc, snmask=snmask, rebin=rebin, output_dir=output_dir, name=name)
     total = image[~mask]
     print('A=',np.sum(diff[~mask]) / np.sum(total) if np.sum(total) > 0 else np.nan)
 
@@ -227,6 +201,7 @@ llamatab=llamatab
 RA = main_meta["RA"]
 DEC = main_meta["DEC"]
 PA = main_meta["PA"]
+PA = 70
 I = main_meta["Inclination"]
 beam_scale_pc = main_meta["beam_scale_pc"]
 D_Mpc = main_meta["D_Mpc"]
@@ -239,6 +214,8 @@ beam_area_arcsec2 = main_meta["beam_area_arcsec2"]
 pixel_area_pc2 = main_meta["pixel_area_pc2"]
 pc_per_arcsec = main_meta["pc_per_arcsec"]
 header = main_meta["header"]
+
+print(D_Mpc)
 
 R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
 jy_per_K = float(header.get("JYTOK", 0))
@@ -364,7 +341,7 @@ gas_analysis_seyfert.plot_moment_map(
 ###### metrics debugging ######
 
 smoothness_debug(image, mask, pc_per_arcsec=pc_per_arcsec, pixel_scale_arcsec=pixel_scale_arcsec, flux_mask=flux_mask)
-asymmetry_debug(image, mask)
+# asymmetry_debug(image, mask)
 asymmetry_debug_mask_after(image, mask)
 gini_debug(image, mask)
  

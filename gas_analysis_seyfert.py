@@ -71,7 +71,6 @@ def process_mc_chunk_shm(
     # Lists to collect metrics
     gini_vals = []
     asym_vals = []
-    asym_vals_maskafter = []
     smooth_vals = []
     conc_vals = []
     tm_vals = []
@@ -98,10 +97,7 @@ def process_mc_chunk_shm(
         except Exception:
             asym_vals.append(np.nan)
 
-        try:
-            asym_vals_maskafter.append(asymmetry_single_maskafter(mc_img, mask))
-        except Exception:
-            asym_vals_maskafter.append(np.nan)
+
 
         try:
             smooth_vals.append(smoothness_single(
@@ -260,7 +256,6 @@ def process_mc_chunk_shm(
     return {
         "gini": gini_vals,
         "asym": asym_vals,
-        "asym_maskafter": asym_vals_maskafter,
         "smooth": smooth_vals,
         "conc": conc_vals,
         "tmass": tm_vals,
@@ -281,13 +276,16 @@ def gini_single(image, mask, **kwargs):
     if len(valid_data) == 0:
         return np.nan
     sorted_vals = np.sort(valid_data)
+    if np.nanmin(sorted_vals) < 0:
+        sorted_vals -= np.nanmin(sorted_vals)  # boost so minimum is 0
+    sorted_vals += 1e-7  # boost so minimum is not 0
     n = len(sorted_vals)
     total = np.sum(sorted_vals)
     if total == 0:
         return 0.0
     index = np.arange(1, n + 1)
 
-    mean = total / n
+    mean = total / (n-1)
     G = 1/(mean*n*(n-1)) * np.sum((2*index - n - 1) * sorted_vals)
     return G
 
@@ -296,21 +294,22 @@ def asymmetry_single(image, mask, **kwargs):
     mask_rot = np.rot90(mask, 2)
     if np.sum(~mask) == 0 or np.sum(~mask_rot) == 0:
         return np.nan
-    diff = abs(image[~mask] - image_rot[~mask_rot])
-    total = image[~mask]
-    return np.sum(diff) / np.sum(total) if np.sum(total) > 0 else np.nan
-
-def asymmetry_single_maskafter(image, mask, **kwargs):
-    image_rot = np.rot90(image, 2)
-    mask_rot = np.rot90(mask, 2)
-    if np.sum(~mask) == 0 or np.sum(~mask_rot) == 0:
-        return np.nan
-    # diff = abs(image[~mask] - image_rot[~mask_rot])
-    diff = abs(image- image_rot)
+    diff = abs(image - image_rot)
     total = image[~mask]
     return np.sum(diff[~mask]) / np.sum(total) if np.sum(total) > 0 else np.nan
 
-	
+def smoothness_single_davis(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=False, **kwargs): 
+    smoothing_sigma_pc = 500 
+    smoothing_sigma = (smoothing_sigma_pc / pc_per_arcsec) / pixel_scale_arcsec 
+    size = max(1, int(round(smoothing_sigma))) 
+    image_filled = np.nan_to_num(image, nan=0.0) 
+    smooth_image = uniform_filter(image_filled, size=size, mode='constant',cval=0.0)
+    valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(smooth_image)
+    if np.sum(valid_smooth) == 0: return np.nan 
+    diff_smooth = image[valid_smooth] - smooth_image[valid_smooth] # original image and smoothed image use orginal mask
+    total_flux = np.sum(image[valid_smooth])
+    return np.sum(diff_smooth[(diff_smooth>0)]) / total_flux if total_flux > 0 else np.nan #
+
 def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=False, **kwargs): 
     smoothing_sigma_pc = 500 
     smoothing_sigma = (smoothing_sigma_pc / pc_per_arcsec) / pixel_scale_arcsec 
@@ -888,6 +887,10 @@ def resolve_galaxy_beam_scale(
 
         try:
             D_Mpc = llamatab[llamatab['id'] == base_name]['D [Mpc]'][0]
+            D_Mpc_replace_arr = [33.9, 9.96, 13.1, 19.57]
+            name_replace_arr = ['NGC7172',"NGC3351","NGC4254","NGC1365"]
+            if name in name_replace_arr:
+                D_Mpc = D_Mpc_replace_arr[name_replace_arr.index(name)]
             I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
             PA = llamatab[llamatab['id'] == base_name]['PA'][0]
         except Exception:
@@ -974,7 +977,7 @@ def make_projected_region_mask(
     # Astronomical PA is measured east of north
     #
     # Therefore:
-    theta = np.deg2rad(90.0 - PA)
+    theta = np.deg2rad(90.0 + PA)
     angle = theta * u.rad
 
     # ---- Build elliptical aperture
@@ -1368,7 +1371,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             print(f"RMS noise (from error map) = {rms_noise}")
             if rms_noise != float(0):
                 sn_mask = image > 2 * abs(error_map)
-                mask = ~sn_mask | mask  # combine with existing mask
+                #mask = ~sn_mask | mask  # combine with existing mask
 
             elif rms_noise == float(0):
 
@@ -1379,7 +1382,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 mean, median , std = sigma_clipped_stats(image, sigma=5)
                 print('RMS noise (from sigma-clipped stats) = ', std)
                 sn_mask = image > 2 * std
-                mask = ~sn_mask | mask  # combine with existing mask
+                #mask = ~sn_mask | mask  # combine with existing mask
 
 
 
@@ -1460,8 +1463,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             print('single')
             print('G=', gini_single(image, mask))
             print('A=', asymmetry_single(image, mask))
-            print('A_alt=', asymmetry_single_maskafter(image, mask, alt_mask=True))
-            print('S=', smoothness_single(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask))
+            print('S=', smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask))
 
             with ProcessPoolExecutor(max_workers=cpu) as ex:
                 futures = []
@@ -1509,7 +1511,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
             gini, gini_err = merge_global("gini")
             asym, asym_err = merge_global("asym")
-            asym_altmask, asym_altmask_err = merge_global("asym_maskafter")
             smooth, smooth_err = merge_global("smooth")
             conc, conc_err = merge_global("conc")
             total_mass, total_mass_err = merge_global("tmass")
@@ -1524,7 +1525,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             print("Skipping metric calculations as per isolate parameter.")
             gini, gini_err = np.nan, np.nan
             asym, asym_err = np.nan, np.nan
-            asym_altmask, asym_altmask_err = np.nan, np.nan
             smooth, smooth_err = np.nan, np.nan
             conc, conc_err = np.nan, np.nan
             total_mass, total_mass_err = np.nan, np.nan
@@ -1538,7 +1538,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         print('bootstrap')
         print('G=',gini)
         print('A=',asym)
-        print('A_alt=',asym_altmask)
         print('S=',smooth)
 
         if isolate == None or 'expfit' in isolate:
@@ -1605,26 +1604,20 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             "Inclination (deg)": I,
             "Gini": round(gini, 3), "Gini_err": round(gini_err, 3),
             "Asymmetry": round(asym, 3), "Asymmetry_err": round(asym_err, 3),
-            "Asymmetry_altmask": round(asym_altmask, 3), "Asymmetry_altmask_err": round(asym_altmask_err, 3),
             "Smoothness": round(smooth, 3), "Smoothness_err": round(smooth_err, 3),
             "Concentration": round(conc, 3), "Concentration_err": round(conc_err, 3),
-            "Sigma0 (Jy/beam km/s)": sigma0,
-            "rs (pc)": rs,
+            "Gini_davis": round(gini_single(image, mask), 3), "Gini_davis_err": 0.0,
+            "Asymmetry_davis": round(asymmetry_single(image, mask), 3), "Asymmetry_davis_err": 0.0,
+            "Smoothness_davis": round(smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask), 3), "Smoothness_davis_err": 0.0,
+            "Sigma0 (Jy/beam km/s)": sigma0, "rs (pc)": rs,
             "clumping_factor": round(clump, 3), "clumping_factor_err": round(clump_err, 3),
-            "total_mass (M_sun)": round(total_mass, 2),
-            "total_mass_err (M_sun)": round(total_mass_err, 2),
-            "L'CO (K km_s pc2)": round(LCO, 3),
-            "L'CO_err (K km_s pc2)": round(LCO_err, 3),
-            "L'CO_JCMT (K km s pc2)": round(LCO_JCMT, 3),
-            "L'CO_JCMT_err (K km s pc2)": round(LCO_JCMT_err, 3),
-            "L'CO_APEX (K km s pc2)": round(LCO_APEX, 3),
-            "L'CO_APEX_err (K km s pc2)": round(LCO_APEX_err, 3),
-            "flux (Jy km/s)": round(SCOdv, 3),
-            "flux (Jy km/s)_err": round(SCOdv_err, 3),
-            "mass_weighted_sd": round(mw_sd, 1),
-            "mass_weighted_sd_err": round(mw_sd_err, 1),
-            "area_weighted_sd": round(aw_sd, 1),
-            "area_weighted_sd_err": round(aw_sd_err, 1),
+            "total_mass (M_sun)": round(total_mass, 2),"total_mass_err (M_sun)": round(total_mass_err, 2),
+            "L'CO (K km_s pc2)": round(LCO, 3),"L'CO_err (K km_s pc2)": round(LCO_err, 3),
+            "L'CO_JCMT (K km s pc2)": round(LCO_JCMT, 3),"L'CO_JCMT_err (K km s pc2)": round(LCO_JCMT_err, 3),
+            "L'CO_APEX (K km s pc2)": round(LCO_APEX, 3),"L'CO_APEX_err (K km s pc2)": round(LCO_APEX_err, 3),
+            "flux (Jy km/s)": round(SCOdv, 3),"flux (Jy km/s)_err": round(SCOdv_err, 3),
+            "mass_weighted_sd": round(mw_sd, 1),"mass_weighted_sd_err": round(mw_sd_err, 1),
+            "area_weighted_sd": round(aw_sd, 1),"area_weighted_sd_err": round(aw_sd_err, 1),
             "emission_pixels": emission_pixels,
             "emission_fraction": emission_fraction
         })
