@@ -60,8 +60,10 @@ def figure_maker(
             subplot_path += '_norm'
 
         subplot_path += '.png'
-
-        subplot = mpimg.imread(subplot_path)
+        try:
+            subplot = mpimg.imread(subplot_path)
+        except:
+            return
 
         ax.imshow(subplot)
         ax.axis('off')
@@ -76,8 +78,10 @@ def figure_maker(
 
         flux_flag = True if mask == 'flux90_strict' else False
         colourbar_path = '/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits' + f'/colourbar_{R_kpc}_{rebin}_{flux_flag}.png'
-
-        cbar_img = mpimg.imread(colourbar_path)
+        try:
+            cbar_img = mpimg.imread(colourbar_path)
+        except:
+            return
 
         cbar_ax = fig.add_subplot(gs[:, -1])  # span all rows, last column
         cbar_ax.imshow(cbar_img)
@@ -103,15 +107,24 @@ fig_y = 10
 cols = 5
 rows = 4
 
-figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots','Moment 0 maps for LLAMA AGN, normalised','AGN',norm=True,colourbar=True)
-figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots','Moment 0 maps for LLAMA Inactive galaxies, normalised','inactive',norm=True,colourbar=True)
+for R_kpc in [1.5, 0.3]:
 
-# figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots','120pc beam Moment 0 maps for LLAMA AGN','AGN',rebin=120,mask='strict')
-# figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots','120pc beam Moment 0 maps for LLAMA Inactive galaxies','inactive',rebin=120,mask='strict')
-# figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots','flux masked 120pc beam Moment 0 maps for LLAMA AGN','AGN',rebin=120,mask='flux90_strict')
-# figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots','flux masked 120pc beam Moment 0 maps for LLAMA Inactive galaxies','inactive',rebin=120,mask='flux90_strict')
-# figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/AGN/plots','Continuum maps for LLAMA AGN','AGN',m0=False)
-# figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/inactive/plots','Continuum maps for LLAMA Inactive galaxies','inactive',m0=False)
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Moment 0 maps for LLAMA AGN, normalised {2*R_kpc}x{2*R_kpc}kpc','AGN',norm=True,colourbar=True,R_kpc=R_kpc)
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'Moment 0 maps for LLAMA Inactive galaxies, normalised {2*R_kpc}x{2*R_kpc}kpc','inactive',norm=True,colourbar=True,R_kpc=R_kpc)
+
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Moment 0 maps for LLAMA AGN, normalised {2*R_kpc}x{2*R_kpc}kpc','AGN',norm=False,colourbar=False,R_kpc=R_kpc)
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'Moment 0 maps for LLAMA Inactive galaxies, normalised {2*R_kpc}x{2*R_kpc}kpc','inactive',norm=False,colourbar=False,R_kpc=R_kpc)
+
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'120pc beam Moment 0 maps for LLAMA AGN {2*R_kpc}x{2*R_kpc}kpc','AGN',rebin=120,mask='strict',R_kpc=R_kpc)
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'120pc beam Moment 0 maps for LLAMA Inactive galaxies {2*R_kpc}x{2*R_kpc}kpc','inactive',rebin=120,mask='strict',R_kpc=R_kpc)
+
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'flux masked 120pc beam Moment 0 maps for LLAMA AGN {2*R_kpc}x{2*R_kpc}kpc','AGN',rebin=120,mask='flux90_strict',R_kpc=R_kpc)
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'flux masked 120pc beam Moment 0 maps for LLAMA Inactive galaxies {2*R_kpc}x{2*R_kpc}kpc','inactive',rebin=120,mask='flux90_strict',R_kpc=R_kpc)
+
+    # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/AGN/plots',f'Continuum maps for LLAMA AGN {2*R_kpc}x{2*R_kpc}kpc','AGN',R_kpc=R_kpc,m0=False)
+    # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/cont_analysis_results/inactive/plots',f'Continuum maps for LLAMA Inactive galaxies {2*R_kpc}x{2*R_kpc}kpc','inactive',R_kpc=R_kpc,m0=False)
+
+
 
 
 # plt.show()

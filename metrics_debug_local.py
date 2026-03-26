@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 from astropy.table import Table
 
 
-
 _original_read = Table.read
 
 def patched_read(path, *args, **kwargs):
@@ -32,6 +31,8 @@ colourbar_list = []
 gas_analysis_seyfert.llamatab = llamatab
 gas_analysis_seyfert.colourbar_list = colourbar_list
 
+import cas_molecules
+
 def plot_moment_map_debug(image, title,flux_mask=False): 
     # Initialise plot
     fontsize = 35 * R_kpc
@@ -49,6 +50,8 @@ def plot_moment_map_debug(image, title,flux_mask=False):
     plt.title(title)
     if flux_mask:
         title += '_flux_mask'
+    if snmask:
+        title += '_snmask'
     if rebin is not None:
         title += f'_{rebin}pc'
     path = output_dir + f'/{name}' + f'/{name}_{title}.png'
@@ -68,10 +71,37 @@ def smoothness_debug(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=F
     valid_mask = (~mask) & np.isfinite(image) 
     smooth_image = uniform_filter(image_filled, size=size, mode='constant',cval=0.0) # Nans replaced with 0 reduce the smoothed values of emission pixels
     plot_moment_map_debug(smooth_image, 'smoothed image', flux_mask=flux_mask)
-    if not flux_mask:
-        smooth_mask = uniform_filter(valid_mask.astype(float), size=size, mode='constant',cval=0.0) # Smoothing the mask will cancel out this effect
-        plot_moment_map_debug(smooth_mask, 'smoothed mask', flux_mask=flux_mask)
-        with np.errstate(invalid='ignore', divide='ignore'): smooth_image = smooth_image / smooth_mask # this normalises back up those pixels, avoiding divide-by-zero errs
+    # if not flux_mask:
+        # smooth_mask = uniform_filter(valid_mask.astype(float), size=size, mode='constant',cval=0.0) # Smoothing the mask will cancel out this effect
+        # plot_moment_map_debug(smooth_mask, 'smoothed mask', flux_mask=flux_mask)
+        # with np.errstate(invalid='ignore', divide='ignore'): smooth_image = smooth_image / smooth_mask # this normalises back up those pixels, avoiding divide-by-zero errs
+    valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(smooth_image)
+    plot_moment_map_debug(valid_smooth, 'valid smooth', flux_mask=flux_mask)
+    if np.sum(valid_smooth) == 0: return np.nan 
+    diff_smooth = image[valid_smooth] - smooth_image[valid_smooth] # original image and smoothed image use orginal mask
+    full = np.full(image.shape, np.nan)   # empty image
+    full[valid_smooth] = diff_smooth              # place values back
+    plot_moment_map_debug(full, 'smooth difference image', flux_mask=flux_mask)
+    total_flux = np.sum(image[valid_smooth])
+    print('S=',np.sum(diff_smooth) / total_flux if total_flux > 0 else np.nan)
+
+def smoothness_debug_maskfirst(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=False, **kwargs):
+    plot_moment_map_debug(image, 'original image', flux_mask=flux_mask)
+    smoothing_sigma_pc = 500 
+    smoothing_sigma = (smoothing_sigma_pc / pc_per_arcsec) / pixel_scale_arcsec 
+    size = max(1, int(round(smoothing_sigma))) 
+    valid_mask = (~mask) & np.isfinite(image)
+    plot_moment_map_debug(valid_mask, 'valid mask', flux_mask=flux_mask)
+    valid_image = np.full_like(image, np.nan)
+    valid_image[valid_mask] = image[valid_mask]
+    plot_moment_map_debug(valid_image, 'valid image', flux_mask=flux_mask)
+    smooth_image = uniform_filter(valid_image, size=size, mode='constant',cval=0.0) 
+
+    plot_moment_map_debug(smooth_image, 'smoothed image', flux_mask=flux_mask)
+    # if not flux_mask:
+    #     smooth_mask = uniform_filter(valid_mask.astype(float), size=size, mode='constant',cval=0.0) # Smoothing the mask will cancel out this effect
+    #     plot_moment_map_debug(smooth_mask, 'smoothed mask', flux_mask=flux_mask)
+    #     with np.errstate(invalid='ignore', divide='ignore'): smooth_image = smooth_image / smooth_mask # this normalises back up those pixels, avoiding divide-by-zero errs
     valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(smooth_image)
     plot_moment_map_debug(valid_smooth, 'valid smooth', flux_mask=flux_mask)
     if np.sum(valid_smooth) == 0: return np.nan 
@@ -89,16 +119,31 @@ def asymmetry_debug(image, mask, **kwargs):
     image_rot = np.rot90(image, 2)
     plot_moment_map_debug(image_rot, 'rotated image',flux_mask=flux_mask)
     mask_rot = np.rot90(mask, 2)
-    valid_mask = (~mask) & (~mask_rot) & np.isfinite(image) & np.isfinite(image_rot)
-    plot_moment_map_debug(valid_mask, 'valid mask assym', flux_mask=flux_mask)
-    if np.sum(valid_mask) == 0:
+    plot_moment_map_debug(mask, 'valid mask assym', flux_mask=flux_mask)
+    if np.sum(~mask) == 0 or np.sum(~mask_rot) == 0:
         return np.nan
-    diff = abs(image[valid_mask] - image_rot[valid_mask])
+    diff = abs(image[~mask] - image_rot[~mask_rot])
+    valid = (~mask) & (~mask_rot)
     full = np.full(image.shape, np.nan)   # empty image
-    full[valid_mask] = diff             # place values back
+    full[valid] = np.abs(image[valid] - image_rot[valid])
     plot_moment_map_debug(full, 'assym difference image', flux_mask=flux_mask)
-    total = image[valid_mask]
+    total = image[~mask]
     print('A=',np.sum(diff) / np.sum(total) if np.sum(total) > 0 else np.nan)
+
+def asymmetry_debug_mask_after(image, mask, **kwargs):
+    plot_moment_map_debug(image, 'original image',flux_mask=flux_mask)
+    image_rot = np.rot90(image, 2)
+    plot_moment_map_debug(image_rot, 'rotated image',flux_mask=flux_mask)
+    #mask_rot = np.rot90(mask, 2)
+    plot_moment_map_debug(mask, 'valid mask assym', flux_mask=flux_mask)
+    if np.sum(~mask) == 0:
+        return np.nan
+    diff = abs(image- image_rot)
+    full = np.full(image.shape, np.nan)   # empty image
+    full[~mask] = diff[~mask]            # place values back
+    plot_moment_map_debug(full, 'assym difference image alt', flux_mask=flux_mask)
+    total = image[~mask]
+    print('A=',np.sum(diff[~mask]) / np.sum(total) if np.sum(total) > 0 else np.nan)
 
 
 
@@ -112,7 +157,7 @@ def gini_debug(image, mask, **kwargs):
     if total == 0:
         return 0.0
     index = np.arange(1, n + 1)
-    mean = total / n
+    mean = total / (n-1) # changed from total/n to match formula from cas_molecules
     print('G=', 1/(mean*n*(n-1)) * np.sum((2*index - n - 1) * sorted_vals))
 
 def gini_debug_alt(image, mask):
@@ -135,19 +180,19 @@ def gini_debug_alt(image, mask):
 R_kpc = 1.5
 co32 = False
 flux_mask = True
+snmask = False
 normalise_norm = False
 output_dir = '/Users/administrator/Astro/LLAMA/ALMA/AGN/PHANGS_m0_for_test/outputs'
 res_src = 'native'
-rebin = 120
+rebin = None
 PHANGS_mask = 'strict'
 ##################################################
 #INPUT FILE #
 
 
 subdir = '/Users/administrator/Astro/LLAMA/ALMA/AGN/PHANGS_m0_for_test/'
-name = 'NGC5506'
 
-file = '/Users/administrator/Astro/LLAMA/ALMA/AGN/PHANGS_m0_for_test/NGC4260_12m_co21_strict_mom0.fits'
+file = '/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0/NGC7172_mom0.fits'
 
 ##################################################
 
@@ -163,11 +208,14 @@ print(base)
 extension = os.path.splitext(base)[1]
 
 name = base.split("_12m")[0]
-#name = 'NGC3351'
+name = 'NGC7172'
 
 print(f'running {name} with R={R_kpc}kpc, rebin={rebin}, flux_mask={flux_mask}')
 
+#print(os.path.exists(file))
+
 image_untrimmed = fits.getdata(file, memmap=True)
+#print(np.nanmax(image_untrimmed))
 mask_untrimmed = np.isnan(image_untrimmed)
 
 
@@ -219,7 +267,6 @@ x1, x2 = cx - R_pixel, cx + R_pixel
 y1, y2 = cy - R_pixel, cy + R_pixel
 
 image = np.full((target_size, target_size), np.nan)
-error_map = np.full_like(image, np.nan)
 mask = np.ones_like(image, dtype=bool)
 
 x1i, x2i = max(0, x1), min(nx_full, x2)
@@ -228,16 +275,26 @@ y1i, y2i = max(0, y1), min(ny_full, y2)
 xp1, xp2 = x1i - x1, x1i - x1 + (x2i - x1i)
 yp1, yp2 = y1i - y1, y1i - y1 + (y2i - y1i)
 
+# print("cx, cy:", cx, cy)
+# print("x1, x2:", x1, x2)
+# print("y1, y2:", y1, y2)
+
+# print("x1i, x2i:", x1i, x2i, "width:", x2i - x1i)
+# print("y1i, y2i:", y1i, y2i, "height:", y2i - y1i)
+
+# print("source shape:", image_untrimmed[y1i:y2i, x1i:x2i].shape)
+# print("dest shape:", image[yp1:yp2, xp1:xp2].shape)
+
+print(np.nansum(image_untrimmed))
 image[yp1:yp2, xp1:xp2] = image_untrimmed[y1i:y2i, x1i:x2i]
 mask[yp1:yp2, xp1:xp2] = mask_untrimmed[y1i:y2i, x1i:x2i]
-
+print(np.nansum(image))
 
         # ---------- NaN handling ----------
 nan_pixels = np.isnan(image)
 if nan_pixels.any():
     image[nan_pixels] = 0.0
     mask[nan_pixels] = False
-    error_map[nan_pixels] = np.nanmean(error_map)
 
 
 # ---------- Update WCS ----------
@@ -246,6 +303,9 @@ wcs_trimmed.wcs.crpix[0] -= x1
 wcs_trimmed.wcs.crpix[1] -= y1
 
 image_nd = NDData(data=image, wcs=wcs_trimmed)
+
+print(np.nansum(image))
+print(np.nansum(image[~mask]))
 
 # ---------- Flux mask ----------
 if flux_mask == True:
@@ -265,16 +325,30 @@ if flux_mask == True:
         round(R_90, 2)
     )
     mask = flux_mask_90 | mask
-    fits.writeto(output_dir + f'/{name}/{name}_f90mask.fits', mask.astype(int), overwrite=True)
+    outpath = output_dir + f'/{name}' + f'/{name}_flux90mask.fits'
+    if not os.path.exists(os.path.dirname(outpath)):
+        os.makedirs(os.path.dirname(outpath))
+    fits.writeto(outpath, mask.astype(int), overwrite=True)
     aperture_to_plot = flux_aperture_90
 else:
     aperture_to_plot = None
 
-# # ------------------ Signal to noise mask ------------------
-# if error_map is not None:
-#     sn_mask = image > 3 * error_map
-#     mask = ~sn_mask | mask  # combine with existing mask
-#     fits.writeto(output_dir + f'/{name}/{name}_snmask.fits', mask.astype(int), overwrite=True)
+
+# ------------------ Signal to noise mask ------------------
+
+if snmask:
+
+    # try:
+    #     sn_mask = fits.getdata(f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/masks/{name}_snmask.fits', memmap=True).astype(bool)
+    # except:
+    #     sn_mask = fits.getdata(f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/masks/{name}_snmask.fits', memmap=True).astype(bool)
+
+    # mask = sn_mask
+
+    sn_mask = image != float(0)
+    mask = ~sn_mask | mask  # combine with existing mask
+
+
 
 # ---------- Plot ----------
 
@@ -291,6 +365,28 @@ gas_analysis_seyfert.plot_moment_map(
 
 smoothness_debug(image, mask, pc_per_arcsec=pc_per_arcsec, pixel_scale_arcsec=pixel_scale_arcsec, flux_mask=flux_mask)
 asymmetry_debug(image, mask)
+asymmetry_debug_mask_after(image, mask)
 gini_debug(image, mask)
-gini_debug_alt(image, mask)
-  
+ 
+images = [image]
+inc = [I]
+pa = [PA]
+xc = [cx]
+yc = [cy]
+cellsize = [pixel_scale_pc]
+scale = [(500 / pc_per_arcsec) / pixel_scale_arcsec]
+
+for i in range(len(images)):
+
+
+    cas = cas_molecules.cas_molecules(
+        image=images[i],
+        inc=inc[i],
+        pa=pa[i],
+        xc=xc[i],
+        yc=yc[i],
+        cellsize=cellsize[i],
+        scale=scale[i]
+    )
+
+    results = cas.run_all(clip=None)
