@@ -2713,14 +2713,21 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
                 df_pairs['Active Galaxy'] = normalize_name(df_pairs['Active Galaxy'])
                 df_pairs['Inactive Galaxy'] = normalize_name(df_pairs['Inactive Galaxy'])
+                # print(f'AGN\n len({len(merged_AGN_clean["Name_clean"])})\n',merged_AGN_clean["Name_clean"])
+                # print(f'Inactive\n len({len(merged_inactive_clean["Name_clean"])})\n',merged_inactive_clean["Name_clean"])
 
                 for _, row in df_pairs.iterrows():
                     agn_name = row["Active Galaxy"].strip()
                     inactive_name = row["Inactive Galaxy"].strip()
+                    # print('\n row:', _)
+                    # print(agn_name, inactive_name)
 
                     # Extract rows for each galaxy
                     agn_rows = merged_AGN_clean[merged_AGN_clean["Name_clean"] == agn_name]
                     inactive_rows = merged_inactive_clean[merged_inactive_clean["Name_clean"] == inactive_name]
+
+                    # print('agn rows:', len(agn_rows))
+                    # print('inactive rows:', len(inactive_rows))
 
                     if agn_rows.empty or inactive_rows.empty:
                         continue
@@ -2729,6 +2736,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     # NATIVE RESOLUTION MODE
                     # =========================
                     if nativey:
+                        print('native res mode')
 
                         # Select best (smallest) resolution row for each galaxy
                         agn_row = (
@@ -2760,38 +2768,45 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     # =========================
                     # MATCHED RESOLUTION MODE
                     # =========================
-                    for _, agn_row in agn_rows.iterrows():
-                        res_agn = agn_row["Resolution (pc)"]
-                        val_agn = agn_row[y_column]
+                    else:
+                        print('matched res mode')
+                        for _, agn_row in agn_rows.iterrows():
+                            res_agn = agn_row["Resolution (pc)"]
+                            val_agn = agn_row[y_column]
 
-                        if not np.isfinite(val_agn):
-                            continue
+                            if not np.isfinite(val_agn):
+                                continue
 
-                        # Find inactive rows at the SAME resolution
-                        match_inactive = inactive_rows[
-                            inactive_rows["Resolution (pc)"] == res_agn
-                        ]
+                            # Find inactive rows at the SAME resolution
+                            match_inactive = inactive_rows[
+                                inactive_rows["Resolution (pc)"] == res_agn
+                            ]
 
-                        if match_inactive.empty:
-                            continue
+                            if match_inactive.empty:
+                                #print(f"No inactive match for AGN {agn_row['Name_clean']} at resolution {res_agn} pc")
+                                continue
 
-                        inactive_row = match_inactive.iloc[0]
-                        val_inactive = inactive_row[y_column]
+                            inactive_row = match_inactive.iloc[0]
+                            val_inactive = inactive_row[y_column]
 
-                        if not np.isfinite(val_inactive):
-                            continue
+                            #print(agn_row["Name_clean"],val_agn, inactive_row["Name_clean"], val_inactive)
 
-                        diff = float(val_agn) - float(val_inactive)
-                        diffs.append(diff)
-                        valid_pairs += 1
+                            if not np.isfinite(val_inactive):
+                                continue
 
-                        # Stop after first valid match for this pair
-                        break
+                            diff = float(val_agn) - float(val_inactive)
+                            #print(diff)
+                            diffs.append(diff)
+                            valid_pairs += 1
+
+                            # Stop after first valid match for this pair
+                            break
 
                 diffs = np.asarray(diffs)
                 diffs = diffs[np.isfinite(diffs)]
 
                 n = len(diffs)
+                print(f"Number of valid pairs: {n}")
 
                 mean = np.mean(diffs)
                 sigma = np.std(diffs, ddof=1)  # sample standard deviation
@@ -3209,6 +3224,7 @@ for active, nums in active_to_nums.items():
         })
 
 df_pairs = pd.DataFrame(rows).sort_values(["pair_id", "Active Galaxy"]).reset_index(drop=True)
+display(df_pairs)
 print(len(df_pairs), "matched pairs constructed.")
 
 
@@ -3436,10 +3452,11 @@ Rosario2018_obs = [
 
 
 
-#masks = ['broad', 'strict','flux90_strict']
-masks = ['strict']
-#radii = [1.5,1,0.3]
-radii = [0.3]
+masks = ['broad', 'strict','flux90_strict']
+radii = [1.5,1,0.3]
+
+# masks = ['strict']
+# radii = [1.5]
 
 for mask in masks:
     for R_kpc in radii:
@@ -3481,15 +3498,33 @@ for mask in masks:
         # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,exclude_names=None,nativey=True)
 
 
-# #         # ############## CAS with eachother #############
+# # #         # ############## CAS with eachother #############
 
-        plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
-        plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
-        plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
-#         plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
-        plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
-#         plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
-        plot_llama_property('Gini', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+#         plot_llama_property('Gini', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+#         plot_llama_property('Asymmetry', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+#         plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+# #         plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+        # plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+       # plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 5845']) 
+#         plot_llama_property('Gini', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+
+
+# # #         # ############## CAS with eachother (Davis) #############
+
+#         plot_llama_property('Gini_davis', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+#         plot_llama_property('Asymmetry_davis', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+#         plot_llama_property('Asymmetry_davis', 'Gini_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+       # plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+#         plot_llama_property('clumping_factor', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+# #         plot_llama_property('Asymmetry_davis', 'clumping_factor_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260', 'NGC 5845'])
+#         plot_llama_property('Gini_davis', 'Asymmetry_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+
+
+        # #         # ############## davis vs bootstrap #############
+
+        # plot_llama_property('Gini_davis', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+        # plot_llama_property('Asymmetry_davis', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
+        # plot_llama_property('Smoothness_davis', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'])
 
 # # # native res
 
@@ -3499,6 +3534,18 @@ for mask in masks:
 #         plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 5845'],nativex=True,nativey=True)
 #         plot_llama_property('clumping_factor', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'],nativex=True,nativey=True)
 #         plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775', 'NGC 5845'],nativex=True,nativey=True)
+
+#### safe for pairdiffs
+
+        plot_llama_property('emission_pixels', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775'])
+        plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775'],nativey=True)
+        plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775'])
+        plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775'])
+        plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775'])
+        
+        plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775'])
+        plot_llama_property('emission_pixels', 'Gini_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775'])
+        plot_llama_property('emission_pixels', 'Asymmetry_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=['NGC 1375','NGC 1315','NGC 2775'])          
 
 # #         # ############## CAS with concentration #############
 
@@ -3516,6 +3563,19 @@ for mask in masks:
 #         plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
 
         # plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 5845'],res_comp=False,comb_llama=False,yhist=False)
+
+
+# #         ############### Davis CAS with resolution #############
+
+        # plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        # plot_llama_property('Resolution (pc)', 'Asymmetry_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        # plot_llama_property('Resolution (pc)', 'Gini_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        # plot_llama_property('Resolution (pc)', 'Smoothness', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        # plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+
+        # plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 5845'],res_comp=False,comb_llama=False,yhist=False)
+
+
 
 # #           ##################  With emission fraction ##################
 
@@ -3546,7 +3606,7 @@ for mask in masks:
 
         # plot_llama_property('log L′ CO',"L'CO_JCMT (K km s pc2)",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True, logy=True,square=True,best_fit=False,mask=mask,R_kpc=R_kpc,comb_llama=True, exclude_names=None,yhist=False)
 
-
+        
 # # #     ############# CAS WISDOM, PHANGS coplot   #############
 
 #         if R_kpc == 1.5 and mask != 'broad':

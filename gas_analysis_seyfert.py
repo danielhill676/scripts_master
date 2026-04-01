@@ -101,7 +101,7 @@ def process_mc_chunk_shm(
 
         try:
             smooth_vals.append(smoothness_single(
-                mc_img, mask,
+                mc_img, metric_kwargs["snmask"],
                 pc_per_arcsec=metric_kwargs["pc_per_arcsec"],
                 pixel_scale_arcsec=metric_kwargs["pixel_scale_arcsec"], flux_mask=metric_kwargs.get("flux_mask", False)
             ))
@@ -199,7 +199,7 @@ def process_mc_chunk_shm(
 
         try:
             clump_vals.append(clumping_factor_single(
-                mc_img, mask,
+                mc_img, metric_kwargs["snmask"],
                 pixel_area_pc2=metric_kwargs["pixel_area_pc2"],
                 pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
                 beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
@@ -800,7 +800,6 @@ def resolve_galaxy_beam_scale(
 ):
     header = fits.getheader(fits_file)
 
-    # ---- defaults (critical!) ----
     RA = DEC = PA = I = D_Mpc = np.nan
 
     # ---- normalize name ----
@@ -887,10 +886,10 @@ def resolve_galaxy_beam_scale(
 
         try:
             D_Mpc = llamatab[llamatab['id'] == base_name]['D [Mpc]'][0]
-            D_Mpc_replace_arr = [33.9, 9.96, 13.1, 19.57]
-            name_replace_arr = ['NGC7172',"NGC3351","NGC4254","NGC1365"]
-            if name in name_replace_arr:
-                D_Mpc = D_Mpc_replace_arr[name_replace_arr.index(name)]
+            # D_Mpc_replace_arr = [33.9, 9.96, 13.1, 19.57]
+            # name_replace_arr = ['NGC7172',"NGC3351","NGC4254","NGC1365"]
+            # if base_name in name_replace_arr:
+            #     D_Mpc = D_Mpc_replace_arr[name_replace_arr.index(base_name)]
             I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
             PA = llamatab[llamatab['id'] == base_name]['PA'][0]
         except Exception:
@@ -1029,8 +1028,11 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 ##############################################################################
 
-    if name in ['NGC3783','NGC1315','NGC3717','NGC1375','NGC5037','MCG514','ESO021']:
-        return
+    # if name in ['NGC3783','NGC1315','NGC3717','NGC1375','NGC5037','MCG514','ESO021']: this is a set of ones that crashed on the ned search for some reason
+    #     return
+
+    # if name not in ['NGC5845']:
+    #     return
     
 ##############################################################################
 
@@ -1073,8 +1075,11 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     # Load FITS
     image_untrimmed = fits.getdata(file, memmap=True)
-    if error_map_file is not np.nan:
+    if error_map_file is not np.nan and name not in ['NGC5845']:
         error_map_untrimmed = fits.getdata(error_map_file, memmap=True)
+    elif error_map_file is not np.nan and name == 'NGC5845':
+        error_map_untrimmed = fits.getdata(error_map_file, memmap=True)
+        error_map_untrimmed = error_map_untrimmed[:image_untrimmed.shape[0], :image_untrimmed.shape[1]]
     else:
         error_map_untrimmed = np.full_like(image_untrimmed, 0)
 
@@ -1370,18 +1375,20 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             rms_noise = np.sqrt(np.mean(error_map[np.isfinite(error_map)]**2))
             print(f"RMS noise (from error map) = {rms_noise}")
             if rms_noise != float(0):
-                sn_mask = image > 2 * abs(error_map)
-                #mask = ~sn_mask | mask  # combine with existing mask
+                #sn_mask = image > 2 * abs(error_map)
+                sn_mask = image != float(0)
+                if name in ['NGC5845','MCG630']: sn_mask = image > 2 * abs(error_map)
+                combmask = ~sn_mask | mask  # combine with existing mask
 
             elif rms_noise == float(0):
 
-                # print('masking out 0s instead of using error map')
-                # sn_mask = image != float(0)
-                # mask = ~sn_mask | mask
+                print('masking out 0s instead of using error map')
+                sn_mask = image != float(0)
+                combmask = ~sn_mask | mask
 
-                mean, median , std = sigma_clipped_stats(image, sigma=5)
-                print('RMS noise (from sigma-clipped stats) = ', std)
-                sn_mask = image > 2 * std
+                # mean, median , std = sigma_clipped_stats(image, sigma=5)
+                # print('RMS noise (from sigma-clipped stats) = ', std)
+                # sn_mask = image > 2 * std
                 #mask = ~sn_mask | mask  # combine with existing mask
 
 
@@ -1390,6 +1397,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             if not os.path.exists(os.path.dirname(sn_mask_path)):
                 os.makedirs(os.path.dirname(sn_mask_path))
             fits.writeto(sn_mask_path, mask.astype(int), overwrite=True)
+            if name in ['NGC5845','MCG630']: mask = combmask
+
 
 
 
@@ -1459,11 +1468,14 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 pixel_scale_arcsec=pixel_scale_arcsec,
                 jy_per_K = jy_per_K,
                 flux_mask = flux_mask,
+                snmask = combmask
             )
             print('single')
             print('G=', gini_single(image, mask))
             print('A=', asymmetry_single(image, mask))
             print('S=', smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask))
+            print('C=', clumping_factor_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32))
+
 
             with ProcessPoolExecutor(max_workers=cpu) as ex:
                 futures = []
@@ -1981,40 +1993,40 @@ if __name__ == '__main__':
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
 
-    # colourbar_list = [] 
+    colourbar_list = [] 
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    # isolate = 'plot'
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
-    # isolate = None
-    # colourbar_list = [] 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    isolate = 'plot'
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
+    isolate = None
+    colourbar_list = [] 
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
 
 

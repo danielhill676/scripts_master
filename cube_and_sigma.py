@@ -48,7 +48,8 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
         if not name.endswith('.fits'):
             continue  # Skip anything that isn’t a FITS file
 
-        name_short = name.removesuffix('.fits')
+        #name_short = name.removesuffix('.fits')
+        name_short = name.removesuffix('_12m_co21.fits')
 
         # if name_short not in ['ESO137']:
         #     continue
@@ -279,9 +280,9 @@ def cube_imaging(folder,restf,dv,outfolder,FOV,square=False):
                     return None
 
         moment0_data = image_plot(0)
-        image_plot(8)
-        image_plot(1, moment0=moment0_data)
-        image_plot(2, moment0=moment0_data)
+        # image_plot(8)
+        # image_plot(1, moment0=moment0_data)
+        # image_plot(2, moment0=moment0_data)
 
         # Save the sigma image
         sigma_hdu = fits.PrimaryHDU(sigma_image)
@@ -351,23 +352,25 @@ CO2_1 = 230.538
 CO3_2 = 345.796
 square = True
 FOV_barolo = 2000  # in pc
-FOV = 1000
+FOV = 1500
 
-# print('Beginning AGN CO imaging...')
+print('Beginning AGN CO imaging...')
 # AGN_21 = r"/Users/administrator/Astro/LLAMA/ALMA/AGN"
 # AGN_32 = r"/Users/administrator/Astro/LLAMA/ALMA/CO32/AGN"
 
-# cube_imaging(AGN_21,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV, square=True)
-# cube_imaging(AGN_32,CO3_2,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV,square=True)
+AGN_21 = r'/Users/administrator/Astro/LLAMA/ALMA/phangs_cubes_for_test/AGN'
+
+cube_imaging(AGN_21,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/phangs_cubes_for_test',FOV, square=True)
+#cube_imaging(AGN_32,CO3_2,dv,'/Users/administrator/Astro/LLAMA/ALMA/AGN_images',FOV,square=True)
 
 
-# print('Beginning inactive galaxy CO imaging...')
-# inactive = r"/Users/administrator/Astro/LLAMA/ALMA/inactive"
+print('Beginning inactive galaxy CO imaging...')
+inactive = r"/Users/administrator/Astro/LLAMA/ALMA/phangs_cubes_for_test/inactive"
 
-# cube_imaging(inactive,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/inactive_images',FOV,square=True)
+cube_imaging(inactive,CO2_1,dv,'/Users/administrator/Astro/LLAMA/ALMA/phangs_cubes_for_test',FOV,square=True)
 
-# et=time.time()
-# runtime=et-st
-# print('runtime=',runtime)
+et=time.time()
+runtime=et-st
+print('runtime=',runtime)
 
 
