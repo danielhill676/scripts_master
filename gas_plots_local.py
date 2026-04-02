@@ -3115,7 +3115,7 @@ AGN_data = [
      "log L14–195 (erg s⁻¹)": 42.72, "log L2–10 (erg s⁻¹)": 41.66, "log L12 μm (erg s⁻¹)": 42.17,
      "log NH (cm⁻²)": 21.3, "Hubble Stage": 1.0, "Axis Ratio": 0.22, "Bar": "L"},
     
-    {"Name": "NGC 4388", "Distance (Mpc)": 39.0, "AGN Classification": "Sy 2 (1h)", "log LH (L⊙)": 10.65,
+    {"Name": "NGC 4388", "Distance (Mpc)": 25.0, "AGN Classification": "Sy 2 (1h)", "log LH (L⊙)": 10.65,
      "log L14–195 (erg s⁻¹)": 43.70, "log L2–10 (erg s⁻¹)": 42.57, "log L12 μm (erg s⁻¹)": 42.93,
      "log NH (cm⁻²)": "23.5d", "Hubble Stage": 3.0, "Axis Ratio": 0.18, "Bar": "B"},
     
