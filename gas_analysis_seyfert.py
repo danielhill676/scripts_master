@@ -11,6 +11,7 @@ from scipy.ndimage import uniform_filter
 from scipy.optimize import curve_fit
 from concurrent.futures import ProcessPoolExecutor
 import matplotlib.pyplot as plt
+import astropy
 from astropy.visualization import simple_norm
 from astropy.visualization.wcsaxes import add_scalebar
 from astropy.visualization.wcsaxes import add_beam
@@ -31,8 +32,6 @@ from scipy.ndimage import gaussian_filter
 from astropy.convolution import convolve, Gaussian2DKernel, Box2DKernel
 from astropy.stats import sigma_clipped_stats
 from photutils.aperture import aperture_photometry
-
-
 
 
 np.seterr(all='ignore')
@@ -354,7 +353,7 @@ def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=
 #     return np.log10(flux_50 / flux_200)
 
 
-def concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec, PA, I,aperturesmall=None,aperturebig=None, **kwargs):
+def concentration_single(image, mask, aperturesmall=None,aperturebig=None, **kwargs):
 
     valid = (~mask) & np.isfinite(image)
 
@@ -1593,7 +1592,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             "smoothness_espocito50_sig25": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=25,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig25_err": 0.0,
             
             "Smoothness_davis": round(smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask), 3), "Smoothness_davis_err": 0.0,
-            "Concentration": round(concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec,aperturesmall=aperture_clump_espocito50,aperturebig=aperture_clump_espocito200)), "Concentration_err": 0.0,
+            "Concentration": round(concentration_single(image, mask, aperturesmall=aperture_clump_espocito50,aperturebig=aperture_clump_espocito200),3), "Concentration_err": 0.0,
             "Gini": round(gini_single(image, mask), 3), "Gini_davis_err": 0.0,
             "Asymmetry": round(asymmetry_single(image, mask), 3), "Asymmetry_davis_err": 0.0,
 
@@ -1605,15 +1604,17 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             
             
             "L'CO (K km_s pc2)": round(LCO_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_err (K km_s pc2)": 0.0,
-            "L'CO_JCMT (K km s pc2)": round(LCO_single_JCMT(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_JCMT_err (K km s pc2)": 0.0,
-            "L'CO_APEX (K km s pc2)": round(LCO_single_APEX(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_APEX_err (K km s pc2)": 0.0,
+            "L'CO_JCMT (K km s pc2)": round(LCO_single_JCMT(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_JCMT_err (K km s pc2)": 0.0,
+            "L'CO_APEX (K km s pc2)": round(LCO_single_APEX(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_APEX_err (K km s pc2)": 0.0,
             "flux (Jy km/s)": round(SCOdv_single(image,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2), 3),"flux (Jy km/s)_err": 0.0,
             "total_mass (M_sun)": round(total_mass_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 2),"total_mass_err (M_sun)": 0.0,
 
             "emission_pixels": emission_pixels,
             "emission_fraction": emission_fraction
         })
+    print("C =", rows[-1]["Concentration"])
     return rows
+
 
 # ------------------ Parallel Directory Processing ------------------
 
