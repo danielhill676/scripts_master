@@ -312,17 +312,27 @@ def smoothness_single_davis(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux
     total_flux = np.sum(image[valid_smooth])
     return np.sum(diff_smooth[(diff_smooth>0)]) / total_flux if total_flux > 0 else np.nan #
 
-def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=False, sigma = 500, **kwargs): 
+def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=False, sigma = 500,aperture=None, **kwargs): 
     smoothing_sigma_pc = sigma 
     smoothing_sigma = (smoothing_sigma_pc / pc_per_arcsec) / pixel_scale_arcsec 
     size = max(1, int(round(smoothing_sigma))) 
     image_filled = np.nan_to_num(image, nan=0.0) 
     smooth_image = uniform_filter(image_filled, size=size, mode='constant',cval=0.0)
     valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(smooth_image)
-    if np.sum(valid_smooth) == 0: return np.nan 
-    diff_smooth = image[valid_smooth] - smooth_image[valid_smooth] # original image and smoothed image use orginal mask
-    total_flux = np.sum(image[valid_smooth])
-    return np.sum(diff_smooth) / total_flux if total_flux > 0 else np.nan
+    if np.sum(valid_smooth) == 0: return np.nan
+    data = np.where(valid_smooth, image, np.nan)
+    data_smooth = np.where(valid_smooth, smooth_image, np.nan) 
+    diff_smooth = data - data_smooth # original image and smoothed image use orginal mask
+    if aperture ==None:
+        total_diff = np.sum(diff_smooth)
+        total_flux = np.sum(data)
+    else:
+        diff_phot = aperture_photometry(diff_smooth, aperture, method='exact')
+        image_phot = aperture_photometry(data_smooth, aperture, method='exact')
+        total_diff = diff_phot['aperture_sum'][0]
+        total_flux = image_phot['aperture_sum'][0]
+
+    return total_diff / total_flux if total_flux > 0 else np.nan
 
 # def concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec, PA, I, **kwargs):
 #     y, x = np.indices(image.shape)
@@ -344,30 +354,23 @@ def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=
 #     return np.log10(flux_50 / flux_200)
 
 
-def concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec, PA, I, **kwargs):
+def concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec, PA, I,aperturesmall=None,aperturebig=None, **kwargs):
 
     valid = (~mask) & np.isfinite(image)
 
     # Apply mask directly to image (important for photutils)
     data = np.where(valid, image, np.nan)
 
-    # --- Build apertures ---
-    _, aperture_50pc_region, _ = make_projected_region_mask(
-        image.shape, 50/1000, pc_per_arcsec, pixel_scale_arcsec, PA, I)
-
-    _, aperture_200pc_region, _ = make_projected_region_mask(
-        image.shape, 200/1000, pc_per_arcsec, pixel_scale_arcsec, PA, I)
-
     # --- Sub-pixel photometry ---
-    phot_50 = aperture_photometry(data, aperture_50pc_region, method='exact')
-    phot_200 = aperture_photometry(data, aperture_200pc_region, method='exact')
+    phot_50 = aperture_photometry(data, aperturesmall, method='exact')
+    phot_200 = aperture_photometry(data, aperturebig, method='exact')
 
     flux_50 = phot_50['aperture_sum'][0]
     flux_200 = phot_200['aperture_sum'][0]
 
     # --- Normalisation (surface density-like) ---
-    area_50 = aperture_50pc_region.area
-    area_200 = aperture_200pc_region.area
+    area_50 = aperturesmall.area
+    area_200 = aperturebig.area
 
     flux_50 /= area_50
     flux_200 /= area_200
@@ -1435,15 +1438,16 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
         # ---------- aperture for Espocito clumpiness ----------
 
-        mask_clump_espocito200, _, _ = make_projected_region_mask(
+        mask_clump_espocito200, aperture_clump_espocito200, _ = make_projected_region_mask(
                     image.shape, 200/1000 , pc_per_arcsec, pixel_scale_arcsec, PA, I
                 )
         mask_clump_espocito200 = mask_clump_espocito200 | mask
 
-        mask_clump_espocito50, _, _ = make_projected_region_mask(
+        mask_clump_espocito50, aperture_clump_espocito50, _ = make_projected_region_mask(
                     image.shape, 50/1000 , pc_per_arcsec, pixel_scale_arcsec, PA, I
                 )
         mask_clump_espocito50 = mask_clump_espocito50 | mask
+
 
 
         # ------------------ Signal to noise mask ------------------
@@ -1510,127 +1514,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 aperture=aperture_to_plot, res_src=res_src, norm_type=norm_type, normalise_norm=normalise_norm, noise = mass_surface_density_rms_noise
             )
 
-        # if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']):
-
-        #     # Generate Monte-Carlo images (full set)
-        #     N_MC = 2000
-
-        #     # ---- PARALLEL MC PROCESSING HERE ----
-        #     dtype = image.dtype  # e.g. np.float64
-        #     shape = image.shape
-
-        #     shm_img = shared_memory.SharedMemory(create=True, size=image.nbytes)
-        #     shm_err = shared_memory.SharedMemory(create=True, size=error_map.nbytes)
-        #     # write into shared memory
-        #     shm_array_img = np.ndarray(shape, dtype=dtype, buffer=shm_img.buf)
-        #     shm_array_err = np.ndarray(shape, dtype=dtype, buffer=shm_err.buf)
-        #     shm_array_img[:] = image[:]       # copy once
-        #     shm_array_err[:] = error_map[:]   # copy once
-
-        #     cpu = min( max(1, multiprocessing.cpu_count()-1), 8 )  # e.g., reserve one core
-        #     iters_per_worker = [N_MC // cpu] * cpu
-        #     for i in range(N_MC % cpu):
-        #         iters_per_worker[i] += 1
-
-        #     metric_kwargs_small = dict(
-        #         name=name,
-        #         co32=co32,
-        #         pixel_area_pc2=pixel_area_pc2,
-        #         beam_area_pc2=beam_area_pc2,
-        #         beam_scale_pc=beam_scale_pc,
-        #         pixel_area_arcsec2=pixel_area_arcsec2,
-        #         beam_area_arcsec2=beam_area_arcsec2,
-        #         D_Mpc=D_Mpc,
-        #         R_21=R_21,
-        #         R_31=R_31,
-        #         alpha_CO=alpha_CO,
-        #         pc_per_arcsec=pc_per_arcsec,
-        #         pixel_scale_arcsec=pixel_scale_arcsec,
-        #         jy_per_K = jy_per_K,
-        #         flux_mask = flux_mask,
-        #         snmask = combmask
-        #     )
-        #     print('single')
-        #     print('G=', gini_single(image, mask))
-        #     print('A=', asymmetry_single(image, mask))
-        #     print('S=', smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask))
-        #     print('C=', clumping_factor_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32))
-
-
-        #     with ProcessPoolExecutor(max_workers=cpu) as ex:
-        #         futures = []
-        #         for w, n_iter_chunk in enumerate(iters_per_worker):
-        #             seed = np.random.SeedSequence().entropy + w
-        #             futures.append(ex.submit(
-        #                 process_mc_chunk_shm,
-        #                 n_iter_chunk,
-        #                 shm_img.name,
-        #                 shm_err.name,
-        #                 shape,
-        #                 str(dtype),
-        #                 mask,
-        #                 metric_kwargs_small,
-        #                 isolate,
-        #                 seed
-        #             ))
-        #         results = [f.result() for f in futures]
-
-        #     # When done, unlink the shared memory
-        #     shm_img.close()
-        #     shm_img.unlink()
-        #     shm_err.close()
-        #     shm_err.unlink()
-
-        #     def merge_global(metric_name):
-        #         """Concatenate raw MC values across chunks and compute global stats."""
-                
-        #         # Collect lists from every chunk
-        #         all_values = []
-        #         for r in results:
-        #             if metric_name in r:
-        #                 all_values.extend(r[metric_name])
-
-        #         # Convert to array
-        #         arr = np.array(all_values, dtype=float)
-
-        #         # Handle case where everything failed
-        #         if len(arr) == 0 or np.all(np.isnan(arr)):
-        #             print(f"All MC calculations failed for metric {metric_name} in galaxy {name}.")
-        #             return np.nan, np.nan
-
-        #         # Global median and std
-        #         return float(np.nanmedian(arr)), float(np.nanstd(arr))
-
-        #     gini, gini_err = merge_global("gini")
-        #     asym, asym_err = merge_global("asym")
-        #     smooth, smooth_err = merge_global("smooth")
-        #     conc, conc_err = merge_global("conc")
-        #     total_mass, total_mass_err = merge_global("tmass")
-        #     SCOdv, SCOdv_err = merge_global("SCOdv")
-        #     LCO, LCO_err = merge_global("LCO")
-        #     LCO_JCMT, LCO_JCMT_err = merge_global("LCO_JCMT")
-        #     LCO_APEX, LCO_APEX_err = merge_global("LCO_APEX")
-        #     mw_sd, mw_sd_err = merge_global("mw")
-        #     aw_sd, aw_sd_err = merge_global("aw")
-        #     clump, clump_err = merge_global("clump")
-        # else:
-        #     print("Skipping metric calculations as per isolate parameter.")
-        #     gini, gini_err = np.nan, np.nan
-        #     asym, asym_err = np.nan, np.nan
-        #     smooth, smooth_err = np.nan, np.nan
-        #     conc, conc_err = np.nan, np.nan
-        #     total_mass, total_mass_err = np.nan, np.nan
-        #     SCOdv, SCOdv_err = np.nan, np.nan,
-        #     LCO, LCO_err = np.nan, np.nan
-        #     LCO_JCMT, LCO_JCMT_err = np.nan, np.nan
-        #     LCO_APEX, LCO_APEX_err = np.nan, np.nan
-        #     mw_sd, mw_sd_err = np.nan, np.nan
-        #     aw_sd, aw_sd_err = np.nan, np.nan
-        #     clump, clump_err = np.nan, np.nan
-        # print('bootstrap')
-        # print('G=',gini)
-        # print('A=',asym)
-        # print('S=',smooth)
+        # if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']): #     # Generate Monte-Carlo images (full set) #     N_MC = 2000 #     # ---- PARALLEL MC PROCESSING HERE ---- #     dtype = image.dtype  # e.g. np.float64 #     shape = image.shape #     shm_img = shared_memory.SharedMemory(create=True, size=image.nbytes) #     shm_err = shared_memory.SharedMemory(create=True, size=error_map.nbytes) #     # write into shared memory #     shm_array_img = np.ndarray(shape, dtype=dtype, buffer=shm_img.buf) #     shm_array_err = np.ndarray(shape, dtype=dtype, buffer=shm_err.buf) #     shm_array_img[:] = image[:]       # copy once #     shm_array_err[:] = error_map[:]   # copy once #     cpu = min( max(1, multiprocessing.cpu_count()-1), 8 )  # e.g., reserve one core #     iters_per_worker = [N_MC // cpu] * cpu #     for i in range(N_MC % cpu): #         iters_per_worker[i] += 1 #     metric_kwargs_small = dict( #         name=name, #         co32=co32, #         pixel_area_pc2=pixel_area_pc2, #         beam_area_pc2=beam_area_pc2, #         beam_scale_pc=beam_scale_pc, #         pixel_area_arcsec2=pixel_area_arcsec2, #         beam_area_arcsec2=beam_area_arcsec2, #         D_Mpc=D_Mpc, #         R_21=R_21, #         R_31=R_31, #         alpha_CO=alpha_CO, #         pc_per_arcsec=pc_per_arcsec, #         pixel_scale_arcsec=pixel_scale_arcsec, #         jy_per_K = jy_per_K, #         flux_mask = flux_mask, #         snmask = combmask #     ) #     print('single') #     print('G=', gini_single(image, mask)) #     print('A=', asymmetry_single(image, mask)) #     print('S=', smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask)) #     print('C=', clumping_factor_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32)) #     with ProcessPoolExecutor(max_workers=cpu) as ex: #         futures = [] #         for w, n_iter_chunk in enumerate(iters_per_worker): #             seed = np.random.SeedSequence().entropy + w #             futures.append(ex.submit( #                 process_mc_chunk_shm, #                 n_iter_chunk, #                 shm_img.name, #                 shm_err.name, #                 shape, #                 str(dtype), #                 mask, #                 metric_kwargs_small, #                 isolate, #                 seed #             )) #         results = [f.result() for f in futures] #     # When done, unlink the shared memory #     shm_img.close() #     shm_img.unlink() #     shm_err.close() #     shm_err.unlink() #     def merge_global(metric_name): #         """Concatenate raw MC values across chunks and compute global stats.""" #         # Collect lists from every chunk #         all_values = [] #         for r in results: #             if metric_name in r: #                 all_values.extend(r[metric_name]) #         # Convert to array #         arr = np.array(all_values, dtype=float) #         # Handle case where everything failed #         if len(arr) == 0 or np.all(np.isnan(arr)): #             print(f"All MC calculations failed for metric {metric_name} in galaxy {name}.") #             return np.nan, np.nan #         # Global median and std #         return float(np.nanmedian(arr)), float(np.nanstd(arr)) #     gini, gini_err = merge_global("gini") #     asym, asym_err = merge_global("asym") #     smooth, smooth_err = merge_global("smooth") #     conc, conc_err = merge_global("conc") #     total_mass, total_mass_err = merge_global("tmass") #     SCOdv, SCOdv_err = merge_global("SCOdv") #     LCO, LCO_err = merge_global("LCO") #     LCO_JCMT, LCO_JCMT_err = merge_global("LCO_JCMT") #     LCO_APEX, LCO_APEX_err = merge_global("LCO_APEX") #     mw_sd, mw_sd_err = merge_global("mw") #     aw_sd, aw_sd_err = merge_global("aw") #     clump, clump_err = merge_global("clump") # else: #     print("Skipping metric calculations as per isolate parameter.") #     gini, gini_err = np.nan, np.nan #     asym, asym_err = np.nan, np.nan #     smooth, smooth_err = np.nan, np.nan #     conc, conc_err = np.nan, np.nan #     total_mass, total_mass_err = np.nan, np.nan #     SCOdv, SCOdv_err = np.nan, np.nan, #     LCO, LCO_err = np.nan, np.nan #     LCO_JCMT, LCO_JCMT_err = np.nan, np.nan #     LCO_APEX, LCO_APEX_err = np.nan, np.nan #     mw_sd, mw_sd_err = np.nan, np.nan #     aw_sd, aw_sd_err = np.nan, np.nan #     clump, clump_err = np.nan, np.nan # print('bootstrap') # print('G=',gini) # print('A=',asym) # print('S=',smooth)
 
         if isolate == None or 'expfit' in isolate:
 
@@ -1694,31 +1578,38 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             "DEC (deg)": DEC,
             "PA (deg)": PA,
             "Inclination (deg)": I,
+            "D_Mpc": D_Mpc,
+
             "Smoothness": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=500), 3), "Smoothness_err": 0.0,
 
-            "smoothness_espocito200_sig100": round(smoothness_single(image, mask_clump_espocito200, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=100), 3), "smoothness_espocito200_sig100_err": 0.0,
-            "smoothness_espocito200_sig75": round(smoothness_single(image, mask_clump_espocito200, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=75), 3), "smoothness_espocito200_sig75_err": 0.0,
-            "smoothness_espocito200_sig50": round(smoothness_single(image, mask_clump_espocito200, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=50), 3), "smoothness_espocito200_sig50_err": 0.0,
-            "smoothness_espocito200_sig25": round(smoothness_single(image, mask_clump_espocito200, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=25), 3), "smoothness_espocito200_sig25_err": 0.0,
+            "smoothness_espocito200_sig100": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=100,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig100_err": 0.0,
+            "smoothness_espocito200_sig75": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=75,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig75_err": 0.0,
+            "smoothness_espocito200_sig50": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=50,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig50_err": 0.0,
+            "smoothness_espocito200_sig25": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=25,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig25_err": 0.0,
 
-            "smoothness_espocito50_sig100": round(smoothness_single(image, mask_clump_espocito50, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=100), 3), "smoothness_espocito50_sig100_err": 0.0,
-            "smoothness_espocito50_sig75": round(smoothness_single(image, mask_clump_espocito50, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=75), 3), "smoothness_espocito50_sig75_err": 0.0,
-            "smoothness_espocito50_sig50": round(smoothness_single(image, mask_clump_espocito50, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=50), 3), "smoothness_espocito50_sig50_err": 0.0,
-            "smoothness_espocito50_sig25": round(smoothness_single(image, mask_clump_espocito50, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=25), 3), "smoothness_espocito50_sig25_err": 0.0,
+            "smoothness_espocito50_sig100": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=100,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig100_err": 0.0,
+            "smoothness_espocito50_sig75": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=75,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig75_err": 0.0,
+            "smoothness_espocito50_sig50": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=50,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig50_err": 0.0,
+            "smoothness_espocito50_sig25": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=25,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig25_err": 0.0,
             
-            "Concentration": round(concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec)), "Concentration_err": 0.0,
+            "Smoothness_davis": round(smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask), 3), "Smoothness_davis_err": 0.0,
+            "Concentration": round(concentration_single(image, mask, pixel_scale_arcsec, pc_per_arcsec,aperturesmall=aperture_clump_espocito50,aperturebig=aperture_clump_espocito200)), "Concentration_err": 0.0,
             "Gini": round(gini_single(image, mask), 3), "Gini_davis_err": 0.0,
             "Asymmetry": round(asymmetry_single(image, mask), 3), "Asymmetry_davis_err": 0.0,
-            "Smoothness_davis": round(smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask), 3), "Smoothness_davis_err": 0.0,
-            "Sigma0 (Jy/beam km/s)": sigma0, "rs (pc)": rs,
+
             "clumping_factor": round(clumping_factor_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32), 3), "clumping_factor_err": 0.0,
-            "total_mass (M_sun)": round(total_mass_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 2),"total_mass_err (M_sun)": 0.0,
+            "mass_weighted_sd": round(mass_weighted_sd_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32), 1),"mass_weighted_sd_err": 0.0,
+            "area_weighted_sd": round(area_weighted_sd_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32), 1),"area_weighted_sd_err": 0.0,
+
+            "Sigma0 (Jy/beam km/s)": sigma0, "rs (pc)": rs,
+            
+            
             "L'CO (K km_s pc2)": round(LCO_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_err (K km_s pc2)": 0.0,
             "L'CO_JCMT (K km s pc2)": round(LCO_single_JCMT(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_JCMT_err (K km s pc2)": 0.0,
             "L'CO_APEX (K km s pc2)": round(LCO_single_APEX(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_APEX_err (K km s pc2)": 0.0,
             "flux (Jy km/s)": round(SCOdv_single(image,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2), 3),"flux (Jy km/s)_err": 0.0,
-            "mass_weighted_sd": round(mass_weighted_sd_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32), 1),"mass_weighted_sd_err": 0.0,
-            "area_weighted_sd": round(area_weighted_sd_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32), 1),"area_weighted_sd_err": 0.0,
+            "total_mass (M_sun)": round(total_mass_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 2),"total_mass_err (M_sun)": 0.0,
+
             "emission_pixels": emission_pixels,
             "emission_fraction": emission_fraction
         })
