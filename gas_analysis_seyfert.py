@@ -321,13 +321,13 @@ def smoothness_single(image, mask, pc_per_arcsec, pixel_scale_arcsec, flux_mask=
     if np.sum(valid_smooth) == 0: return np.nan
     data = np.where(valid_smooth, image, np.nan)
     data_smooth = np.where(valid_smooth, smooth_image, np.nan) 
-    diff_smooth = data - data_smooth # original image and smoothed image use orginal mask
-    if aperture ==None:
-        total_diff = np.sum(diff_smooth)
-        total_flux = np.sum(data)
+    diff_smooth = data - data_smooth
+    if aperture == None:
+        total_diff = np.nansum(diff_smooth)
+        total_flux = np.nansum(data)
     else:
         diff_phot = aperture_photometry(diff_smooth, aperture, method='exact')
-        image_phot = aperture_photometry(data_smooth, aperture, method='exact')
+        image_phot = aperture_photometry(data, aperture, method='exact')
         total_diff = diff_phot['aperture_sum'][0]
         total_flux = image_phot['aperture_sum'][0]
 
@@ -1456,7 +1456,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             if rms_noise != float(0):
                 #sn_mask = image > 2 * abs(error_map)
                 sn_mask = image != float(0)
-                # if name in ['NGC5845','MCG630']: sn_mask = image > 2 * abs(error_map)
+                if name in ['NGC5845','MCG630']: sn_mask = image > 2 * abs(error_map)
                 combmask = ~sn_mask | mask  # combine with existing mask
                 mask_clump_espocito200 = ~sn_mask | mask_clump_espocito200
                 mask_clump_espocito50 = ~sn_mask | mask_clump_espocito50
@@ -1476,11 +1476,11 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
 
-            sn_mask_path = output_dir + '/masks'+ f'/{name}_snmask.fits'  
+            sn_mask_path = output_dir + '/masks'+ f'/{R_kpc}_{PHANGS_mask}_{rebin}_{name}_snmask.fits'  
             if not os.path.exists(os.path.dirname(sn_mask_path)):
                 os.makedirs(os.path.dirname(sn_mask_path))
-            fits.writeto(sn_mask_path, mask.astype(int), overwrite=True)
-            # if name in ['NGC5845','MCG630']: mask = combmask
+            fits.writeto(sn_mask_path, combmask.astype(int), overwrite=True)
+            if name in ['NGC5845','MCG630']: mask = combmask
 
 
 
@@ -1613,6 +1613,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             "emission_fraction": emission_fraction
         })
     print("C =", rows[-1]["Concentration"])
+    print("S =", rows[-1]["Smoothness"])
     return rows
 
 
