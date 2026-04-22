@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 # GATOS DATA
 
@@ -65,6 +66,9 @@ log10_L_AGN_LEdd_ordered = [
 ]
 
 
+line_ratio_GATOS = [1.6, np.nan, np.nan, 4.6, 2.1, 2.7, 5.7, 5.6, np.nan, np.nan, 8.1, 7.4, 15.9]
+
+
 # NUGA DATA
 
 names_NUGA = ['N613', 'N1326', 'N1365', 'N1433', 'N1566', 'N1672', 'N1808']
@@ -83,6 +87,8 @@ log_LX_filtered     = [41.2, 39.9, 40.5, 38.4, 39.8]
 
 log_LX_bullshit = [41.3, 39.8,40.9,39.2,39.9]
 EDDR_NUGA_bullshit = [-3.5,-4,-3.5,-6.3,-4.5]
+
+line_ratio_NUGA = [8.4,37.8,6.8,11.9,33.9]
 
 LEDD_NUGA = []
 
@@ -106,6 +112,7 @@ names = ['NGC 613', 'NGC 1068', 'NGC 1326', 'NGC 1365', 'NGC 1566', 'NGC 1672', 
 
 L_X_master =[]
 EDD_R_master = []
+line_ratio_master = []
 
 g_count = 0
 n_count = 0
@@ -115,6 +122,7 @@ for i in range(len(names)):
         print('GATOS')
         L_X_master.append(log10_L_2_10_ordered[g_count])
         EDD_R_master.append(log10_L_AGN_LEdd_ordered[g_count])
+        line_ratio_master.append(line_ratio_GATOS[g_count])
         g_count += 1
     else:
         print('NUGA')
@@ -122,31 +130,36 @@ for i in range(len(names)):
         print(log10_sigma_50pc[i] - log10_sigma_200pc[i])
         L_X_master.append(log_LX_bullshit[n_count])
         EDD_R_master.append(EDDR_NUGA_bullshit[n_count])
+        line_ratio_master.append(line_ratio_NUGA[n_count])
+
         n_count += 1
 
 print(L_X_master)
 print(EDD_R_master)
 
 
-# Inactive pairs
-names_inactive = ['NGC 2775','NGC 3717','NGC 4254','NGC 3175']
-LBOL = [40.6,40.7,40.5,40]
-L_X_inactive = []
+M_star = [10.4,10.3,10.2,]
 
-for i in range(len(LBOL)):
-    L_X = math.log10((12.76*(1+(LBOL[i]-math.log10(3.82e33))/12.15)**18.78)*3.82e33)
-    L_X_inactive.append(L_X)
-fCO32_lim = [0.40*200*1e-3,0.55*200*1e-3,0.55*200*1e-3,0.55*200*1e-3]
-D = [21,24,15,14]
-LPCO32 = [3.25e7*f*(d**2)*(1/324.8**2) for f,d in zip(fCO32_lim,D)]
+names_inactive = ['NGC3717','NGC5921','NGC4254','NGC4224','NGC5037','NGC3749']
+inactive_CO_fd = np.array([784,359,102,
+                          46,333,427])
+
+HCO_limit = inactive_CO_fd/3
+
+fCO32_lim = 0.55*200*1e-3
+D = np.array([24.0,21.0,15,41,35,42])
+LPCO32 = [3.25e7*fCO32_lim*(d**2)*(1/324.8**2) for d in D]
+LPCO32 = [3.25e7*f*(d**2)*(1/324.8**2) for f,d in zip(inactive_CO_fd,D)]
 ratio = 0.7  # change to 0.7 or 2.9 ?
 LPCO10 = [l/ratio for l in LPCO32]
 MH2 = [1.1*l for l in LPCO10]
-beam = [math.pi*((0.13/206265)*d*1e6/2)**2 for d in D]
+beam = [math.pi*((0.1/206265)*d*1e6/2)**2 for d in D]
 inactive_torus = [math.log10(m/b) for m,b in zip(MH2,beam)]
-print(inactive_torus)
 
-M_star = [10.4,10.3,10.2,]
+BAT_sens = 4.2e-12 # erg/cm2/s
+BAT_sens_flux = BAT_sens * 1e-7 * 1e4
+L_X_inactive = np.log10(BAT_sens_flux * 4 * math.pi * (D * 3.086e24)**2)
+
 
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
@@ -157,26 +170,62 @@ torus_200_ratio = [a-b for a,b in zip(log10_sigma_torus, log10_sigma_200pc)]
 
 fig, ax = plt.subplots(figsize=(8, 9))
 
+########## ADJUST PARAMS HERE ############################################################
+
+x,y,c = L_X_master, log10_sigma_torus, EDD_R_master
+sigma_y = 0.4
+sigma_x = 0.3
+y_tick_spacing = 0.25
+x_tick_spacing = 1
+limit = inactive_torus
+xlim = L_X_inactive
+print('limits')
+print(limit, xlim)
+
+# x,y,c = EDD_R_master, line_ratio_master, L_X_master
+# sigma_y = 0
+# sigma_x = 0
+# y_tick_spacing = 5
+# x_tick_spacing = 1
+# limit = HCO_limit
+# xlim = -6
+
+##########################################################################################
+
+x = np.array(x)
+y = np.array(y)
+
+mask = np.isfinite(x) & np.isfinite(y)
+
+names = np.asarray(list(names), dtype=object)
+mask = np.asarray(mask, dtype=bool)
+
+x = x[mask]
+y = y[mask]
+
+names = names[mask]
+
 # Scatter plot with individual marker logic
 for i, name in enumerate(names):
     marker = 'o' if name in names_GATOS else 's'  # circle or square
-    sc = ax.scatter(L_X_master[i], torus_200_ratio[i],
-                    c=EDD_R_master[i],
+    sc = ax.scatter(x[i], y[i],
+                    c=c[i],
                     cmap='plasma',
-                    vmin=min(EDD_R_master),
-                    vmax=max(EDD_R_master),
+                    vmin=min(c),
+                    vmax=max(c),
                     marker=marker,
                     edgecolors='black',
                     s=250)
-    ax.text(L_X_master[i], torus_200_ratio[i] + 0.05, name,fontsize=10,
+    ax.text(x[i], y[i] + y_tick_spacing/5, name,fontsize=10,
             ha='center', va='bottom')
     
 for i, name in enumerate(names_inactive):
-    sc_I = ax.scatter(L_X_inactive[i], inactive_torus[i],
+    # if name == 'NGC4254':
+    sc_I = ax.scatter(np.mean(xlim), limit[i],
                     marker='.',
                     color = 'black',
                     edgecolors='black',
-                    s=20)
+                    s=150)
 
     # if name == 'NGC 4254':
     #     ax.text(L_X_inactive[i]+0.12, inactive_torus[i] + 0.10, name, ha='center',fontsize=10)  # Shift upward
@@ -188,8 +237,14 @@ for i, name in enumerate(names_inactive):
     #     ax.text(L_X_inactive[i], inactive_torus[i] + 0.05, name, ha='center',fontsize=10)
     
 # Labels
-ax.set_xlabel(r'log $L^X_{2-10 keV}$', fontsize=18)
-ax.set_ylabel(r'log $(\Sigma^\text{torus}_{\text{gas}} [M_\odot \text{pc}^{-2}]$', fontsize=18)
+
+ax.set_xlabel(r'log $L^X_{2-10 keV}$ [erg s$^{-1}$]', fontsize=18)
+ax.set_ylabel(r'log $(\Sigma^\text{torus}_{\text{gas}}) [M_\odot \text{pc}^{-2}]$', fontsize=18)
+
+
+# ax.set_xlabel(r'log Edd. ratio', fontsize=18)
+# ax.set_ylabel(r'CO(3-2)/HCO$^{+}$(4-3)', fontsize=18)
+
 ax.tick_params(axis='both', which='major', labelsize=16)
 # Square axes (equal aspect ratio)
 ax.set_aspect('auto', adjustable='box')
@@ -197,27 +252,93 @@ ax.set_aspect('auto', adjustable='box')
 # Remove gridlines
 ax.grid(False)
 
+
 # Horizontal colorbar above the plot with thinner size
 cbar = plt.colorbar(sc, ax=ax, orientation='horizontal', pad=0.1, aspect=30)
-cbar.set_label('log Edd. ratio', fontsize=12)
+cbar.set_label(r'log Edd. ratio', fontsize=12)
+
+# # Horizontal colorbar above the plot with thinner size
+# cbar = plt.colorbar(sc, ax=ax, orientation='horizontal', pad=0.1, aspect=30)
+# cbar.set_label(r'log $L^X_{2-10 keV}$', fontsize=12)
 
 # Ensure the plot is square by adjusting the aspect ratio of the figure
-ax.set_xlim(min(L_X_master) - 1.5, max(L_X_master) + 0.3)  # Adjust x-limits for better view
-ax.set_ylim(min(torus_200_ratio) - 0.5, max(torus_200_ratio) + 0.2)  # Adjust y-limits for better view
+ax.set_xlim(min(x) - 2*x_tick_spacing, max(x) + x_tick_spacing)  # Adjust x-limits for better view
+ax.set_ylim(min(y) - y_tick_spacing, max(y) + 9*y_tick_spacing)  # Adjust y-limits for better view
 
-ax.yaxis.set_major_locator(MultipleLocator(0.25))
+ax.yaxis.set_major_locator(MultipleLocator(y_tick_spacing))
+
+
+
 
 # Add a blue cross in the bottom left corner
 cross_x = 40
-cross_y = -0.25
-cross_x_len = 0.3
-cross_y_len = 0.4
+cross_y = 1.8
+cross_x_len = sigma_x
+cross_y_len = sigma_y
 
 # Horizontal line (cross)
 ax.plot([cross_x - cross_x_len/2, cross_x + cross_x_len/2], [cross_y, cross_y], color='blue', lw=1)
 
 # Vertical line (cross)
 ax.plot([cross_x, cross_x], [cross_y - cross_y_len/2, cross_y + cross_y_len/2], color='blue', lw=1)
+
+
+
+# import numpy as np
+# from scipy import stats
+
+# names = np.asarray(names)
+
+# anom_mask = names != 'NGC 1672'
+# names = names[anom_mask]
+# x = x[anom_mask]
+# y = y[anom_mask]
+
+# # --- Linear regression ---
+# slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+
+# # Best-fit line
+# x_fit = np.linspace(ax.get_xlim()[0], ax.get_xlim()[1], 200)
+# y_fit = slope * x_fit + intercept
+
+# # --- Compute confidence band (1σ) ---
+# n = len(x)
+# y_model = slope * x + intercept
+
+# # Residual standard deviation
+# residuals = y - y_model
+# s_err = np.sqrt(np.sum(residuals**2) / (n - 2))
+
+# # Mean of x
+# x_mean = np.mean(x)
+
+# # Confidence interval (standard error on the mean prediction)
+# conf = s_err * np.sqrt(
+#     1/n + (x_fit - x_mean)**2 / np.sum((x - x_mean)**2)
+# )
+
+# sigma_x_to_y = slope * sigma_x
+
+# # total variance
+# pred = np.sqrt(
+#     s_err**2 * (1 + 1/n + (x_fit - x_mean)**2 / np.sum((x - x_mean)**2))
+#     + sigma_y**2
+#     + sigma_x_to_y**2
+# )
+
+# # --- Plot ---
+# ax.plot(x_fit, y_fit, color='black', lw=2, label='Linear fit')
+
+# ax.fill_between(
+#     x_fit,
+#     y_fit - pred,
+#     y_fit + pred,
+#     color='black',
+#     alpha=0.2,
+#     label='Prediction interval (with errors)'
+# )
+
+
 
 # Tight layout to prevent clipping
 plt.tight_layout()
