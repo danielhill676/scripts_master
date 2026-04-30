@@ -983,15 +983,15 @@ r = 1.5
 # )
 
 
-plot_llama_triptych(
-    x_column1='Gini', y_column1='Smoothness',
-    x_column2='Asymmetry', y_column2='Smoothness',
-    x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, m = m, r = r, native_res=True, hist=False, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630']
-)
+# plot_llama_triptych(
+#     x_column1='Gini', y_column1='Smoothness',
+#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column3='Asymmetry', y_column3='Gini',
+# base_AGN=base_AGN, base_inactive=base_inactive,
+#     log_axes={'x_shared': False, 'y_shared': False},
+#     bins=10,
+#     figsize=9, m = m, r = r, native_res=True, hist=False, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630']
+# )
 
 # ################################################################ AGN vs inactive CAS triptych wis phangs comparison ###################################################################
 
@@ -1009,59 +1009,59 @@ base_AGN=base_AGN, base_inactive=base_inactive, base_aux=base_aux,
     phangs_df=phangs_df,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
-    figsize=9, m = m, r = r, comb_llama=True, native_res=True, hist=False, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845']
+    figsize=9, m = m, r = r, comb_llama=True, native_res=True, hist=False, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630','NGC5064_WIS','NGC1387_WIS']
 )
 
 ################################################################ comparison of mask and apertures ###################################################################
 
-plot_llama_triptych(
-    x_column1='Gini', y_column1='Smoothness',
-    x_column2='Asymmetry', y_column2='Smoothness',
-    x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict','flux90_strict'],[0.3,1,1.5]], native_res=True, colours_list={
-  "\'strict\' mask and 0.6x0.6kpc aperture": "#0F2FFF",
-  "\'strict\' mask and 2.0x2.0kpc aperture": "#AF0FFF",
-  "\'strict\' mask and 3.0x3.0kpc aperture": "#FF0F9B",
-  "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "#00EDED"
-}, markers_list={
-  "\'strict\' mask and 0.6x0.6kpc aperture": "D",
-  "\'strict\' mask and 2.0x2.0kpc aperture": "s",
-  "\'strict\' mask and 3.0x3.0kpc aperture": "o",
-"\'flux90_strict\' mask and 3.0x3.0kpc aperture": "P"
-}, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845'],hist=False)
+# plot_llama_triptych(
+#     x_column1='Gini', y_column1='Smoothness',
+#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column3='Asymmetry', y_column3='Gini',
+# base_AGN=base_AGN, base_inactive=base_inactive,
+#     log_axes={'x_shared': False, 'y_shared': False},
+#     bins=10,
+#     figsize=9, comb_llama=True, which_compare=[['strict','flux90_strict'],[0.3,1,1.5]], native_res=True, colours_list={
+#   "\'strict\' mask and 0.6x0.6kpc aperture": "#0F2FFF",
+#   "\'strict\' mask and 2.0x2.0kpc aperture": "#AF0FFF",
+#   "\'strict\' mask and 3.0x3.0kpc aperture": "#FF0F9B",
+#   "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "#00EDED"
+# }, markers_list={
+#   "\'strict\' mask and 0.6x0.6kpc aperture": "D",
+#   "\'strict\' mask and 2.0x2.0kpc aperture": "s",
+#   "\'strict\' mask and 3.0x3.0kpc aperture": "o",
+# "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "P"
+# }, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630'],hist=False)
 
 
-plot_llama_triptych(
-    x_column1='Gini', y_column1='Smoothness',
-    x_column2='Asymmetry', y_column2='Smoothness',
-    x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, 
-    colours_list=  
-    {"\'strict\' mask and 3.0x3.0kpc aperture": "#008891",
-  "\'broad\' mask and 3.0x3.0kpc aperture": "#CC6900"
-}, markers_list={
-  "\'strict\' mask and 3.0x3.0kpc aperture": "D",
-  "\'broad\' mask and 3.0x3.0kpc aperture": "s",
-}, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845'],hist=False)
+# plot_llama_triptych(
+#     x_column1='Gini', y_column1='Smoothness',
+#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column3='Asymmetry', y_column3='Gini',
+# base_AGN=base_AGN, base_inactive=base_inactive,
+#     log_axes={'x_shared': False, 'y_shared': False},
+#     bins=10,
+#     figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, 
+#     colours_list=  
+#     {"\'strict\' mask and 3.0x3.0kpc aperture": "#008891",
+#   "\'broad\' mask and 3.0x3.0kpc aperture": "#CC6900"
+# }, markers_list={
+#   "\'strict\' mask and 3.0x3.0kpc aperture": "D",
+#   "\'broad\' mask and 3.0x3.0kpc aperture": "s",
+# }, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630'],hist=False)
 
 
-plot_llama_triptych(
-    x_column1='Gini', y_column1='Smoothness',
-    x_column2='Asymmetry', y_column2='Smoothness',
-    x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict'],[1.5]], native_res=True, colours_list={
-  "\'strict\' mask and 3.0x3.0kpc aperture": "#83CC90",
-  "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "#00470E"
-}, markers_list={
-  "\'strict\' mask and 3.0x3.0kpc aperture": "D",
-  "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
-}, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845'],hist=False)
+# plot_llama_triptych(
+#     x_column1='Gini', y_column1='Smoothness',
+#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column3='Asymmetry', y_column3='Gini',
+# base_AGN=base_AGN, base_inactive=base_inactive,
+#     log_axes={'x_shared': False, 'y_shared': False},
+#     bins=10,
+#     figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict'],[1.5]], native_res=True, colours_list={
+#   "\'strict\' mask and 3.0x3.0kpc aperture": "#83CC90",
+#   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "#00470E"
+# }, markers_list={
+#   "\'strict\' mask and 3.0x3.0kpc aperture": "D",
+#   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
+# }, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630'],hist=False)

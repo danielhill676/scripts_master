@@ -33,7 +33,9 @@ from astropy.convolution import convolve, Gaussian2DKernel, Box2DKernel
 from astropy.stats import sigma_clipped_stats
 from photutils.aperture import aperture_photometry
 from regions import CircleSkyRegion # type: ignore
-
+from astropy.convolution import convolve, Gaussian2DKernel
+from astropy.wcs.utils import proj_plane_pixel_scales
+from astropy.convolution import convolve_fft
 
 np.seterr(all='ignore')
 co32 = False
@@ -165,39 +167,39 @@ def process_mc_chunk_shm(
         except Exception:
             tm_vals.append(np.nan)
 
-        try:
-            mw_vals.append(mass_weighted_sd_single(
-                mc_img, metric_kwargs["snmask"],
-                pixel_area_pc2=metric_kwargs["pixel_area_pc2"],
-                pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
-                beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
-                beam_area_pc2=metric_kwargs["beam_area_pc2"],
-                R_21=metric_kwargs["R_21"],
-                R_31=metric_kwargs["R_31"],
-                alpha_CO=metric_kwargs["alpha_CO"],
-                name=metric_kwargs["name"],
-                D_Mpc=metric_kwargs["D_Mpc"],
-                co32=metric_kwargs["co32"]
-            ))
-        except Exception:
-            mw_vals.append(np.nan)
+        # try:
+        #     mw_vals.append(mass_weighted_sd_single(
+        #         mc_img, metric_kwargs["snmask"],
+        #         pixel_area_pc2=metric_kwargs["pixel_area_pc2"],
+        #         pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
+        #         beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
+        #         beam_area_pc2=metric_kwargs["beam_area_pc2"],
+        #         R_21=metric_kwargs["R_21"],
+        #         R_31=metric_kwargs["R_31"],
+        #         alpha_CO=metric_kwargs["alpha_CO"],
+        #         name=metric_kwargs["name"],
+        #         D_Mpc=metric_kwargs["D_Mpc"],
+        #         co32=metric_kwargs["co32"]
+        #     ))
+        # except Exception:
+        #     mw_vals.append(np.nan)
 
-        try:
-            aw_vals.append(area_weighted_sd_single(
-                mc_img, metric_kwargs["snmask"],
-                pixel_area_pc2=metric_kwargs["pixel_area_pc2"],
-                pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
-                beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
-                beam_area_pc2=metric_kwargs["beam_area_pc2"],
-                R_21=metric_kwargs["R_21"],
-                R_31=metric_kwargs["R_31"],
-                alpha_CO=metric_kwargs["alpha_CO"],
-                name=metric_kwargs["name"],
-                D_Mpc=metric_kwargs["D_Mpc"],
-                co32=metric_kwargs["co32"]
-            ))
-        except Exception:
-            aw_vals.append(np.nan)
+        # try:
+        #     aw_vals.append(area_weighted_sd_single(
+        #         mc_img, metric_kwargs["snmask"],
+        #         pixel_area_pc2=metric_kwargs["pixel_area_pc2"],
+        #         pixel_area_arcsec2=metric_kwargs["pixel_area_arcsec2"],
+        #         beam_area_arcsec2=metric_kwargs["beam_area_arcsec2"],
+        #         beam_area_pc2=metric_kwargs["beam_area_pc2"],
+        #         R_21=metric_kwargs["R_21"],
+        #         R_31=metric_kwargs["R_31"],
+        #         alpha_CO=metric_kwargs["alpha_CO"],
+        #         name=metric_kwargs["name"],
+        #         D_Mpc=metric_kwargs["D_Mpc"],
+        #         co32=metric_kwargs["co32"]
+        #     ))
+        # except Exception:
+        #     aw_vals.append(np.nan)
 
         try:
             clump_vals.append(clumping_factor_single(
@@ -409,26 +411,63 @@ def concentration_single(image, mask, aperturesmall=None,aperturebig=None, **kwa
 def SCOdv_single(
     image,
     mask,
-    jy_per_K,        
-    beam_area_arcsec2, 
+    jy_per_K,
+    beam_area_arcsec2,
     pixel_area_arcsec2,
     aperture=None
 ):
-    pix_per_beam = beam_area_arcsec2 / pixel_area_arcsec2
-    # Sum integrated intensity in aperture (K km/s)
-    if aperture == None:
-        I_sum = np.nansum(image[~mask])
+
+    # -----------------------------
+    # 1. Extract NDData components
+    # -----------------------------
+    if isinstance(image, NDData):
+        image_data = image.data
+        image_wcs = image.wcs.celestial if image.wcs is not None else None
     else:
-        valid = (~mask) & np.isfinite(image)
-        data = np.where(valid, image, np.nan)
-        I_phot = aperture_photometry(data, aperture, method='exact')
+        image_data = image
+        image_wcs = None
+
+    # -----------------------------
+    # 2. Force clean NumPy array
+    # -----------------------------
+    if hasattr(image_data, "value"):   # Quantity safety
+        image_data = image_data.value
+
+    image_data = np.asarray(image_data, dtype=float)
+    mask = np.asarray(mask, dtype=bool)
+
+    pix_per_beam = beam_area_arcsec2 / pixel_area_arcsec2
+
+    # -----------------------------
+    # 3. Simple apertureless sum
+    # -----------------------------
+    if aperture is None:
+        I_sum = np.nansum(image_data[~mask])
+
+    # -----------------------------
+    # 4. WCS-aware aperture case
+    # -----------------------------
+    else:
+        valid = (~mask) & np.isfinite(image_data)
+
+        # IMPORTANT: data must be ndarray, NOT NDData or Quantity
+        data = np.where(valid, image_data, np.nan)
+
+        I_phot = aperture_photometry(
+            data,
+            aperture,
+            wcs=image_wcs,   # <-- THIS is the missing piece
+            method='exact'
+        )
+
         I_sum = I_phot['aperture_sum'][0]
 
-    # Convert to total flux (Jy km/s)
+    # -----------------------------
+    # 5. Convert
+    # -----------------------------
     S_CO_dv = (I_sum / jy_per_K) / pix_per_beam
 
     return S_CO_dv
-
 
 def LCO_single(
     image,
@@ -624,120 +663,140 @@ def _Sigma_H2_map(
     return Sigma[~mask]
 
 
-def mass_weighted_sd_single(
-    image,
-    mask,
-    pixel_area_pc2,
-    pixel_area_arcsec2,
-    beam_area_arcsec2,
-    beam_area_pc2,
-    R_21,
-    R_31,
-    alpha_CO,
-    name,
-    D_Mpc,
-    co32=False,
-    **kwargs
-):
-    Sigma = _Sigma_H2_map(
-        image,
-        mask,
-        pixel_area_pc2,
-        pixel_area_arcsec2,
-        beam_area_arcsec2,
-        beam_area_pc2,
-        R_21,
-        R_31,
-        alpha_CO,
-        D_Mpc,
-        co32,
-    )
-
-    if Sigma.size == 0:
-        return np.nan
-
-    numerator = np.sum(Sigma**2 * pixel_area_pc2)
-    denominator = np.sum(Sigma * pixel_area_pc2)
-
-    return numerator / denominator if denominator > 0 else np.nan
-
-
-def area_weighted_sd_single(
-    image,
-    mask,
-    pixel_area_pc2,
-    pixel_area_arcsec2,
-    beam_area_arcsec2,
-    beam_area_pc2,
-    R_21,
-    R_31,
-    alpha_CO,
-    name,
-    D_Mpc,
-    co32=False,
-    **kwargs
-):
-    Sigma = _Sigma_H2_map(
-        image,
-        mask,
-        pixel_area_pc2,
-        pixel_area_arcsec2,
-        beam_area_arcsec2,
-        beam_area_pc2,
-        R_21,
-        R_31,
-        alpha_CO,
-        D_Mpc,
-        co32,
-    )
-
-    if Sigma.size == 0:
-        return np.nan
-
-    total_area = Sigma.size * pixel_area_pc2
-    return np.sum(Sigma * pixel_area_pc2) / total_area if total_area > 0 else np.nan
-
 def clumping_factor_single(
-    image, mask,
-    pixel_area_pc2,
-    pixel_area_arcsec2,
-    beam_area_arcsec2,
-    beam_area_pc2,
-    R_21,
-    R_31,
-    alpha_CO,
-    name,
-    D_Mpc,
-    co32=False,
-    **kwargs
+    image,
+    mask, pixel_scale_arcsec, pc_per_arcsec, native_res, R_kpc
+
 ):
-    mw = mass_weighted_sd_single(
-        image, mask,
-        pixel_area_pc2,
-        pixel_area_arcsec2,
-        beam_area_arcsec2,
-        beam_area_pc2,
-        R_21,
-        R_31,
-        alpha_CO,
-        name,
-        D_Mpc,
-        co32=co32
+    # Sigma = _Sigma_H2_map(
+    #     image,
+    #     mask,
+    #     pixel_area_pc2,
+    #     pixel_area_arcsec2,
+    #     beam_area_arcsec2,
+    #     beam_area_pc2,
+    #     R_21,
+    #     R_31,
+    #     alpha_CO,
+    #     D_Mpc,
+    #     co32,
+    # )
+
+    # if Sigma.size == 0:
+    #     return np.nan
+    Sigma_native = image.copy()
+    Sigma_native[mask] = np.nan
+    Sigma2_native = Sigma_native**2
+
+    pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
+    sigma_kernel_pc = np.sqrt((1000*R_kpc)**2 - native_res**2)
+    sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
+    kernel = Gaussian2DKernel(sigma_kernel_pix)
+    print('convolving')
+    Sigma_1kpc = convolve_fft(
+        Sigma_native,
+        kernel,
+        nan_treatment='interpolate',
+        normalize_kernel=True
     )
-    aw = area_weighted_sd_single(
-        image, mask,
-        pixel_area_pc2,
-        pixel_area_arcsec2,
-        beam_area_arcsec2,
-        beam_area_pc2,
-        R_21,
-        R_31,
-        alpha_CO,
-        name,
-        D_Mpc,
-        co32=co32
+
+    Sigma2_1kpc = convolve_fft(
+        Sigma2_native,
+        kernel,
+        nan_treatment='interpolate',
+        normalize_kernel=True
     )
-    return mw / aw if aw and aw > 0 else np.nan
+    print('convoling complete')
+
+    # numerator = np.sum(Sigma**2 * pixel_area_pc2)
+    # denominator = np.sum(Sigma * pixel_area_pc2)
+    y0, x0 = np.array(image.shape) // 2
+
+    Sigma_A = Sigma_1kpc[y0, x0]
+    Sigma_M = Sigma2_1kpc[y0, x0] / Sigma_1kpc[y0, x0]
+
+    c = Sigma_M / Sigma_A
+    print('F=',c)
+
+    return c
+
+
+# def area_weighted_sd_single(
+#     image,
+#     mask,
+#     pixel_area_pc2,
+#     pixel_area_arcsec2,
+#     beam_area_arcsec2,
+#     beam_area_pc2,
+#     R_21,
+#     R_31,
+#     alpha_CO,
+#     name,
+#     D_Mpc,
+#     co32=False,
+#     **kwargs
+# ):
+#     Sigma = _Sigma_H2_map(
+#         image,
+#         mask,
+#         pixel_area_pc2,
+#         pixel_area_arcsec2,
+#         beam_area_arcsec2,
+#         beam_area_pc2,
+#         R_21,
+#         R_31,
+#         alpha_CO,
+#         D_Mpc,
+#         co32,
+#     )
+
+#     if Sigma.size == 0:
+#         return np.nan
+
+#     total_area = Sigma.size * pixel_area_pc2
+#     return np.sum(Sigma * pixel_area_pc2) / total_area if total_area > 0 else np.nan
+
+# def clumping_factor_single(
+#     image, mask,
+#     pixel_area_pc2,
+#     pixel_area_arcsec2,
+#     beam_area_arcsec2,
+#     beam_area_pc2,
+#     R_21,
+#     R_31,
+#     alpha_CO,
+#     name,
+#     D_Mpc,
+#     co32=False,
+#     **kwargs
+# ):
+#     mw = mass_weighted_sd_single(
+#         image, mask,
+#         pixel_area_pc2,
+#         pixel_area_arcsec2,
+#         beam_area_arcsec2,
+#         beam_area_pc2,
+#         R_21,
+#         R_31,
+#         alpha_CO,
+#         name,
+#         D_Mpc,
+#         co32=co32
+#     )
+#     aw = area_weighted_sd_single(
+#         image, mask,
+#         pixel_area_pc2,
+#         pixel_area_arcsec2,
+#         beam_area_arcsec2,
+#         beam_area_pc2,
+#         R_21,
+#         R_31,
+#         alpha_CO,
+#         name,
+#         D_Mpc,
+#         co32=co32
+#     )
+#     return mw / aw if aw and aw > 0 else np.nan
 
 def radial_profile_with_errors(data, errors, mask, center=None, nbins=30):
     y, x = np.indices(data.shape)
@@ -763,6 +822,17 @@ def radial_profile_with_errors(data, errors, mask, center=None, nbins=30):
 
 def exp_profile(r, Sigma0, rs):
     return Sigma0 * np.exp(-r / rs)
+
+
+def compute_surface_density(data, pixel_area_arcsec2, D_Mpc,R_31, R_21,alpha_CO,pixel_area_pc2):
+    Lprime = data * 23.5 * pixel_area_arcsec2 * D_Mpc**2
+
+    if co32:
+        Lprime = (Lprime / R_31) * R_21
+
+    Lprime_10 = Lprime / (R_31 if co32 else R_21)
+    mass = alpha_CO * Lprime_10
+    return mass / pixel_area_pc2
 
 # ----------------- Moment map plotting ------------------
 
@@ -801,7 +871,6 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
         if norm_type == 'sqrt':
             norm = simple_norm(image.data, 'sqrt', vmin=vmin, vmax=vmax)
         elif norm_type == 'linear':
-            print(vmin)
             norm = simple_norm(image.data, 'linear', vmin=vmin, vmax=vmax)
         else:
             raise ValueError(f"Unknown norm_type: {norm_type}")
@@ -856,10 +925,10 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
             import matplotlib.ticker as mticker
             cb.set_ticks(np.linspace(vmin, vmax, 5))
             cb.ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
-            cb.ax.tick_params(labelsize=fontsize)   
+            cb.ax.tick_params(labelsize=fontsize*5)   
             cb.locator = mticker.MaxNLocator(nbins=5)
             cb.update_ticks()
-        cb.set_label('Surface density (M☉pc⁻²)', fontsize=fontsize*1.5)
+        cb.set_label('Surface density (M☉pc⁻²)', fontsize=fontsize*5)
         plt.savefig('/data/c3040163/llama/alma/gas_analysis_results'+ f'/colourbar_{R_kpc}_{rebin}_{flux_mask}.png', bbox_inches='tight', pad_inches=0)
         plt.close(cbar_fig)
         
@@ -887,7 +956,7 @@ def resolve_galaxy_beam_scale(
     name,
     fits_file,
     llamatab,
-    max_retries=3
+    max_retries=1
 ):
     header = fits.getheader(fits_file)
 
@@ -917,6 +986,7 @@ def resolve_galaxy_beam_scale(
     else:
         ned_name = base_name
         needs_extended = name.endswith(("_phangs", "_wis"))
+    print(f"[INFO] {ned_name}: needs_extended={needs_extended}")
 
     # ---- metadata resolution ----
     if not needs_extended:
@@ -993,6 +1063,27 @@ def resolve_galaxy_beam_scale(
             DEC = - (58 + 4/60 + 47.77/3600) 
             PA = 18
             I = 41
+        # inactive proposal replacements
+
+        elif base_name == 'NGC3749':
+            RA = (11+35/60+53.2244/3600)*360/24
+            DEC = - (37 + 59/60 + 50.938/3600)
+        elif base_name == 'NGC3717':
+            RA = (11+31/60+31.8861/3600)*360/24
+            DEC = - (30 + 18/60 + 27.892/3600)
+        elif base_name == 'NGC4224':
+            RA = (12+16/60+33.7838/3600)*360/24
+            DEC = - (7 + 27/60 + 43.529/3600)
+        elif base_name == 'NGC4254':
+            RA = (12+18/60+49.6014/3600)*360/24
+            DEC = - (14 + 24/60 + 59.382/3600)
+        elif base_name == 'NGC5037':
+            RA = (13+14/60+59.3733/3600)*360/24
+            DEC = - (16 + 35/60 + 24.961/3600)
+        elif base_name == 'NGC5921':
+            RA = (15+21/60+56.4857/3600)*360/24
+            DEC = - (5 + 04/60 + 14.340/3600)
+
         else:
             Ned_table = query_ned_with_retries(ned_name)
             RA = Ned_table['RA'][0]
@@ -1240,7 +1331,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
-    wcs_full = WCS(header)
+    wcs_full = WCS(header).celestial
 
     ny, nx = image_untrimmed.shape
     try:
@@ -1359,8 +1450,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     # preserve order, unique
     res_list = list(dict.fromkeys(res_list))
 
-    for src, res in res_list:
-        assert src == "native" or src in beam_scale_labels
+    # for src, res in res_list:
+    #     assert src == "native" or src in beam_scale_labels
 
     # ---------- smoothing ----------
     for src, res in res_list:
@@ -1384,7 +1475,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             beam_scale_pc_copy = res
             BMAJ_new = beam_scale_pc_copy / (pc_per_arcsec * 3600)
             BMIN_new = BMAJ_new
-
+        
         images.append(image_copy)
         errormaps.append(error_map_copy)
         BMAJs.append(BMAJ_new)
@@ -1432,7 +1523,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         ) in enumerate(zip(images, errormaps, BMAJs, BMINs, res_values, res_sources)):
 
         beam_scale_pc = res_pc
-        R_21, R_31, alpha_CO = 0.65, 0.32, 4.35
+        R_21, R_31, alpha_CO = 0.65, 0.32, 1.1
         beam_arcsec = np.sqrt(np.abs(BMAJ * BMIN)) * 3600
         beam_area_arcsec2 = (np.pi/(4*np.log(2)))*(BMAJ*3600)*(BMIN*3600)
         pc_per_arcsec = (D_Mpc * 1e6) / 206265
@@ -1455,8 +1546,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         wcs_trimmed = wcs_full.deepcopy()
         wcs_trimmed.wcs.crpix[0] -= x1
         wcs_trimmed.wcs.crpix[1] -= y1
-
-        image_nd = NDData(data=image, wcs=wcs_trimmed)
+        image_nd = NDData(data=image, wcs=wcs_trimmed)  
 
         # ---------- Flux mask ----------
         if flux_mask == True:
@@ -1536,25 +1626,15 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             if name in ['NGC5845','MCG630']: mask = combmask
 
 
-
-
         # ------------ Convert to mass surface density ------------
 
-        pix_per_beam = beam_area_arcsec2 / pixel_area_arcsec2
-        Lprime_map = image_nd.data * 23.5 * beam_area_arcsec2/pix_per_beam * D_Mpc**2
-        if co32:
-            Lprime_map = (Lprime_map / R_31) * R_21
-        Lprime_10_map = Lprime_map / (R_31 if co32 else R_21)
-        mass_map =  alpha_CO * Lprime_10_map
-        mass_surface_density_map = mass_map / pixel_area_pc2
-        mass_surface_density_map_nd = NDData(data=mass_surface_density_map, wcs=wcs_trimmed)
+        mass_surface_density_map = compute_surface_density(image_nd.data,pixel_area_arcsec2,D_Mpc,R_31,R_21,alpha_CO,pixel_area_pc2)
+        mass_surface_density_rms_noise = compute_surface_density(rms_noise,pixel_area_arcsec2,D_Mpc,R_31,R_21,alpha_CO,pixel_area_pc2)
 
-        Lprime_rms_noise = rms_noise * 23.5 * beam_area_arcsec2/pix_per_beam * D_Mpc**2
-        if co32:
-            Lprime_rms_noise = (Lprime_rms_noise / R_31) * R_21
-        Lprime_10_rms_noise = Lprime_rms_noise / (R_31 if co32 else R_21)
-        mass_rms_noise =  alpha_CO * Lprime_10_rms_noise
-        mass_surface_density_rms_noise = mass_rms_noise / pixel_area_pc2
+        mass_surface_density_map_nd = NDData(data=mass_surface_density_map, wcs=wcs_trimmed)
+        mass_surface_density_rms_noise_nd = NDData(data=mass_surface_density_rms_noise, wcs=wcs_trimmed)
+
+# pix_per_beam_1kpc = beam_area_arcsec2_1kpc / pixel_area_arcsec2# Lprime_map_1kpc = image_1kpc_nd.data * 23.5 * beam_area_arcsec2_1kpc/pix_per_beam_1kpc * D_Mpc**2# if co32:#     Lprime_map_1kpc = (Lprime_map_1kpc / R_31) * R_21# Lprime_10_map_1kpc = Lprime_map_1kpc / (R_31 if co32 else R_21)# mass_map_1kpc =  alpha_CO * Lprime_10_map_1kpc# mass_surface_density_map_1kpc = mass_map_1kpc / pixel_area_pc2# mass_surface_density_map_nd_1kpc = NDData(data=mass_surface_density_map_1kpc, wcs=wcs_trimmed)
 
         # ---------- Plot ----------
         if isolate is None or 'plot' in isolate:
@@ -1568,56 +1648,56 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
         # if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']): #     # Generate Monte-Carlo images (full set) #     N_MC = 2000 #     # ---- PARALLEL MC PROCESSING HERE ---- #     dtype = image.dtype  # e.g. np.float64 #     shape = image.shape #     shm_img = shared_memory.SharedMemory(create=True, size=image.nbytes) #     shm_err = shared_memory.SharedMemory(create=True, size=error_map.nbytes) #     # write into shared memory #     shm_array_img = np.ndarray(shape, dtype=dtype, buffer=shm_img.buf) #     shm_array_err = np.ndarray(shape, dtype=dtype, buffer=shm_err.buf) #     shm_array_img[:] = image[:]       # copy once #     shm_array_err[:] = error_map[:]   # copy once #     cpu = min( max(1, multiprocessing.cpu_count()-1), 8 )  # e.g., reserve one core #     iters_per_worker = [N_MC // cpu] * cpu #     for i in range(N_MC % cpu): #         iters_per_worker[i] += 1 #     metric_kwargs_small = dict( #         name=name, #         co32=co32, #         pixel_area_pc2=pixel_area_pc2, #         beam_area_pc2=beam_area_pc2, #         beam_scale_pc=beam_scale_pc, #         pixel_area_arcsec2=pixel_area_arcsec2, #         beam_area_arcsec2=beam_area_arcsec2, #         D_Mpc=D_Mpc, #         R_21=R_21, #         R_31=R_31, #         alpha_CO=alpha_CO, #         pc_per_arcsec=pc_per_arcsec, #         pixel_scale_arcsec=pixel_scale_arcsec, #         jy_per_K = jy_per_K, #         flux_mask = flux_mask, #         snmask = combmask #     ) #     print('single') #     print('G=', gini_single(image, mask)) #     print('A=', asymmetry_single(image, mask)) #     print('S=', smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask)) #     print('C=', clumping_factor_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32)) #     with ProcessPoolExecutor(max_workers=cpu) as ex: #         futures = [] #         for w, n_iter_chunk in enumerate(iters_per_worker): #             seed = np.random.SeedSequence().entropy + w #             futures.append(ex.submit( #                 process_mc_chunk_shm, #                 n_iter_chunk, #                 shm_img.name, #                 shm_err.name, #                 shape, #                 str(dtype), #                 mask, #                 metric_kwargs_small, #                 isolate, #                 seed #             )) #         results = [f.result() for f in futures] #     # When done, unlink the shared memory #     shm_img.close() #     shm_img.unlink() #     shm_err.close() #     shm_err.unlink() #     def merge_global(metric_name): #         """Concatenate raw MC values across chunks and compute global stats.""" #         # Collect lists from every chunk #         all_values = [] #         for r in results: #             if metric_name in r: #                 all_values.extend(r[metric_name]) #         # Convert to array #         arr = np.array(all_values, dtype=float) #         # Handle case where everything failed #         if len(arr) == 0 or np.all(np.isnan(arr)): #             print(f"All MC calculations failed for metric {metric_name} in galaxy {name}.") #             return np.nan, np.nan #         # Global median and std #         return float(np.nanmedian(arr)), float(np.nanstd(arr)) #     gini, gini_err = merge_global("gini") #     asym, asym_err = merge_global("asym") #     smooth, smooth_err = merge_global("smooth") #     conc, conc_err = merge_global("conc") #     total_mass, total_mass_err = merge_global("tmass") #     SCOdv, SCOdv_err = merge_global("SCOdv") #     LCO, LCO_err = merge_global("LCO") #     LCO_JCMT, LCO_JCMT_err = merge_global("LCO_JCMT") #     LCO_APEX, LCO_APEX_err = merge_global("LCO_APEX") #     mw_sd, mw_sd_err = merge_global("mw") #     aw_sd, aw_sd_err = merge_global("aw") #     clump, clump_err = merge_global("clump") # else: #     print("Skipping metric calculations as per isolate parameter.") #     gini, gini_err = np.nan, np.nan #     asym, asym_err = np.nan, np.nan #     smooth, smooth_err = np.nan, np.nan #     conc, conc_err = np.nan, np.nan #     total_mass, total_mass_err = np.nan, np.nan #     SCOdv, SCOdv_err = np.nan, np.nan, #     LCO, LCO_err = np.nan, np.nan #     LCO_JCMT, LCO_JCMT_err = np.nan, np.nan #     LCO_APEX, LCO_APEX_err = np.nan, np.nan #     mw_sd, mw_sd_err = np.nan, np.nan #     aw_sd, aw_sd_err = np.nan, np.nan #     clump, clump_err = np.nan, np.nan # print('bootstrap') # print('G=',gini) # print('A=',asym) # print('S=',smooth)
 
-        if isolate == None or 'expfit' in isolate:
+    #     if isolate == None or 'expfit' in isolate:
 
-            # Radial profile unchanged
-            try:
-                radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
-                valid = np.isfinite(profile) & np.isfinite(profile_err)
-                radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
-            except:
-                radii, profile, profile_err = np.array([]), np.array([]), np.array([])
-                print(f"Radial profile extraction failed for {name}.")
+    #         # Radial profile unchanged
+    #         try:
+    #             radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
+    #             valid = np.isfinite(profile) & np.isfinite(profile_err)
+    #             radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
+    #         except:
+    #             radii, profile, profile_err = np.array([]), np.array([]), np.array([])
+    #             print(f"Radial profile extraction failed for {name}.")
 
-            try:
-                popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
-                                    absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
-                perr = np.sqrt(np.diag(pcov))
-                sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
-                rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
-                rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
-                rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
+    #         try:
+    #             popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
+    #                                 absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
+    #             perr = np.sqrt(np.diag(pcov))
+    #             sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
+    #             rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
+    #             rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
+    #             rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
 
-                # --- Create decently sized figure and control font sizes ---
-                plt.figure(figsize=(8, 6))           # Larger canvas
-                plt.rcParams.update({
-                    'font.size': 10,                 # base font size
-                    'axes.titlesize': 12,            # title
-                    'axes.labelsize': 11,            # axis labels  
-                    'xtick.labelsize': 10,
-                    'ytick.labelsize': 10,
-                    'legend.fontsize': 10
-    })
+    #             # --- Create decently sized figure and control font sizes ---
+    #             plt.figure(figsize=(8, 6))           # Larger canvas
+    #             plt.rcParams.update({
+    #                 'font.size': 10,                 # base font size
+    #                 'axes.titlesize': 12,            # title
+    #                 'axes.labelsize': 11,            # axis labels  
+    #                 'xtick.labelsize': 10,
+    #                 'ytick.labelsize': 10,
+    #                 'legend.fontsize': 10
+    # })
 
-                bin_widths = np.diff(np.linspace(0, radii.max(), len(radii)+1))
-                bin_widths_pc = bin_widths * pixel_scale_arcsec * pc_per_arcsec
-                radii_pc = radii * pixel_scale_arcsec * pc_per_arcsec
-                plt.errorbar(radii_pc, profile, yerr=profile_err, fmt='x', label="Data", capsize=3, xerr=bin_widths_pc / 2)
-                plt.plot(radii_pc, exp_profile(radii, *popt), label="Fit", color='orange')
-                plt.xlabel("Radius (pc)")
-                plt.ylabel("Integrated intensity [Jy/beam km/s]")
-                plt.title(name)
-                plt.legend()
-                plt.tight_layout()
-                plot_path = os.path.join(output_dir, f"{name}_{PHANGS_mask}_{rebin}_{R_kpc}kpc_expfit.png")
-                if save_exp == True:
-                    plt.savefig(plot_path,dpi=200)
-                plt.close()
+    #             bin_widths = np.diff(np.linspace(0, radii.max(), len(radii)+1))
+    #             bin_widths_pc = bin_widths * pixel_scale_arcsec * pc_per_arcsec
+    #             radii_pc = radii * pixel_scale_arcsec * pc_per_arcsec
+    #             plt.errorbar(radii_pc, profile, yerr=profile_err, fmt='x', label="Data", capsize=3, xerr=bin_widths_pc / 2)
+    #             plt.plot(radii_pc, exp_profile(radii, *popt), label="Fit", color='orange')
+    #             plt.xlabel("Radius (pc)")
+    #             plt.ylabel("Integrated intensity [Jy/beam km/s]")
+    #             plt.title(name)
+    #             plt.legend()
+    #             plt.tight_layout()
+    #             plot_path = os.path.join(output_dir, f"{name}_{PHANGS_mask}_{rebin}_{R_kpc}kpc_expfit.png")
+    #             if save_exp == True:
+    #                 plt.savefig(plot_path,dpi=200)
+    #             plt.close()
 
-            except:
-                sigma0, rs = "fit failed", "fit failed"
-        else:
-            sigma0, rs = np.nan, np.nan
+    #         except:
+    #             sigma0, rs = "fit failed", "fit failed"
+    #     else:
+    #         sigma0, rs = np.nan, np.nan
         
 
         # ---------- assemble row ----------
@@ -1634,40 +1714,33 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
             "Smoothness": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=500), 3), "Smoothness_err": 0.0,
 
-            "smoothness_espocito200_sig100": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=100,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig100_err": 0.0,
-            "smoothness_espocito200_sig75": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=75,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig75_err": 0.0,
-            "smoothness_espocito200_sig50": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=50,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig50_err": 0.0,
-            "smoothness_espocito200_sig25": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=25,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig25_err": 0.0,
+            # "smoothness_espocito200_sig100": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=100,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig100_err": 0.0,
+            # "smoothness_espocito200_sig75": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=75,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig75_err": 0.0,
+            # "smoothness_espocito200_sig50": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=50,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig50_err": 0.0,
+            # "smoothness_espocito200_sig25": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=25,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig25_err": 0.0,
 
             "smoothness_espocito50_sig100": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=100,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig100_err": 0.0,
-            "smoothness_espocito50_sig75": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=75,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig75_err": 0.0,
-            "smoothness_espocito50_sig50": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=50,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig50_err": 0.0,
-            "smoothness_espocito50_sig25": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=25,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig25_err": 0.0,
+            # "smoothness_espocito50_sig75": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=75,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig75_err": 0.0,
+            # "smoothness_espocito50_sig50": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=50,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig50_err": 0.0,
+            # "smoothness_espocito50_sig25": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=25,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig25_err": 0.0,
             
             "Smoothness_davis": round(smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask), 3), "Smoothness_davis_err": 0.0,
             "Concentration": round(concentration_single(image, mask, aperturesmall=aperture_clump_espocito50,aperturebig=aperture_clump_espocito200),3), "Concentration_err": 0.0,
             "Gini": round(gini_single(image, mask), 3), "Gini_davis_err": 0.0,
             "Asymmetry": round(asymmetry_single(image, mask), 3), "Asymmetry_err": 0.0,
 
-            "clumping_factor": round(clumping_factor_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32), 3), "clumping_factor_err": 0.0,
-            "mass_weighted_sd": round(mass_weighted_sd_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32), 1),"mass_weighted_sd_err": 0.0,
-            "area_weighted_sd": round(area_weighted_sd_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32), 1),"area_weighted_sd_err": 0.0,
-
-            "Sigma0 (Jy/beam km/s)": sigma0, "rs (pc)": rs,
-            
-            
+            "clumping_factor": round(clumping_factor_single(mass_surface_density_map,combmask,pixel_scale_arcsec, pc_per_arcsec, res_pc, R_kpc), 3),
+                        
             "L'CO (K km_s pc2)": round(LCO_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_err (K km_s pc2)": 0.0,
             "L'CO_JCMT (K km s pc2)": round(LCO_single_JCMT(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_JCMT_err (K km s pc2)": 0.0,
             "L'CO_APEX (K km s pc2)": round(LCO_single_APEX(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_APEX_err (K km s pc2)": 0.0,
             "flux (Jy km/s)": round(SCOdv_single(image,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2), 3),"flux (Jy km/s)_err": 0.0,
-            "flux (Jy km/s) 1as": round(SCOdv_single(image,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2,aperture1as), 3),
+            "flux (Jy km/s) 1as": round(SCOdv_single(image_nd,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2,aperture1as), 3),
             "total_mass (M_sun)": round(total_mass_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 2),"total_mass_err (M_sun)": 0.0,
 
             "emission_pixels": emission_pixels,
             "emission_fraction": emission_fraction
         })
-    print("C =", rows[-1]["Concentration"])
-    print("S =", rows[-1]["Smoothness"])
     return rows
 
 
@@ -1969,7 +2042,7 @@ inactive_by_num = {
     20: "NGC 1315",
 }
 
-# Active galaxies with the exact numbers shown in their corners (from the image; left panel)
+
 active_to_nums = {
     "NGC 1365": [7],
     "NGC 7582": [11, 17],
@@ -2032,19 +2105,19 @@ if __name__ == '__main__':
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
 
-    # colourbar_list = [] 
+    colourbar_list = [] 
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    # isolate = 'plot'
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    isolate = 'plot'
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
     # isolate = None
     # colourbar_list = [] 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
@@ -2053,8 +2126,8 @@ if __name__ == '__main__':
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
