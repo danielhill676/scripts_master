@@ -8,21 +8,71 @@ from astropy.wcs import WCS
 from reproject import reproject_interp
 from astropy import units as u
 
-base_dir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/postprocess"
+base_dir = "/Users/administrator/Astro/LLAMA/ALMA/pipeline_cubes"
 
-AGN_table_dir = "/data/c3040163/llama/alma/gas_analysis_results/AGN/gas_analysis_summary_broad_1.5kpc.csv"
-inactive_table_dir = "/data/c3040163/llama/alma/gas_analysis_results/inactive/gas_analysis_summary_broad_1.5kpc.csv"
+AGN_table_dir = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/gas_analysis_summary_broad_1.5kpc.csv"
+inactive_table_dir = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/gas_analysis_summary_broad_1.5kpc.csv"
+
+ranges = {
+    "ESO021": [51, 114],
+    "ESO093": [77, 115],
+    "ESO137": [68, 125],
+    "ESO208": [50, 136],
+    "MCG514": [80, 120],
+    "MCG523": [62, 120],
+    "MCG630": [65, 92],
+    "NGC718": [79, 112],
+    "NGC1079": [74, 113],
+    "NGC1315": [0, 0],
+    #"NGC1365": [50, 93],
+    "NGC1365": [118, 161],
+    "NGC1375": [0, 0],
+    "NGC1947": [72, 138],
+    "NGC2110": [49, 94],
+    "NGC2775": [0, 0],
+    "NGC2992": [50, 96],
+    "NGC3081": [57, 91],
+    "NGC3175": [83, 116],
+    "NGC3351": [20, 50],
+    "NGC3717": [69, 126],
+    "NGC3749": [63, 131],
+    "NGC3783": [84, 106],
+    "NGC4224": [66, 125],
+    "NGC4235": [65, 124],
+    "NGC4254": [20, 46],
+    "NGC4260": [76, 122],
+    "NGC4593": [49, 96],
+    "NGC5037": [66, 133],
+    "NGC5506": [60, 103],
+    "NGC5728": [54, 107],
+    "NGC5845": [83, 119],
+    "NGC5921": [80, 118],
+    #"NGC6814": [137, 162],
+    "NGC6814": [87, 112],
+    "NGC7172": [37, 104],
+    "NGC7213": [50, 90],
+    "NGC7582": [1, 105],
+    "NGC7727": [74, 132],
+}
 
 fit_data_AGN = pd.read_csv(AGN_table_dir)
 fit_data_inactive = pd.read_csv(inactive_table_dir)
 
 cwd = os.getcwd()
-outbase = "/data/c3040163/llama/alma/gas_analysis_results/pymakeplots/"
+outbase = "/Users/administrator/Astro/LLAMA/ALMA/pymakeplots/"
 
 for name in os.listdir(base_dir):
     subdir = os.path.join(base_dir, name)
 
     if not os.path.isdir(subdir):
+        continue
+        
+    outsubdir = os.path.join(outbase, name)
+
+    # if os.path.exists(outsubdir+'/_allplots.pdf'):
+    #     continue
+
+    if name not in['NGC6814']:
         continue
 
     print(f"Processing {name}")
@@ -33,25 +83,6 @@ for name in os.listdir(base_dir):
     if not (os.path.exists(file_pbcorr) and os.path.exists(file_pb)):
         print(f"{name}: missing files")
         continue
-
-    header = fits.getheader(file_pbcorr)
-
-    nchan = header["NAXIS3"]
-    mid_chan = nchan // 2
-
-    c = 299792.458  # km/s
-
-    dnu = abs(header["CDELT3"])
-    nu = header["RESTFRQ"]
-
-    dv = c * (dnu / nu)
-    print('dv=',dv)
-
-    vwidth = 1000  # km/s
-    chan_offset = int(np.round(vwidth / dv))
-
-    chan_min = max(0, mid_chan - chan_offset)
-    chan_max = min(nchan - 1, mid_chan + chan_offset)
 
     if name in fit_data_AGN["Galaxy"].values:
         table = fit_data_AGN
@@ -93,11 +124,13 @@ for name in os.listdir(base_dir):
     plotter.obj_ra = RA
     plotter.obj_dec = DEC
     plotter.gal_distance=D
-    plotter.chans2do = [chan_min, chan_max]
+    if not ranges[name][0] == 0 and not ranges[name][1] == 0:
+        plotter.chans2do = ranges[name]
+    else:
+        continue
     plotter.posang = PA
     plotter.imagesize=[theta_arcsec, theta_arcsec]
 
-    outsubdir = os.path.join(outbase, name)
     os.makedirs(outsubdir, exist_ok=True)
 
     os.chdir(outsubdir)

@@ -120,12 +120,12 @@ source ~/.zshrc  # or ~/.bashrc if you use bash
 # BBarolo 3DFIT parameter file (simple model for inner 1 kpc)
 # -------------------------
 FITSFILE    {filepath}
-THREADS     4
+THREADS     8
 
 /////////// 3DFIT parameters /////////////
-3DFIT       true
-NRADII      {NRADII}               # integer, computed (see notes)
-RADSEP      {BMAJ:.3f}             # set ≈ BMAJ (beam major FWHM)
+3DFIT       false
+#NRADII      {NRADII}               # integer, computed (see notes)
+#RADSEP      {BMAJ:.3f}             # set ≈ BMAJ (beam major FWHM)
 
 # Geometry (FIX these to external/photometric values)
 XPOS        {RA}
@@ -143,7 +143,7 @@ VSYS        {vsys:.2f}
 FREE        VROT VDISP PA INC
 
 # Normalization & mask (emphasis on kinematics)
-NORM        AZIM   # could change to LOCAL because maybe it don't worling...
+NORM        LOCAL
 MASK        SMOOTH&SEARCH
 FACTOR      2
 BLANKCUT    3
@@ -185,6 +185,46 @@ write_barolo_params(
 
 
 
+galaxy_vsys = {
+    "ESO021": 2950.0,
+    "ESO093": 1831.0,
+    "ESO137": 2843.0,
+    "ESO208": 1085.0,
+    "MCG514": 2972.0,
+    "MCG523": 2559.0,
+    "MCG630": 2323.0,
+    "NGC1079": 1452.0,
+    "NGC1315": 1615.0,
+    "NGC1365": 1636.0,
+    "NGC1375": 777.0,
+    "NGC1947": 1100.0,
+    "NGC2110": 2353.0,
+    "NGC2775": 1350.0,
+    "NGC2992": 2311.0,
+    "NGC3081": 2443.0,
+    "NGC3175": 1087.0,
+    "NGC3351": 778.0,
+    "NGC3717": 1733.0,
+    "NGC3749": 2702.0,
+    "NGC3783": 2917.0,
+    "NGC4224": 2585.0,
+    "NGC4235": 2263.0,
+    "NGC4254": 2407.0,
+    "NGC4260": 1776.0,
+    "NGC4593": 2492.0,
+    "NGC5037": 1857.0,
+    "NGC5128": 547.0,
+    "NGC5506": 1824.0,
+    "NGC5728": 2754.0,
+    "NGC5845": 1664.0,
+    "NGC5921": 1480.0,
+    "NGC6814": 1565.0,
+    "NGC7172": 2616.0,
+    "NGC718": 1733.0,
+    "NGC7213": 1750.0,
+    "NGC7582": 1622.0,
+    "NGC7727": 1795.0,
+}
 
 
 

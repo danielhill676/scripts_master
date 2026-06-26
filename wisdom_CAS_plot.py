@@ -6,6 +6,12 @@ import itertools
 import os
 from IPython.display import display
 
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Computer Modern"],
+})
+
 def strip_units(colname):
     return colname.split("[")[0].strip()
 
@@ -113,8 +119,8 @@ def plot_llama_triptych(
             df_aux = fit_data_aux_maxres if fit_data_aux is not None else None
 
         if m == '120pc_flux90_strict':
-            dfA = fit_data_AGN.dropna(subset=['Galaxy', x_column1, y_column1, x_column2, y_column2, x_column3, y_column3])
-            dfI = fit_data_inactive.dropna(subset=['Galaxy', x_column1, y_column1, x_column2, y_column2, x_column3, y_column3])
+            dfA = fit_data_AGN_maxres.dropna(subset=['Galaxy', x_column1, y_column1, x_column2, y_column2, x_column3, y_column3])
+            dfI = fit_data_inactive_maxres.dropna(subset=['Galaxy', x_column1, y_column1, x_column2, y_column2, x_column3, y_column3])
             df_aux = fit_data_aux_maxres
 
         # --------------------------------------------------
@@ -122,7 +128,7 @@ def plot_llama_triptych(
         # --------------------------------------------------
         optional_datasets = {}
         if df_aux is not None:
-            optional_datasets['Comparison-pipeline'] = df_aux
+            optional_datasets['Comparison-control'] = df_aux
         if wis_df is not None:
             wis_df = wis_df.copy()
             if 'Galaxy' not in wis_df.columns and 'Name' in wis_df.columns:
@@ -249,10 +255,10 @@ def plot_llama_triptych(
             for label, df in datasets_for_plotting.items():
                 panels[key][label] = extract_xy(df, xcol, ycol)
 
-            # --- Add LLAMA combined if needed ---
+            # --- Add LLAMA if needed ---
             if comb_llama:
                 combined_df = pd.concat([dfA, dfI], ignore_index=True)
-                panels[key]['LLAMA combined'] = extract_xy(combined_df, xcol, ycol)
+                panels[key]['LLAMA'] = extract_xy(combined_df, xcol, ycol)
 
             panels[key]["xcol"] = xcol
             panels[key]["ycol"] = ycol
@@ -312,7 +318,7 @@ def plot_llama_triptych(
         default_label_styles = {
             "LLAMA AGN": ("s", 'red'),
             "LLAMA inactive": ("D", 'blue'),
-            "Comparison-pipeline": ("*", "dodgerblue"),
+            "Comparison-control": ("*", "dodgerblue"),
             "WISDOM": ("H", "indigo"),
             "PHANGS": ("D", "orange")
         }
@@ -321,7 +327,7 @@ def plot_llama_triptych(
         label_styles = {}
 
         if comb_llama:
-            label_styles['LLAMA combined'] = ('o', 'black')  # Combined AGN+inactive
+            label_styles['LLAMA'] = ('o', 'black')  # Combined AGN+inactive
         else:
             if 'LLAMA AGN' in datasets_for_plotting:
                 label_styles['LLAMA AGN'] = default_label_styles['LLAMA AGN']
@@ -329,7 +335,7 @@ def plot_llama_triptych(
                 label_styles['LLAMA inactive'] = default_label_styles['LLAMA inactive']
 
         # Always add optional datasets
-        for opt in ['Comparison-pipeline', 'WISDOM', 'PHANGS']:
+        for opt in ['Comparison-control', 'WISDOM', 'PHANGS']:
             if opt in datasets_for_plotting:
                 label_styles[opt] = default_label_styles[opt]
 
@@ -363,7 +369,7 @@ def plot_llama_triptych(
                 # --------------------------------------------------
                 # Annotate shared galaxies (both datasets)
                 # --------------------------------------------------
-                if label in ["WISDOM", "PHANGS"]:
+                if label in ["WISDOM", "PHANGS"]: #### edited to print out all names
 
                     for xi, yi, name in zip(x, y, names):
 
@@ -392,7 +398,7 @@ def plot_llama_triptych(
                                 color="black",   # distinguish LLAMA labels
                                 zorder=10
                             )
-                elif label == "Comparison-pipeline": 
+                elif label == "Comparison-control": 
                     # Annotate ALL points (no matching condition)
                     for xi, yi, name in zip(x, y, names):
                         ax.text(
@@ -488,7 +494,7 @@ def plot_llama_triptych(
         if hist:
             # Determine which datasets to include in histograms
             if comb_llama:
-                hist_labels = ['LLAMA combined']
+                hist_labels = ['LLAMA']
             else:
                 hist_labels = ['LLAMA AGN', 'LLAMA inactive']
             
@@ -525,10 +531,14 @@ def plot_llama_triptych(
         # --------------------------------------------------
         # Labels + legend
         # --------------------------------------------------
-        ax_left.set_xlabel(x_column1)
-        ax_left.set_ylabel(y_column1)
-        ax_bottom.set_xlabel(x_column3)
-        ax_bottom.set_ylabel(y_column3)
+        fs = 14  # adjust as needed
+
+        ax_left.set_xlabel(axis_label_lookup.get(x_column1, x_column1), fontsize=fs)
+        ax_left.set_ylabel(axis_label_lookup.get(y_column1, y_column1), fontsize=fs)
+
+        ax_bottom.set_xlabel(axis_label_lookup.get(x_column3, x_column3), fontsize=fs)
+        ax_bottom.set_ylabel(axis_label_lookup.get(y_column3, y_column3), fontsize=fs)
+
 
         ax_top.set_xlabel("")
         ax_top.set_ylabel("")
@@ -543,10 +553,10 @@ def plot_llama_triptych(
         legend_marker_sizes = {
         "LLAMA AGN": 8,
         "LLAMA inactive": 12,
-        "LLAMA combined": 8,
+        "LLAMA": 8,
         "WISDOM": 8,
         "PHANGS": 8,
-        "Comparison-pipeline": 14   # make it bigger
+        "Comparison-control": 14   # make it bigger
     }
         
         legend_handles = []
@@ -916,10 +926,14 @@ def plot_llama_triptych(
         # --------------------------------------------------
         # Labels + legend
         # --------------------------------------------------
-        ax_left.set_xlabel(x_column1)
-        ax_left.set_ylabel(y_column1)
-        ax_bottom.set_xlabel(x_column3)
-        ax_bottom.set_ylabel(y_column3)
+        fs = 14  # adjust as needed
+
+        ax_left.set_xlabel(axis_label_lookup.get(x_column1, x_column1), fontsize=fs)
+        ax_left.set_ylabel(axis_label_lookup.get(y_column1, y_column1), fontsize=fs)
+
+        ax_bottom.set_xlabel(axis_label_lookup.get(x_column3, x_column3), fontsize=fs)
+        ax_bottom.set_ylabel(axis_label_lookup.get(y_column3, y_column3), fontsize=fs)
+
 
         ax_top.set_xlabel("")
         ax_top.set_ylabel("")
@@ -957,6 +971,20 @@ def plot_llama_triptych(
         outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/"
         plt.savefig(f"{outfolder}/wisdom_CAS_triptych_comparison{which_compare}native{native_res}.png", dpi=300)
 
+axis_label_lookup = {
+    "Resolution (pc)": "Resolution (pc)",
+    "log LH (L⊙)": "$\log{L_H}$ (L$_\odot$)",
+    "Smoothness": "Clumpiness",
+    "clumping_factor": "Clumping Factor",
+    "Smoothness_davis": "Clumpiness",
+    "log LX": "$\log{L_{2-10}}$ (erg s$^{-1}$)",
+    "total_mass (M_sun)": "Total Molecular Gas Mass ($M_\odot$)",
+    "avg_mass_dens": "Average molecular Mass Surface Density ($M_\odot$kpc$^{-2}$)",
+    "L'CO_JCMT (K km s pc2)": "ALMA L$'$ CO (K km s pc$^2$)",
+    "L'CO_APEX (K km s pc2)": "ALMA L$'$ CO (K km s pc$^2$)",
+    'log L′ CO': "Single-dish L$'$ CO (K km s pc$^2$)",
+    "smoothness_espocito50_sig100": r"Clumpiness$_{50\,\mathrm{pc}}^{\sigma=100}$"
+}
 
 
 base_AGN = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN"
@@ -965,6 +993,10 @@ base_aux = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/aux"
 
 wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df.csv")
 phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_df.csv")
+
+exclude = ['NGC1375','NGC1315','NGC2775','MCG630']
+exclude1 = ['NGC1375','NGC1315','NGC2775']
+excludewisphagns= ['NGC1375','NGC1315','NGC2775','NGC5064_WIS','NGC1387_WIS']
 
 ################################################################### AGN vs inactive CAS triptych ###################################################################
 
@@ -983,14 +1015,16 @@ r = 1.5
 # )
 
 
+
+
 # plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness',
-#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column1='Gini', y_column1='Smoothness_davis',
+#     x_column2='Asymmetry', y_column2='Smoothness_davis',
 #     x_column3='Asymmetry', y_column3='Gini',
 # base_AGN=base_AGN, base_inactive=base_inactive,
 #     log_axes={'x_shared': False, 'y_shared': False},
 #     bins=10,
-#     figsize=9, m = m, r = r, native_res=True, hist=False, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630']
+#     figsize=9, m = m, r = r, native_res=True, hist=False, exclude_names=exclude1
 # )
 
 # ################################################################ AGN vs inactive CAS triptych wis phangs comparison ###################################################################
@@ -1009,14 +1043,14 @@ base_AGN=base_AGN, base_inactive=base_inactive, base_aux=base_aux,
     phangs_df=phangs_df,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
-    figsize=9, m = m, r = r, comb_llama=True, native_res=True, hist=False, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630','NGC5064_WIS','NGC1387_WIS']
+    figsize=9, m = m, r = r, comb_llama=True, native_res=True, hist=False, exclude_names=excludewisphagns
 )
 
 ################################################################ comparison of mask and apertures ###################################################################
 
 # plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness',
-#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column1='Gini', y_column1='Smoothness_davis',
+#     x_column2='Asymmetry', y_column2='Smoothness_davis',
 #     x_column3='Asymmetry', y_column3='Gini',
 # base_AGN=base_AGN, base_inactive=base_inactive,
 #     log_axes={'x_shared': False, 'y_shared': False},
@@ -1031,12 +1065,12 @@ base_AGN=base_AGN, base_inactive=base_inactive, base_aux=base_aux,
 #   "\'strict\' mask and 2.0x2.0kpc aperture": "s",
 #   "\'strict\' mask and 3.0x3.0kpc aperture": "o",
 # "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "P"
-# }, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630'],hist=False)
+# }, exclude_names=exclude1,hist=False)
 
 
 # plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness',
-#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column1='Gini', y_column1='Smoothness_davis',
+#     x_column2='Asymmetry', y_column2='Smoothness_davis',
 #     x_column3='Asymmetry', y_column3='Gini',
 # base_AGN=base_AGN, base_inactive=base_inactive,
 #     log_axes={'x_shared': False, 'y_shared': False},
@@ -1048,12 +1082,12 @@ base_AGN=base_AGN, base_inactive=base_inactive, base_aux=base_aux,
 # }, markers_list={
 #   "\'strict\' mask and 3.0x3.0kpc aperture": "D",
 #   "\'broad\' mask and 3.0x3.0kpc aperture": "s",
-# }, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630'],hist=False)
+# }, exclude_names=exclude1,hist=False)
 
 
 # plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness',
-#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column1='Gini', y_column1='Smoothness_davis',
+#     x_column2='Asymmetry', y_column2='Smoothness_davis',
 #     x_column3='Asymmetry', y_column3='Gini',
 # base_AGN=base_AGN, base_inactive=base_inactive,
 #     log_axes={'x_shared': False, 'y_shared': False},
@@ -1064,4 +1098,4 @@ base_AGN=base_AGN, base_inactive=base_inactive, base_aux=base_aux,
 # }, markers_list={
 #   "\'strict\' mask and 3.0x3.0kpc aperture": "D",
 #   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
-# }, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630'],hist=False)
+# }, exclude_names=exclude1,hist=False)
