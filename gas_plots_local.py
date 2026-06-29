@@ -832,11 +832,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         flux_2_10 = BAT_sens_flux * 0.355
         merged_inactive['log LX'] = np.log10(flux_2_10 * 4 * math.pi * (merged_inactive['Distance (Mpc)'] * 3.086e24)**2)
 
-        print(merged_inactive['Name_clean'])
-
-        print(merged_inactive['log LX'])
-
-
         for df in [merged_AGN, merged_inactive]:
             if "Bar" in df.columns:
                 df["Bar"] = df["Bar"].astype(str).str.strip().replace("", np.nan)
@@ -1543,7 +1538,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             
             if logx:
                 x_inactive_stat = np.log(x_inactive)
-                y_inactive_stat = np.log(y_inactive)
+                x_agn_stat = np.log(x_agn)
             else:
                 x_inactive_stat,x_agn_stat = x_inactive, x_agn
 
@@ -2371,7 +2366,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                         ecolor='black',
                         capsize=2,
                         elinewidth=1,
-                        histtype='step', linewidth=4,
+linewidth=4,
                         zorder=2
                     )
 
@@ -2437,6 +2432,84 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                         color='black' if c_column is not None else colour_inactive,
                         size_factor=2.0
                     )
+
+    ############################## Plot comparison samples ##############################
+
+            if soloplot is None and use_gb21 and ratiox != 'gb21' and ratioy != 'gb21':
+                ax_scatter.errorbar(
+                        x_gb21, y_gb21,
+                        xerr=xerr_gb21, yerr=yerr_gb21,
+                        fmt='o', color='green', label='Garcia-Burillo+24', markersize=8,
+                        capsize=2, elinewidth=1, alpha=0.3
+                    )
+                # if not comb_llama:
+                #     for x, y, name in zip(x_gb21, y_gb21, shared_names_gb21):
+                #         ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='darkgreen', zorder=10)
+                # x_combined = np.concatenate([x_agn, x_inactive])
+                # y_combined = np.concatenate([y_agn, y_inactive])
+                # names_combined = np.concatenate([names_agn, names_inactive])
+
+                # connect_shared_galaxies(
+                #     ax_scatter,
+                #     x_gb21, y_gb21, shared_names_gb21,
+                #     x_combined, y_combined, names_combined,
+                #     line_color='black',
+                #     alpha=0.5,
+                #     lw=1.5
+                # )
+
+            if soloplot is None and use_wis and ratiox != 'wis' and ratioy != 'wis':
+                ax_scatter.scatter(
+                x_wis, y_wis,
+                marker='H', color='purple', label='WISDOM', s=56, alpha=0.8, edgecolors='none'
+                )
+                if not comb_llama:
+                    for x, y, name in zip(x_wis, y_wis, names_wis):
+                        ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='indigo', zorder=10)
+                elif comb_llama and plotshared:
+                    names_llama = list(names_agn) + list(names_inactive)
+                    for x, y, name in zip(x_wis, y_wis, shared_names_wis):
+                        ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='indigo', zorder=10)
+
+            if soloplot is None and use_phangs and ratiox != 'phangs' and ratioy != 'phangs':
+                ax_scatter.scatter(
+                x_phangs, y_phangs,
+                marker='D', color='orange', label='PHANGS', s=36, alpha=0.8, edgecolors='none'
+                )
+                if not comb_llama:
+                    for x, y, name in zip(x_phangs, y_phangs, names_phangs):
+                        ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='darkorange', zorder=10)
+                elif comb_llama and plotshared:
+                    for x, y, name in zip(x_phangs, y_phangs, shared_names_phangs):
+                        ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='darkorange', zorder=10)
+
+            if soloplot is None and use_sim and ratiox != 'sim' and ratioy != 'sim':
+                ax_scatter.scatter(
+                x_sim, y_sim,
+                marker='X', color='brown', label='Simulations', s=36, alpha=0.8, edgecolors='none'
+                )
+                if not comb_llama:
+                    for x, y, name in zip(x_sim, y_sim, names_sim):
+                        ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='saddlebrown', zorder=10)
+                elif comb_llama:
+
+                    shared_names_sim = [x if x in names_llama else None for x in names_sim]
+                    for x, y, name in zip(x_sim, y_sim, shared_names_sim):
+                        ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='saddlebrown', zorder=10)
+
+            if soloplot is None and use_leroy:
+                ax_scatter.errorbar(x_leroy, y_leroy,
+                xerr=xerr_leroy, yerr=yerr_leroy,
+                fmt='X', color='brown', label='Leroy+2013 CO', markersize=8,
+                capsize=2, elinewidth=1, alpha=0.8)
+
+            if use_aux and ratiox != 'aux' and ratioy != 'aux':
+                ax_scatter.scatter(
+                x_aux, y_aux,
+                marker='*', color='cyan', label='wis/phangs pipeline', s=100, alpha=0.9, edgecolors='black', linewidths=0.5
+                )
+                for x, y, name in zip(x_aux, y_aux, names_aux):
+                    ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='teal', zorder=10)
 
             # =========================================================
             # Colourbar
@@ -3206,7 +3279,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ax.set_ylabel("Number of pairs", fontsize=font)
 
                 ax.set_title(f"One-sample t-test p-value: {p_value_t:.4f}", fontsize=font)
-                print(p_value_t)
                 # else:
                 #     ax.set_title(f"Wilcoxon test p-value: {p_value_w:.3f}")
                 ax.legend()
@@ -4133,7 +4205,7 @@ for mask in masks:
 
 # #         # using GB24 for concentration
 
-        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False)
+        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False)
 
 
         plot_llama_property('log LX', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,soloplot='AGN',nativex=True,nativey=True,logy=True,yhist=False,plotshared=False,c_column='Concentration')#,exclude_names=['NGC 3783','MCG-05-23-016'])
