@@ -1197,6 +1197,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         if use_gb21:
  #see archived_comp_samp_build
             GB21_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/GB24_df_new_final_no_overlap.csv")
+            if plotshared:
+                GB21_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples/GB24_df_new_final.csv")
             #GB21_df = GB21_df.drop_duplicates(subset=['Name'], keep='last')
             GB21_df[x_column] = pd.to_numeric(GB21_df[x_column], errors='coerce')
             GB21_df[y_column] = pd.to_numeric(GB21_df[y_column], errors='coerce')
@@ -2084,7 +2086,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
                 # Find shared names
                 shared = set(dict1.keys()) & set(dict2.keys())
-
+                ratios_x=[]
+                ratios_y=[]
                 # Draw all pairwise connections
                 for name in shared:
                     for (x_start, y_start) in dict1[name]:
@@ -2097,8 +2100,17 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                                 lw=lw,
                                 zorder=zorder
                             )
-
-
+                            print(name)
+                            print('x axis')
+                            print('gb24=',x_start,'llama=',x_end,'ratio=',x_end-x_start)
+                            ratios_x.append(x_end-x_start)
+                            print('y axis')
+                            print('gb24=',y_start,'llama=',y_end,'ratio=',y_end-y_start)
+                            ratios_y.append(y_end-y_start)
+                print('median xratio',np.median(ratios_x))
+                print('mean xratio',np.mean(ratios_x))
+                print('median yratio',np.median(ratios_y))
+                print('mean yratio',np.mean(ratios_y))
             if c_column is None:
                 colour_AGN = 'red'
                 colour_inactive = 'blue'
@@ -2204,7 +2216,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                         zorder=2
                     )
 
-                if not comb_llama and not plotshared:
+                if not comb_llama and plotshared:
                     for x, y, name in zip(x_agn, y_agn, names_agn):
                         ax_scatter.text(
                             float(x + 0.005),
@@ -2370,7 +2382,7 @@ linewidth=4,
                         zorder=2
                     )
 
-                if not comb_llama and not plotshared:
+                if not comb_llama and plotshared:
                     for x, y, name in zip(x_inactive, y_inactive, names_inactive):
                         ax_scatter.text(
                             float(x + 0.005),
@@ -2442,21 +2454,22 @@ linewidth=4,
                         fmt='o', color='green', label='Garcia-Burillo+24', markersize=8,
                         capsize=2, elinewidth=1, alpha=0.3
                     )
-                # if not comb_llama:
-                #     for x, y, name in zip(x_gb21, y_gb21, shared_names_gb21):
-                #         ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='darkgreen', zorder=10)
-                # x_combined = np.concatenate([x_agn, x_inactive])
-                # y_combined = np.concatenate([y_agn, y_inactive])
-                # names_combined = np.concatenate([names_agn, names_inactive])
+                if plotshared:
+                    if not comb_llama:
+                        for x, y, name in zip(x_gb21, y_gb21, shared_names_gb21):
+                            ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='darkgreen', zorder=10)
+                    x_combined = np.concatenate([x_agn, x_inactive])
+                    y_combined = np.concatenate([y_agn, y_inactive])
+                    names_combined = np.concatenate([names_agn, names_inactive])
 
-                # connect_shared_galaxies(
-                #     ax_scatter,
-                #     x_gb21, y_gb21, shared_names_gb21,
-                #     x_combined, y_combined, names_combined,
-                #     line_color='black',
-                #     alpha=0.5,
-                #     lw=1.5
-                # )
+                    connect_shared_galaxies(
+                        ax_scatter,
+                        x_gb21, y_gb21, shared_names_gb21,
+                        x_combined, y_combined, names_combined,
+                        line_color='black',
+                        alpha=0.5,
+                        lw=1.5
+                    )
 
             if soloplot is None and use_wis and ratiox != 'wis' and ratioy != 'wis':
                 ax_scatter.scatter(
@@ -2548,7 +2561,10 @@ linewidth=4,
             y_for_bins = all_y[(all_y >= ylower) & (all_y <= yupper)]
             if y_for_bins.empty:
                 y_for_bins = all_y
-            bin_edges = np.histogram_bin_edges(y_for_bins, bins=9)
+            if logy:
+                bin_edges = np.logspace(np.log10(ylower), np.log10(yupper), 10)
+            else:
+                bin_edges = np.histogram_bin_edges(y_for_bins, bins=9)
 
             ############################### Scatter labels ###############################
             font = 16
@@ -2699,6 +2715,9 @@ linewidth=4,
             ax_hist_only.set_ylabel("Number of galaxies")
 
             # Match x-limits to scatter y-range
+            
+            if logy:
+                ax_hist_only.set_xscale("log")
             ax_hist_only.set_xlim(ylower, yupper)
 
             #ax_hist_only.legend(fontsize=8)
@@ -2798,12 +2817,13 @@ linewidth=4,
 
 
         ############################### X histogram bin edges ##############################
-
             x_for_bins = all_x[(all_x >= xlower) & (all_x <= xupper)]
             if x_for_bins.empty:
                 x_for_bins = all_x
-
-            bin_edges_x = np.histogram_bin_edges(x_for_bins, bins=9)
+            if logx:
+                bin_edges_x = np.logspace(np.log10(xlower), np.log10(xupper), 10)
+            else:
+                bin_edges_x = bin_edges_x = np.histogram_bin_edges(x_for_bins, bins=9)
 
         ############################### Standalone X histogram ###############################
 
@@ -2911,6 +2931,9 @@ linewidth=4,
             ax_hist_x.set_ylabel("Number of galaxies")
 
             # Match x-limits to scatter
+
+            if logx:
+                ax_hist_only.set_xscale("log")
             ax_hist_x.set_xlim(xlower, xupper)
 
             #ax_hist_x.legend(fontsize=8)
@@ -3096,6 +3119,8 @@ linewidth=4,
                 parts.append(f'_ratiox_{ratiox}')
             if ratioy is not None:
                 parts.append(f'_ratioy_{ratioy}')
+            if plotshared:
+                parts.append('_plotshared')
             suffix = ''.join(parts)
             outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/{mask}_{R_kpc}kpc/'
             os.makedirs(outputdir, exist_ok=True)
@@ -3118,6 +3143,17 @@ linewidth=4,
                 indeps = []
                 valid_pairs = 0
 
+                obs_groups = ["o", "i", "u"]
+                labels = {
+                    "o": "Obscured",
+                    "i": "Intermediate",
+                    "u": "Unobscured",
+                }
+                diffs_obs = {k: [] for k in obs_groups}
+                diffs_frac_obs = {k: [] for k in obs_groups}
+                indeps_obs = {k: [] for k in obs_groups}
+                stats_by_class = {}
+
                 df_pairs['Active Galaxy'] = normalize_name(df_pairs['Active Galaxy'])
                 df_pairs['Inactive Galaxy'] = normalize_name(df_pairs['Inactive Galaxy'])
                 # print(f'AGN\n len({len(merged_AGN_clean["Name_clean"])})\n',merged_AGN_clean["Name_clean"])
@@ -3128,7 +3164,9 @@ linewidth=4,
                     inactive_name = row["Inactive Galaxy"].strip()
                     # print('\n row:', _)
                     # print(agn_name, inactive_name)
-
+                    obsclass = agn_obs.get(agn_name, {}).get("obsclass")
+                    if obsclass is None:
+                        continue
                     # Extract rows for each galaxy
                     agn_rows = merged_AGN_clean[merged_AGN_clean["Name_clean"] == agn_name]
                     inactive_rows = merged_inactive_clean[merged_inactive_clean["Name_clean"] == inactive_name]
@@ -3173,6 +3211,7 @@ linewidth=4,
 
                         diff = float(val_agn) - float(val_inactive)
                         diffs.append(diff)
+                        diffs_obs[obsclass].append(diff)
                         # denom = abs(val_agn) + abs(val_inactive)
 
                         # if denom == 0:
@@ -3181,8 +3220,10 @@ linewidth=4,
                         #     diff_frac = (val_agn - val_inactive) / denom
                         diff_frac =  (val_agn - val_inactive) / val_agn                      
                         diffs_frac.append(diff_frac)
+                        diffs_frac_obs[obsclass].append(diff_frac)
                         indep = 0.5*(float(indep_AGN)+float(indep_inactive))
                         indeps.append(indep)
+                        indeps_obs[obsclass].append(indep)
                         valid_pairs += 1
 
                         continue  # move to next pair
@@ -3226,8 +3267,11 @@ linewidth=4,
                             diff_frac =  (val_agn - val_inactive) / val_agn                      
                             indep = 0.5*(float(indep_AGN)+float(indep_inactive))
                             indeps.append(indep)
+                            indeps_obs[obsclass].append(indep)
                             diffs.append(diff)
+                            diffs_obs[obsclass].append(diff)
                             diffs_frac.append(diff_frac)
+                            diffs_frac_obs[obsclass].append(diff_frac)
                             valid_pairs += 1
 
                             # Stop after first valid match for this pair
@@ -3259,12 +3303,59 @@ linewidth=4,
                 mean_err_frac  = sigma_frac / np.sqrt(n_frac)
                 t_stat_frac , p_value_t_frac = ttest_1samp(diffs_frac , 0)
 
+                for obsclass in ["o", "i", "u"]:
+
+                    # -------------------------
+                    # Absolute differences
+                    # -------------------------
+                    d = np.asarray(diffs_obs[obsclass], dtype=float)
+                    d = d[np.isfinite(d)]
+
+                    # -------------------------
+                    # Fractional differences
+                    # -------------------------
+                    df = np.asarray(diffs_frac_obs[obsclass], dtype=float)
+                    df = df[np.isfinite(df)]
+
+                    n_obs = len(d)
+                    n_frac_obs = len(df)
+
+                    print(f"\n{labels[obsclass]}")
+                    print(f"Number of valid pairs: {n_obs}")
+
+                    mean_obs = np.mean(d)
+                    sigma_obs = np.std(d, ddof=1)
+                    mean_err_obs = sigma_obs / np.sqrt(n_obs)
+                    t_stat_obs, p_value_t_obs = ttest_1samp(d, 0)
+
+                    mean_frac_obs = np.mean(df)
+                    sigma_frac_obs = np.std(df, ddof=1)
+                    mean_err_frac_obs = sigma_frac_obs / np.sqrt(n_frac_obs)
+                    t_stat_frac_obs, p_value_t_frac_obs = ttest_1samp(df, 0)
+
+
+                    stats_by_class[obsclass] = {
+                        "n": n_obs,
+                        "mean": mean_obs,
+                        "sigma": sigma_obs,
+                        "mean_err": mean_err_obs,
+                        "t_stat": t_stat_obs,
+                        "p_value": p_value_t_obs,
+                        "n_frac": n_frac_obs,
+                        "mean_frac": mean_frac_obs,
+                        "sigma_frac": sigma_frac_obs,
+                        "mean_err_frac": mean_err_frac_obs,
+                        "t_stat_frac": t_stat_frac_obs,
+                        "p_value_frac": p_value_t_frac_obs,
+                    }
+
 
                 #########################################################
 
+                bin_edges = np.histogram_bin_edges(diffs, bins=12)
 
                 fig, ax = plt.subplots(figsize=(8, 5))
-                ax.hist(diffs, bins=12, color="grey", histtype='step', linewidth=4)
+                ax.hist(diffs, bins=12, color="lightgrey", histtype='bar', linewidth=4)
                 ax.axvline(mean, color="red", linestyle="--", label=f"Mean = {mean:.2g} ± {mean_err:.2g}")
                 ax.axvline(mean - sigma, color="blue", linestyle="--")
                 ax.axvline(mean + sigma, color="blue", linestyle="--",label=f"$1\sigma = {(sigma):.2g}$" if sigma > 0 else r"$1\sigma = \infty$")
@@ -3294,7 +3385,8 @@ linewidth=4,
 
                 if y_column =="flux (Jy km/s)":
                     output_path = outputdir+'fluxjykms_pair_differences.png'
-
+                
+                plt.savefig(output_path)
                 print(f"Saved matched-pairs plot to: {output_path}")
                 plt.close(fig)
 
@@ -3303,7 +3395,7 @@ linewidth=4,
                 ###########################################################
 
                 fig, ax = plt.subplots(figsize=(8, 5))
-                ax.hist(diffs_frac , bins=12, color="grey", histtype='step', linewidth=4)
+                ax.hist(diffs_frac , bins=12, color="lightgrey", histtype='bar', linewidth=4)
                 ax.axvline(mean_frac , color="red", linestyle="--", label=f"Mean = {mean_frac :.2g} ± {mean_err_frac:.2g}")
                 ax.axvline(mean_frac  - sigma_frac , color="blue", linestyle="--")
                 ax.axvline(mean_frac  + sigma_frac , color="blue", linestyle="--",label=f"$1\sigma = {(sigma_frac):.2g}$" if sigma_frac > 0 else r"$1\sigma = \infty$")
@@ -3334,6 +3426,181 @@ linewidth=4,
                     output_path = outputdir_frac+f'{y_column}_native_pair_differences.png'
                 plt.savefig(output_path)
                 print(f"Saved matched-pairs plot to: {output_path}")
+                plt.close(fig)
+
+
+
+                # ###########################################################
+                # Obscuration-split histogram
+                # ###########################################################
+
+                obs_colors = {
+                    "o": "tab:red",
+                    "i": "tab:green",
+                    "u": "tab:blue",
+                }
+
+                fig, ax = plt.subplots(figsize=(8, 5))
+
+                for obsclass in ["o", "i", "u"]:
+
+                    stats = stats_by_class[obsclass]
+
+                    ax.hist(
+                        diffs_obs[obsclass],
+                        bins=bin_edges,
+                        histtype="step",
+                        linewidth=4,
+                        color=obs_colors[obsclass],
+                        label=f"{labels[obsclass]} (N={stats['n']})",
+                    )
+
+                    ax.axvline(
+                        stats["mean"],
+                        color=obs_colors[obsclass],
+                        linestyle="--",
+                        linewidth=2,
+                    )
+
+                    # ax.axvline(
+                    #     stats["mean"] - stats["sigma"],
+                    #     color=obs_colors[obsclass],
+                    #     linestyle=":",
+                    #     linewidth=1.5,
+                    # )
+
+                    # ax.axvline(
+                    #     stats["mean"] + stats["sigma"],
+                    #     color=obs_colors[obsclass],
+                    #     linestyle=":",
+                    #     linewidth=1.5,
+                    # )
+
+                ax.axvline(0, color="black", linestyle="-")
+
+                try:
+                    ax.set_xlabel(
+                        fr"$\Delta$ {axis_label_lookup[y_column]} (AGN - Inactive)",
+                        fontsize=font,
+                    )
+                except:
+                    ax.set_xlabel(
+                        fr"$\Delta$ {y_column} (AGN - Inactive)",
+                        fontsize=font,
+                    )
+
+                ax.set_ylabel("Number of pairs", fontsize=font)
+
+                title = "\n".join(
+                    [
+                        f"{labels[o]}: p={stats_by_class[o]['p_value']:.3g}"
+                        for o in ["o", "i", "u"]
+                    ]
+                )
+
+                ax.set_title(title, fontsize=font-2)
+
+                ax.legend()
+
+                outputdir_obs = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/obsclass/{masky}_{R_kpcy}kpc/'
+                os.makedirs(outputdir_obs, exist_ok=True)
+
+                output_path_obs = outputdir_obs + f'{y_column}_pair_differences_obsclass.png'
+
+                if co21only:
+                    output_path_obs = outputdir_obs + f'{y_column}_pair_differences_obsclass_co21only.png'
+                if nativey:
+                    output_path_obs = outputdir_obs + f'{y_column}_native_pair_differences_obsclass.png'
+                if y_column == "flux (Jy km/s)":
+                    output_path_obs = outputdir_obs + 'fluxjykms_pair_differences_obsclass.png'
+
+                plt.savefig(output_path_obs)
+                print(f"Saved obscuration-split plot to: {output_path_obs}")
+                plt.close(fig)
+
+
+                ###########################################################
+                # Fractional obscuration-split histogram
+                ###########################################################
+
+                fig, ax = plt.subplots(figsize=(8, 5))
+
+                for obsclass in ["o", "i", "u"]:
+
+                    stats = stats_by_class[obsclass]
+
+                    ax.hist(
+                        diffs_frac_obs[obsclass],
+                        bins=12,
+                        histtype="step",
+                        linewidth=3,
+                        color=obs_colors[obsclass],
+                        label=f"{labels[obsclass]} (N={stats['n_frac']})",
+                    )
+
+                    ax.axvline(
+                        stats["mean_frac"],
+                        color=obs_colors[obsclass],
+                        linestyle="--",
+                        linewidth=2,
+                    )
+
+                    ax.axvline(
+                        stats["mean_frac"] - stats["sigma_frac"],
+                        color=obs_colors[obsclass],
+                        linestyle=":",
+                        linewidth=1.5,
+                    )
+
+                    ax.axvline(
+                        stats["mean_frac"] + stats["sigma_frac"],
+                        color=obs_colors[obsclass],
+                        linestyle=":",
+                        linewidth=1.5,
+                    )
+
+                ax.axvline(0, color="black", linestyle="-")
+
+                try:
+                    ax.set_xlabel(
+                        fr"$\Delta$ {axis_label_lookup[y_column]} (1 - Inactive/AGN)",
+                        fontsize=font,
+                    )
+                except:
+                    ax.set_xlabel(
+                        fr"$\Delta$ {y_column} (1 - Inactive/AGN)",
+                        fontsize=font,
+                    )
+
+                ax.set_ylabel("Number of pairs", fontsize=font)
+
+                title = "\n".join(
+                    [
+                        f"{labels[o]}: p={stats_by_class[o]['p_value_frac']:.3g}"
+                        for o in ["o", "i", "u"]
+                    ]
+                )
+
+                ax.set_title(title, fontsize=font-2)
+
+                ax.legend()
+
+                outputdir_frac_obs = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/frac/obsclass/{masky}_{R_kpcy}kpc/'
+                os.makedirs(outputdir_frac_obs, exist_ok=True)
+
+                output_path_frac_obs = outputdir_frac_obs + f'{y_column}_pair_differences_obsclass.png'
+
+                if co21only:
+                    output_path_frac_obs = outputdir_frac_obs + f'{y_column}_pair_differences_obsclass_co21only.png'
+                if nativey and y_column == "flux (Jy km/s)":
+                    output_path_frac_obs = outputdir_frac_obs + 'fluxjykms_native_pair_differences_obsclass.png'
+                elif nativey:
+                    output_path_frac_obs = outputdir_frac_obs + f'{y_column}_native_pair_differences_obsclass.png'
+                elif y_column == "flux (Jy km/s)":
+                    output_path_frac_obs = outputdir_frac_obs + 'fluxjykms_pair_differences_obsclass.png'
+
+                plt.savefig(output_path_frac_obs)
+                print(f"Saved obscuration-split plot to: {output_path_frac_obs}")
                 plt.close(fig)
 
 
@@ -4129,6 +4396,35 @@ leroy2013 = pd.DataFrame([
 
 leroy2013['clumping_factor_err'] = leroy2013[['c_err_plus_pc','c_err_minus_pc']].max(axis=1)
 
+agn_obs = {
+    "ESO 021-G004":  {"type": "Sy2",  "obsclass": "o"},
+    "ESO 137-G034":  {"type": "Sy2",  "obsclass": "o"},
+    "MCG-05-14-012":  {"type": "Sy1.0","obsclass": "u"},
+    "MCG-05-23-016":  {"type": "Sy1.9","obsclass": "i"},
+    "MCG-06-30-015":  {"type": "Sy1.2","obsclass": "u"},
+    "NGC 1365": {"type": "Sy1.8","obsclass": "i"},
+    "NGC 2110": {"type": "Sy1h", "obsclass": "o"},
+    "NGC 2992": {"type": "Sy1.8","obsclass": "i"},
+    "NGC 3081": {"type": "Sy1h", "obsclass": "o"},
+    "NGC 3783": {"type": "Sy1.2","obsclass": "u"},
+    "NGC 4235": {"type": "Sy1.2","obsclass": "u"},
+    "NGC 4388": {"type": "Sy1h", "obsclass": "o"},
+    "NGC 4593": {"type": "Sy1.0","obsclass": "u"},
+    "NGC 5128": {"type": "Sy2",  "obsclass": "o"},
+    "NGC 5506": {"type": "Sy1i", "obsclass": "i"},
+    "NGC 5728": {"type": "Sy2",  "obsclass": "o"},
+    "NGC 6814": {"type": "Sy1.5","obsclass": "i"},
+    "NGC 7172": {"type": "Sy1i", "obsclass": "i"},
+    "NGC 7213": {"type": "Sy1",  "obsclass": "u"},
+    "NGC 7582": {"type": "Sy1i", "obsclass": "i"},
+}
+
+obsclass_labels = {
+    "o": "obscured",
+    "i": "intermediate",
+    "u": "unobscured",
+}
+
 
 
 axis_label_lookup = {
@@ -4159,8 +4455,8 @@ axis_label_lookup = {
 masks = ['broad', 'strict','flux90_strict']
 radii = [1.5,0.3,1]
 
-# masks = ['strict']
-# radii = [1.5]
+masks = ['broad']
+radii = [0.3,1.5]
 
 for mask in masks:
     for R_kpc in radii:
@@ -4205,10 +4501,11 @@ for mask in masks:
 
 # #         # using GB24 for concentration
 
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=True)
 
 
-        plot_llama_property('log LX', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,soloplot='AGN',nativex=True,nativey=True,logy=True,yhist=False,plotshared=False,c_column='Concentration')#,exclude_names=['NGC 3783','MCG-05-23-016'])
+        # plot_llama_property('log LX', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,soloplot='AGN',nativex=True,nativey=True,logy=True,yhist=False,plotshared=False,c_column='Concentration')#,exclude_names=['NGC 3783','MCG-05-23-016'])
 
 
 # # #         # ############## CAS with eachother #############
@@ -4239,10 +4536,10 @@ for mask in masks:
 
 #         # ############## CAS with concentration #############
 
-        plot_llama_property('Concentration', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=False,yhist=False)
-        plot_llama_property('Concentration', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=False,yhist=False)
-        plot_llama_property('Concentration', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=False,yhist=False)
-        plot_llama_property('Concentration', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=False,yhist=False,logy=True)
+        # plot_llama_property('Concentration', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=False,yhist=False)
+        # plot_llama_property('Concentration', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=False,yhist=False)
+        # plot_llama_property('Concentration', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=False,yhist=False)
+        # plot_llama_property('Concentration', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018, False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=False,yhist=False,logy=True)
 
 
 # #         ############### CAS with resolution #############
@@ -4266,11 +4563,11 @@ for mask in masks:
 
 # #  # ############### CAS with Gas mass #############
 
-        plot_llama_property('avg_mass_dens', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
-        plot_llama_property('avg_mass_dens', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
-        plot_llama_property('avg_mass_dens', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
-        plot_llama_property('avg_mass_dens', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
-        plot_llama_property('avg_mass_dens', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,logy=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
+        # plot_llama_property('avg_mass_dens', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
+        # plot_llama_property('avg_mass_dens', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
+        # plot_llama_property('avg_mass_dens', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
+        # plot_llama_property('avg_mass_dens', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
+        # plot_llama_property('avg_mass_dens', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,logy=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
 
 # #         # ############### Clumping factor plot #############
 
@@ -4307,17 +4604,17 @@ for mask in masks:
 
 #### safe for pairdiffs
 
-        plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
-        plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
+        # plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        # plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        # plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
 
 
-        plot_llama_property('emission_pixels', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
-        plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
-        plot_llama_property('emission_pixels', 'L\'CO (K km_s pc2)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
-        plot_llama_property('emission_pixels', 'flux (Jy km/s)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
+        # plot_llama_property('emission_pixels', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
+        plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=False)
+        # plot_llama_property('emission_pixels', 'L\'CO (K km_s pc2)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
+        # plot_llama_property('emission_pixels', 'flux (Jy km/s)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
 
         # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=True)
         # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=True)
@@ -4327,7 +4624,7 @@ for mask in masks:
 
         # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=True)
         
-        plot_llama_property('emission_pixels', 'Resolution (pc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativex=True,nativey=True)
+        # plot_llama_property('emission_pixels', 'Resolution (pc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativex=True,nativey=True)
 
 
 # # #     ############# CAS WISDOM, PHANGS coplot   #############

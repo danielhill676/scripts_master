@@ -7,6 +7,10 @@ import time
 from astropy.table import MaskedColumn
 import numpy as np
 import os
+from astroquery.ipac.ned import Ned
+from astropy.coordinates import SkyCoord
+import astropy.units as u
+from astroquery.simbad import Simbad
 
 def normalize_name(col):
     s = pd.Series(col.astype(str))
@@ -129,6 +133,8 @@ wis_properties = {
     "FRL49": {
         "Type": "E★",
         "Distance (Mpc)": 85.7,
+        "PA": 160,
+        "axis_ratio": 0.8  ,
         "log_MH2": 8.68,
         "log_SigmaH2_1kpc": 2.91,
         "log_Mstar": 10.30,
@@ -145,6 +151,8 @@ wis_properties = {
     "MRK567": {
         "Type": "S",
         "Distance (Mpc)": 140.6,
+        "PA": 70,
+        "axis_ratio": 0.9  ,
         "log_MH2": 8.79,
         "log_SigmaH2_1kpc": 3.28,
         "log_Mstar": 11.26,
@@ -161,6 +169,8 @@ wis_properties = {
     "NGC0383": {
         "Type": "E",
         "Distance (Mpc)": 66.6,
+                "PA": 25,
+        "axis_ratio": 0.88  ,
         "log_MH2": 9.18,
         "log_SigmaH2_1kpc": 2.66,
         "log_Mstar": 11.82,
@@ -187,7 +197,9 @@ wis_properties = {
         "Beam_arcsec": 0.66,
         "Beam_pc": 211.2,
         "Mass_Ref": "z0MGS",
-        "Data_Ref": None
+        "Data_Ref": None,
+                        "PA": 75,
+        "axis_ratio": 0.54  
     },
 
     "NGC0524": {
@@ -204,6 +216,8 @@ wis_properties = {
         "Beam_pc": 36.7,
         "Mass_Ref": "z0MGS",
         "Data_Ref": "Smith et al. (2019)"
+                                ,"PA": 55,
+        "axis_ratio": 0.9  
     },
 
     "NGC0612": {
@@ -220,6 +234,8 @@ wis_properties = {
         "Beam_pc": 122.2,
         "Mass_Ref": "MKs",
         "Data_Ref": "Ruffa+ in prep"
+                                        ,"PA": 172,
+        "axis_ratio": 0.63
     },
 
     "NGC0708": {
@@ -236,6 +252,8 @@ wis_properties = {
         "Beam_pc": 24.1,
         "Mass_Ref": "MASSIVE",
         "Data_Ref": "North et al. (2021)"
+                                                ,"PA": 40,
+        "axis_ratio": 0.88
     },
 
     "NGC1387": {
@@ -252,6 +270,8 @@ wis_properties = {
         "Beam_pc": 40.3,
         "Mass_Ref": "z0MGS",
         "Data_Ref": "Boyce+ in prep"
+                                                        ,"PA": 131,
+        "axis_ratio": 0.98
     },
 
     "NGC1574": {
@@ -268,6 +288,8 @@ wis_properties = {
         "Beam_pc": 15.4,
         "Mass_Ref": "z0MGS",
         "Data_Ref": "Ruffa+ in prep"
+                                                                ,"PA": 50,
+        "axis_ratio": 0.91
     },
 
     "NGC3169": {
@@ -284,6 +306,8 @@ wis_properties = {
         "Beam_pc": 54.0,
         "Mass_Ref": "z0MGS",
         "Data_Ref": None
+                                                                        ,"PA": 53,
+        "axis_ratio": 0.74
     },
 
     "NGC3368": {
@@ -300,6 +324,8 @@ wis_properties = {
         "Beam_pc": 17.9,
         "Mass_Ref": "z0MGS",
         "Data_Ref": None
+                                                                                ,"PA": 135,
+        "axis_ratio": 0.68
     },
 
     "NGC3607": {
@@ -316,6 +342,8 @@ wis_properties = {
         "Beam_pc": 59.0,
         "Mass_Ref": "A3D",
         "Data_Ref": None
+                                                                                        ,"PA": 125,
+        "axis_ratio": 0.89
     },
 
     "NGC4061": {
@@ -332,6 +360,8 @@ wis_properties = {
         "Beam_pc": 59.2,
         "Mass_Ref": "MASSIVE",
         "Data_Ref": None
+                                                                                                ,"PA": 65,
+        "axis_ratio": 0.7
     },
 
     "NGC4429": {
@@ -348,6 +378,8 @@ wis_properties = {
         "Beam_pc": 12.8,
         "Mass_Ref": "A3D",
         "Data_Ref": "Davis et al. (2018)"
+                                                                                                        ,"PA": 97,
+        "axis_ratio": 0.34
     },
 
     "NGC4435": {
@@ -364,6 +396,8 @@ wis_properties = {
         "Beam_pc": 19.1,
         "Mass_Ref": "A3D",
         "Data_Ref": None
+                                                                                                                ,"PA": 15,
+        "axis_ratio": 0.68
     },
 
     "NGC4438": {
@@ -380,6 +414,8 @@ wis_properties = {
         "Beam_pc": 45.1,
         "Mass_Ref": "z0MGS",
         "Data_Ref": None
+                                                                                                                        ,"PA": 21,
+        "axis_ratio": 0.54
     },
 
     "NGC4501": {
@@ -396,6 +432,8 @@ wis_properties = {
         "Beam_pc": 42.6,
         "Mass_Ref": "z0MGS",
         "Data_Ref": None
+                                                                                                                                ,"PA": 140,
+        "axis_ratio": 0.44
     },
 
     "NGC4697": {
@@ -412,6 +450,8 @@ wis_properties = {
         "Beam_pc": 30.5,
         "Mass_Ref": "A3D",
         "Data_Ref": "Davis et al. (2017)"
+                                                                                                                                        ,"PA": 68,
+        "axis_ratio": 0.63
     },
 
     "NGC4826": {
@@ -428,6 +468,8 @@ wis_properties = {
         "Beam_pc": 6.5,
         "Mass_Ref": "z0MGS",
         "Data_Ref": None
+                                                                                                                                                ,"PA": 110,
+        "axis_ratio": 0.57
     },
 
     "NGC5064": {
@@ -444,6 +486,8 @@ wis_properties = {
         "Beam_pc": 9.9,
         "Mass_Ref": "z0MGS",
         "Data_Ref": "Onishi+ in prep"
+                                                                                                                                                        ,"PA": 35,
+        "axis_ratio": 0.52
     },
 
     "NGC5765b": {
@@ -460,6 +504,8 @@ wis_properties = {
         "Beam_pc": 178.4,
         "Mass_Ref": "MKs",
         "Data_Ref": None
+                                                                                                                                                                ,"PA": 10,
+        "axis_ratio": 0.9
     },
 
     "NGC5806": {
@@ -476,6 +522,8 @@ wis_properties = {
         "Beam_pc": 31.0,
         "Mass_Ref": "z0MGS",
         "Data_Ref": None
+                                                                                                                                                                        ,"PA": 170,
+        "axis_ratio": 0.42
     },
 
     "NGC6753": {
@@ -492,6 +540,8 @@ wis_properties = {
         "Beam_pc": 28.4,
         "Mass_Ref": "z0MGS",
         "Data_Ref": None
+                                                                                                                                                                                ,"PA": 20,
+        "axis_ratio": 0.88
     },
 
     "NGC6958": {
@@ -508,6 +558,8 @@ wis_properties = {
         "Beam_pc": 19.0,
         "Mass_Ref": "z0MGS",
         "Data_Ref": "Thater+ in prep"
+                                                                                                                                                                                        ,"PA": 90,
+        "axis_ratio": 0.86
     },
 
     "NGC7052": {
@@ -524,6 +576,8 @@ wis_properties = {
         "Beam_pc": 32.1,
         "Mass_Ref": "MASSIVE",
         "Data_Ref": "Smith et al. (2021)"
+                                                                                                                                                                                                ,"PA": 65,
+        "axis_ratio": 0.48
     },
 
     "NGC7172": {
@@ -540,6 +594,8 @@ wis_properties = {
         "Beam_pc": 22.2,
         "Mass_Ref": "z0MGS",
         "Data_Ref": None
+                                                                                                                                                                                                        ,"PA": 98,
+        "axis_ratio": 0.46
     }
 }
 
@@ -739,34 +795,68 @@ wis_H_phot = Table.read('/Users/administrator/Astro/LLAMA/wisdom_2mass_Hphotomet
 phangs_H_phot = Table.read('/Users/administrator/Astro/LLAMA/phangs_2mass_Hphotometry.fits', format='fits')
 #wis_H_phot.show_in_browser()
 
-def get_hubble_T(name):
-    result = Vizier.query_object(name, catalog="VII/155/rc3")
-    if len(result) == 0:
-        result = Vizier.query_object(name, catalog="J/A+A/659/A188/ulx-xmm9")
+def get_data(name):
     try:
+        result = Vizier.query_object(name, catalog="VII/155/rc3")
+        if len(result) == 0:
+            result = Vizier.query_object(name, catalog="J/A+A/659/A188/ulx-xmm9")
+
         T_col = result[0]["T"]
         if isinstance(T_col, MaskedColumn):
             T_data = T_col.filled(np.nan)
         else:
             T_data = np.array(T_col)
-        T_val = np.nanmedian(T_data)
-        return T_val
-    except:
-        print(len(result))
 
+        T_val = np.nanmedian(T_data)
+
+        # # --- robust coordinate handling ---
+        # if "RA2000" in result[0].colnames:
+        #     RA_val = result[0]["RA2000"][0]
+        #     DEC_val = result[0]["DE2000"][0]
+        # else:
+        #     RA_val = result[0]["RAJ2000"][0]
+        #     DEC_val = result[0]["DEJ2000"][0]
+
+        # c = SkyCoord(RA_val, DEC_val, unit=(u.hourangle, u.deg))
+
+        # ra_deg = float(c.ra.deg)
+        # dec_deg = float(c.dec.deg)
+
+        # tab = Ned.query_object(name)
+        # print(tab.colnames)
+        # for col in tab.colnames:
+        #     print(col, tab[col][0])
+        # ra_deg = tab["RA(deg)"][0]
+        # dec_deg = tab["DEC(deg)"][0]
+
+        Simbad.add_votable_fields("ra", "dec")
+        tab = Simbad.query_object(name)
+        ra_deg = tab["ra"][0]
+        dec_deg = tab["dec"][0]
+
+        return T_val, ra_deg, dec_deg
+
+    except Exception as e:
+        print(f"[{name}] failed:", e)
+        return np.nan, np.nan, np.nan
 
 ###### update wisdom table ######
+
+for name, props in wis_properties.items():
+    axis_ratio = props["axis_ratio"]
+    i_rad =  np.arccos(np.clip(axis_ratio, -1.0, 1.0))
+    props["i"] = np.degrees(i_rad)
+
 print("Updating WISDOM table with Hubble T from Vizier...")
 wis_properties = pd.DataFrame.from_dict(wis_properties, orient="index")
 
 for name_str in wis_properties.index:
 
     max_retries = 3
-    hubble_T = None
 
     for attempt in range(max_retries):
         try:
-            wis_properties.loc[name_str, "Hubble Stage"] = get_hubble_T(name_str)
+            wis_properties.loc[name_str, "Hubble Stage"],wis_properties.loc[name_str, "RA"],wis_properties.loc[name_str, "DEC"] = get_data(name_str)
 
             break
 
@@ -796,7 +886,7 @@ for name_str in phangs_properties.index:
 
     for attempt in range(max_retries):
         try:
-            phangs_properties.loc[name_str, "Hubble Stage"] = get_hubble_T(name_str)
+            phangs_properties.loc[name_str, "Hubble Stage"],phangs_properties.loc[name_str, "RA"],phangs_properties.loc[name_str, "DEC"] = get_data(name_str)
 
             break
 
@@ -838,6 +928,8 @@ L = 4 * np.pi * D_cm**2 * (H_flux/0.21)*1.662
 # only take log10 where L is positive, otherwise set NaN
 with np.errstate(invalid="ignore", divide="ignore"):
     wis_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
+
+
 
 ######## save csv, comment out later ##########
 

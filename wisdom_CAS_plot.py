@@ -386,6 +386,7 @@ def plot_llama_triptych(
                                 color=color,
                                 zorder=10
                             )
+                            
 
                             # --- annotate corresponding LLAMA point ---
                             xL, yL = llama_lookup[key][key_name]
@@ -397,6 +398,13 @@ def plot_llama_triptych(
                                 fontsize=7,
                                 color="black",   # distinguish LLAMA labels
                                 zorder=10
+                            )
+                            print(
+                                f"{key}: {pdata['xcol']} vs {pdata['ycol']} | "
+                                f"{name} | "
+                                f"davis22=({xi:.3f}, {yi:.3f}) | "
+                                f"llama=({xL:.3f}, {yL:.3f}) | "
+                                f"ratio=({xL/xi:.3f}, {yL/yi:.3f})"
                             )
                 elif label == "Comparison-control": 
                     # Annotate ALL points (no matching condition)
