@@ -296,7 +296,7 @@ def process_fits_file(filepath,phangs_df,wis_df):
 
         BMAJ = target_beam.major.to(u.deg).value
         BMIN = target_beam.minor.to(u.deg).value
-        PA = target_beam.pa.to(u.deg).value
+        BPA = target_beam.pa.to(u.deg).value
 
     except BeamError:
         print(f"{name}: {beam_scale_pc} native beam is already larger than or incompatible with a {rebin} pc circular beam.")

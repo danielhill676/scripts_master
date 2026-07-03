@@ -460,8 +460,8 @@ base_AGN = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN"
 base_inactive = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive"
 base_aux = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/aux"
 
-wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df.csv")
-phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_df.csv")
+wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_new.csv")
+phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_new.csv")
 
 exclude = ['NGC1375','NGC1315','NGC2775','MCG630']
 exclude1 = ['NGC1375','NGC1315','NGC2775']
