@@ -19,16 +19,8 @@ def normalize_name(col):
         .str.replace('−', '-', regex=False)
         .str.strip()
         .str.upper()
-        .str.replace(r'X$', '', regex=True)
+        .str.replace('X','',regex=False)
     )
-
-def fix_ned_name(s: str) -> str:
-    s_new = s.replace("ngc","NGC")
-    s_new = s_new.replace("NGC0", "NGC")
-    s_new = s_new.replace("NGC","NGC ")
-    return s_new
-
-
 
 ################## WISDOM X DATA ##################
 
@@ -59,7 +51,7 @@ wisdom = pd.DataFrame([
     ["NGC6958", 0.11, 0.01, 0.10, 0.01, 0.42, 0.09],
     ["NGC7052", 0.22, 0.02, 0.14, 0.03, 0.34, 0.09],
     ["NGC7172", 0.21, 0.01, 0.18, 0.02, 0.64, 0.03]
-], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness_davis", "Smoothness_davis_err", "Gini", "Gini_err"])
+], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness", "Smoothness_err", "Gini", "Gini_err"])
 
 simulations = pd.DataFrame([
     ["noB", 1.57, 0.08, 0.52, 0.027, 0.81, 0.03],
@@ -72,7 +64,7 @@ simulations = pd.DataFrame([
     ["B_M90_R1", 0.35, 0.04, 0.20, 0.012, 0.23, 0.02],
     ["B_M90_R2", 0.46, 0.05, 0.21, 0.016, 0.25, 0.02],
     ["B_M90_R3", 0.69, 0.05, 0.27, 0.015, 0.36, 0.02]
-], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness_davis", "Smoothness_davis_err", "Gini", "Gini_err"])
+], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness", "Smoothness_err", "Gini", "Gini_err"])
 
 phangs = pd.DataFrame([
     ["IC1954", 0.97, 0.01, 0.30, 0.01, 0.57, 0.01],
@@ -135,7 +127,7 @@ phangs = pd.DataFrame([
     ["NGC5643", 0.89, 0.01, 0.28, 0.01, 0.82, 0.02],
     ["NGC6300", 0.78, 0.01, 0.36, 0.01, 0.87, 0.01],
     ["NGC7496", 0.53, 0.01, 0.28, 0.01, 0.77, 0.06]
-], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness_davis", "Smoothness_davis_err", "Gini", "Gini_err"])
+], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness", "Smoothness_err", "Gini", "Gini_err"])
 
 
 wis_properties = {
@@ -838,28 +830,16 @@ def get_data(name):
         # ra_deg = tab["RA(deg)"][0]
         # dec_deg = tab["DEC(deg)"][0]
 
-#         ned_name = fix_ned_name(name)
+        # Simbad.add_votable_fields("ra", "dec")
+        # tab = Simbad.query_object(name)
+        # ra_deg = tab["ra"][0]
+        # dec_deg = tab["dec"][0]
 
-#         try:
-#             tab = Ned.query_object(ned_name)
-#             ra_deg = tab['RA'][0]
-#             dec_deg = tab['DEC'][0]
-#         except (
-#     requests.exceptions.ReadTimeout,
-#     requests.exceptions.ConnectionError,
-#     RemoteServiceError,
-# ) as e:
-#             print(f"NED failed for {ned_name}: {e}")
-#             Simbad.add_votable_fields("ra", "dec")
-#             tab = Simbad.query_object(name)
-#             ra_deg = tab["ra"][0]
-#             dec_deg = tab["dec"][0]
-
-        return T_val
+        return T_val#, ra_deg, dec_deg
 
     except Exception as e:
         print(f"[{name}] failed:", e)
-        return np.nan
+        return np.nan#, np.nan, np.nan
 
 ###### update wisdom table ######
 
@@ -898,10 +878,8 @@ print("Updating PHANGS table with Hubble Stage from Vizier...")
 if isinstance(phangs_properties, list):
     phangs_properties = pd.DataFrame(phangs_properties)
 
-df_phangs = phangs_properties.copy()
-
-if "name" in df_phangs.columns:
-    df_phangs["name"] = df_phangs["name"]
+if "name" in phangs_properties.columns:
+    phangs_properties = phangs_properties.set_index("name")
 
 for name_str in phangs_properties.index:
     max_retries = 3
@@ -927,112 +905,95 @@ for name_str in phangs_properties.index:
 
 
 
-# ============================================================
-# WIS PIPELINE
-# ============================================================
-
 wis_df = pd.DataFrame(wisdom)
-wis_df['Name'] = normalize_name(wis_df['Name']).str.replace(" ", "", regex=False)
-
-df_wis = pd.DataFrame(wis_properties)
-df_wis.index = normalize_name(df_wis.index).str.replace(" ", "", regex=False)
-df_wis = df_wis.reset_index().rename(columns={'index': 'Name'})
-
+wis_df['Name'] = normalize_name(wis_df['Name'])
+wis_df['Name'] = wis_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
+df_wis = wis_properties
+df_wis['Name'] = df_wis.index
+df_wis['Name'] = normalize_name(df_wis['Name'])
+df_wis['Name'] = df_wis['Name'].str.replace(" ", "", regex=False)   # remove all spaces
 wis_H_phot_df = wis_H_phot.to_pandas()
-wis_H_phot_df['ID'] = normalize_name(wis_H_phot_df['ID']).str.replace(" ", "", regex=False)
-
+wis_H_phot_df['ID'] = normalize_name(wis_H_phot_df['ID'])
 df_wis = df_wis.merge(
-    wis_H_phot_df,
-    left_on="Name",
-    right_on="ID",
-    how="left"
+wis_H_phot_df,
+left_on="Name",
+right_on="ID",
+how="left"
 )
+            
 
-wis_df = wis_df.merge(
-    df_wis,
-    left_on="Name",
-    right_on="Name",
-    how="left"
-)
-
+wis_df = pd.merge(wis_df, df_wis, left_on='Name', right_on='Name',how='left')
 D_cm = pd.to_numeric(wis_df["Distance (Mpc)"], errors="coerce") * 3.0856776e24
-H_flux = pd.to_numeric(wis_df.get("H flux"), errors="coerce")
-
-L = 4 * np.pi * D_cm**2 * (H_flux / 0.21) * 1.662
-
+H_flux = pd.to_numeric(wis_df["H flux"], errors="coerce") if "H flux" in wis_df.columns else pd.Series(np.nan, index=wis_df.index)
+L = 4 * np.pi * D_cm**2 * (H_flux/0.21)*1.662 
+# only take log10 where L is positive, otherwise set NaN
 with np.errstate(invalid="ignore", divide="ignore"):
     wis_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
 
 
-# save WIS
+
+######## save csv, comment out later ##########
+
 out_dir = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples"
 os.makedirs(out_dir, exist_ok=True)
+out_path = os.path.join(out_dir, "wis_df.csv")
+wis_df.to_csv(out_path, index=False)
 
-wis_df.to_csv(os.path.join(out_dir, "wis_df.csv"), index=False)
 
 
-# ============================================================
-# PHANGS PIPELINE
-# ============================================================
 
 phangs_df = pd.DataFrame(phangs)
-phangs_df['Name'] = normalize_name(phangs_df['Name']).str.replace(" ", "", regex=False)
-
-
-# ---- properties table (fix key alignment)
-
-df_phangs["name"] = normalize_name(df_phangs["name"]).str.replace(" ", "", regex=False)
-
-# ---- properties2 table (FIXED construction + bugfix)
+phangs_df['Name'] = normalize_name(phangs_df['Name'])
+phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
+df_phangs = pd.DataFrame(phangs_properties)
 df_phangs2 = pd.DataFrame(phangs_properties2).T.reset_index()
 df_phangs2 = df_phangs2.rename(columns={'index': 'Name'})
-df_phangs2['Name'] = normalize_name(df_phangs2['Name']).str.replace(" ", "", regex=False)
-
-
-# ---- H photometry
+df_phangs = df_phangs.reset_index()  # moves index to column 'name'
+if 'name' in df_phangs.columns[df_phangs.columns.duplicated()]:
+    df_phangs = df_phangs.loc[:, ~df_phangs.columns.duplicated()]
+df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)   # remove all spaces
+df_phangs2['Name'] = normalize_name(df_phangs2['Name']).str.replace(" ", "", regex=False) 
 phangs_H_phot_df = phangs_H_phot.to_pandas()
-phangs_H_phot_df['ID'] = normalize_name(phangs_H_phot_df['ID']).str.replace(" ", "", regex=False)
-
-
-# ---- merge H photometry into properties
+phangs_H_phot_df['ID'] = normalize_name(phangs_H_phot_df['ID'])
+phangs_H_phot_df['ID'] = phangs_H_phot_df['ID'].str.replace(" ", "", regex=False)
+# merge phangs H-photometry into df_phangs using normalized keys
 df_phangs = df_phangs.merge(
     phangs_H_phot_df,
     left_on="name",
     right_on="ID",
     how="left"
 )
+# ensure df_phangs2 was created/renamed correctly and normalize its Name column
+df_phangs2['Name'] = normalize_name(df_phangs2['Name'])
+df_phangs2['Name'] = df_phangs2['Name'].str.replace(" ", "", regex=False)
 
-
-# ---- merge properties2 into properties
+# also normalize df_phangs 'name' (remove spaces already done above but keep for safety)
+df_phangs['name'] = normalize_name(df_phangs['name'])
+df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)
+# merge additional properties from df_phangs2
 df_phangs = df_phangs.merge(
     df_phangs2,
     left_on="name",
     right_on="Name",
     how="left"
 )
+# Ensure phangs_df 'Name' is in the same normalized form as df_phangs['Name'] before final merge
+phangs_df['Name'] = normalize_name(phangs_df['Name'])
+phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)
 
+phangs_df = pd.merge(phangs_df, df_phangs, left_on='Name', right_on='Name', how='left')
 
-# ---- final merge into phangs_df
-phangs_df = phangs_df.merge(
-    df_phangs,
-    left_on="Name",
-    right_on="name",
-    how="left"
-)
-
-
-# ----------------------------
-# luminosity calculation
-# ----------------------------
 D_cm = pd.to_numeric(phangs_df["Distance (Mpc)"], errors="coerce") * 3.0856776e24
-H_flux = pd.to_numeric(phangs_df.get("H flux"), errors="coerce")
+H_flux = pd.to_numeric(phangs_df["H flux"], errors="coerce") if "H flux" in phangs_df.columns else pd.Series(np.nan, index=phangs_df.index)
 
-L = 4 * np.pi * D_cm**2 * (H_flux / 0.21) * 1.662
-
+L = 4 * np.pi * D_cm**2 * (H_flux/0.21)*1.662 # convert from L H (multiplied by bandwidth) to lambdafnu H
+        # only take log10 where L is positive, otherwise set NaN
 with np.errstate(invalid="ignore", divide="ignore"):
     phangs_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
 
-
-# save PHANGS
-phangs_df.to_csv(os.path.join(out_dir, "phangs_df.csv"), index=False)
+    ######## save csv, comment out later ##########
+out_dir = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples"
+os.makedirs(out_dir, exist_ok=True)
+out_path = os.path.join(out_dir, "phangs_df.csv")
+phangs_df.to_csv(out_path, index=False)
 ################################################
