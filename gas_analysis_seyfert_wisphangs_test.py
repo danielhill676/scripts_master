@@ -21,8 +21,9 @@ from astropy.nddata import NDData
 from astropy.wcs import WCS
 from matplotlib.patches import Ellipse
 from scipy.ndimage import gaussian_filter
-
-
+from radio_beam import Beam
+from astropy.convolution import convolve_fft
+from radio_beam.utils import BeamError
 
 # ------------------ Metrics ------------------
 
@@ -270,26 +271,35 @@ def process_fits_file(filepath,phangs_df,wis_df):
         image[nan_pixels] = 0.0
         mask[nan_pixels] = False
 
-########## Smoothing ########################################
+    # smoothing
 
-    rebin = 120
-    native_res = float(beam_scale_pc)
+    rebin = 120 # target resolution (pc)
+    #Native beam (assumed stored in degrees) 
+    beam = Beam( major=BMAJ * u.deg, minor=BMIN * u.deg, pa= PA * u.deg )
+    # Target circular beam corresponding to 120 pc
+    target_fwhm_arcsec = rebin / pc_per_arcsec
+    target_beam = Beam( major=target_fwhm_arcsec * u.arcsec, minor=target_fwhm_arcsec * u.arcsec, pa=0 * u.deg)
 
-    smooth_factor = rebin / native_res
-    if rebin is not None and smooth_factor > 1:
-        pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
-        sigma_kernel_pc = np.sqrt(rebin**2 - native_res**2)
-        sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
-
-        image = gaussian_filter(image, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
-        BMAJ = (BMAJ*smooth_factor) / (pc_per_arcsec * 3600)
-        BMIN = (BMIN*smooth_factor) / (pc_per_arcsec * 3600)
-
-    else:
-        print(
-            f"No rebinning applied for {name}: requested rebin {rebin} pc "
-            f"is not larger than beam scale {native_res:.2f} pc."
+    try:
+        kernel = target_beam.deconvolve(beam).as_kernel(
+            pixel_scale_arcsec * u.arcsec
         )
+
+        image = convolve_fft(
+            image,
+            kernel,
+            boundary="fill",
+            fill_value=0.0,
+            normalize_kernel=True,
+            preserve_nan=True,
+        )
+
+        BMAJ = target_beam.major.to(u.deg).value
+        BMIN = target_beam.minor.to(u.deg).value
+        PA = target_beam.pa.to(u.deg).value
+
+    except BeamError:
+        print(f"{name}: {beam_scale_pc} native beam is already larger than or incompatible with a {rebin} pc circular beam.")
 
     # ---------- Update WCS ----------
     wcs_trimmed = wcs_full.deepcopy()
@@ -337,9 +347,9 @@ def process_fits_file(filepath,phangs_df,wis_df):
 
     return {
         "name": name,
-        "gini": round(gin,3),
-        "asymmetry": round(asym,3),
-        "smoothness": round(smooth,3)
+        "Gini": round(gin,3),
+        "Asymmetry": round(asym,3),
+        "Smoothness_davis": round(smooth,3)
     }
 
 
@@ -347,8 +357,8 @@ def process_fits_file(filepath,phangs_df,wis_df):
 
 def run_directory(input_dir, output_csv):
     results = []
-    phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples/phangs_df.csv")
-    wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df.csv")
+    phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples/phangs_new.csv")
+    wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_new.csv")
 
     for f in os.listdir(input_dir):
         if not f.endswith(".fits"):
@@ -369,7 +379,12 @@ def run_directory(input_dir, output_csv):
 # ------------------ Execute ------------------
 
 if __name__ == "__main__":
-    input_dir = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0"
-    output_csv = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics.csv"
+    input_dir_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0/wis"
+    output_csv_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_wis.csv"
 
-    run_directory(input_dir, output_csv)
+    run_directory(input_dir_wis, output_csv_wis)
+
+    input_dir_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0/phangs"
+    output_csv_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_phangs.csv"
+
+    run_directory(input_dir_phangs, output_csv_phangs)

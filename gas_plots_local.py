@@ -22,7 +22,6 @@ from collections import defaultdict
 from scipy.stats import t
 from scipy.stats import ttest_1samp
 from scipy.stats import wilcoxon
-from collections import defaultdict
 pd.set_option('future.no_silent_downcasting', True)
 
 plt.rcParams.update({
@@ -4605,14 +4604,14 @@ for mask in masks:
 #### safe for pairdiffs
 
         # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
+        plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
         # plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
         # plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
         # plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
 
 
         # plot_llama_property('emission_pixels', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
-        plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=False)
+        # plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=False)
         # plot_llama_property('emission_pixels', 'L\'CO (K km_s pc2)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
         # plot_llama_property('emission_pixels', 'flux (Jy km/s)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
 
