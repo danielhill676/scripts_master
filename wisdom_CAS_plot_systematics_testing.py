@@ -296,25 +296,25 @@ def plot_llama_triptych(
                         #     zorder=10
                         # )
                         
+                        if connect:
+                        #--- annotate corresponding LLAMA point ---
+                            xL, yL = metrics_lookup[key][key_name]
 
-                        # --- annotate corresponding LLAMA point ---
-                        xL, yL = metrics_lookup[key][key_name]
-
-                        # ax.text(
-                        #     xL,
-                        #     yL,
-                        #     str(name),
-                        #     fontsize=7,
-                        #     color="black",   # distinguish LLAMA labels
-                        #     zorder=10
-                        # )
+                            ax.text(
+                                xL,
+                                yL,
+                                str(name),
+                                fontsize=7,
+                                color="black",   # distinguish LLAMA labels
+                                zorder=10
+                            )
                         # print(
                         #     f"{key}: {pdata['xcol']} vs {pdata['ycol']} | "
                         #     f"{name} | "
                         #     f"davis22=({xi:.3f}, {yi:.3f}) | "
                         #     f"llama=({xL:.3f}, {yL:.3f}) | "
                         #     f"ratio=({xL/xi:.3f}, {yL/yi:.3f})"
-                        # )
+                        #)
                         if connect:
                             connect_shared_galaxy(
                             ax,
