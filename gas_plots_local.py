@@ -195,7 +195,7 @@ def _prepare_replacement_df(df, value_column):
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, use_gb21=False, soloplot=None, exclude_names=None, isolate_names=None, logx=False, logy=False,  #see archived_comp_samp_build for rebuilding PHANGS WIS SIM GB21
                         background_image=None, manual_limits=None, square=False, best_fit=False, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False, use_leroy=False,
                         comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False, which_compare=None, use_aux=False, use_cont = False,nativex=False,nativey=False,
-                        yhist=True,res_comp=False,rebinxc=None,rebinyc=None, maskxc=None, maskyc=None, R_kpcxc=None, R_kpcyc=None, ratiox = None, ratioy = None, force_names=False, x_ref=None, y_ref=None, co21only=False,c_column=None,legend_hist=False):
+                        yhist=True,res_comp=False,rebinxc=None,rebinyc=None, maskxc=None, maskyc=None, R_kpcxc=None, R_kpcyc=None, ratiox = None, ratioy = None, force_names=False, x_ref=None, y_ref=None, co21only=False,c_column=None,legend_hist=False,leg_alone=False):
     """possible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness_davis', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -2618,15 +2618,19 @@ linewidth=4,
 
             # --- AGN ---
             if soloplot in (None, 'AGN') and not comb_llama:
+                # ax_hist_only.hist(
+                #     y_agn, bins=bin_edges,
+                #     color='red', histtype='step', linewidth=4, label='AGN'
+                # )
                 ax_hist_only.hist(
                     y_agn, bins=bin_edges,
-                    color='red', histtype='step', linewidth=4, label='AGN'
+                    color='red', linewidth=4, label='AGN', alpha=0.5 #,histtype='step'
                 )
                 median_agn = np.median(y_agn)
                 ax_hist_only.axvline(median_agn, color='red', linestyle='--')
                 ax_hist_only.text(
-                    median_agn, ax_hist_only.get_ylim()[1]*0.9,
-                    f"{median_agn:.2f}", color='red', fontsize=9, ha='center'
+                    median_agn-(bin_edges[1]-bin_edges[0])/2, ax_hist_only.get_ylim()[1]*0.9,
+                    f"{median_agn:.2f}", color='darkred', fontsize=14, ha='center'
                 )
 
             # --- Inactive ---
@@ -2638,8 +2642,8 @@ linewidth=4,
                 median_inactive = np.median(y_inactive)
                 ax_hist_only.axvline(median_inactive, color='blue', linestyle='--')
                 ax_hist_only.text(
-                    median_inactive, ax_hist_only.get_ylim()[1]*0.9,
-                    f"{median_inactive:.2f}", color='blue', fontsize=9, ha='center'
+                    median_inactive-(bin_edges[1]-bin_edges[0])/2, ax_hist_only.get_ylim()[1]*0.9,
+                    f"{median_inactive:.2f}", color='navy', fontsize=14, ha='center'
                 )
 
             # --- Combined LLAMA ---
@@ -2649,12 +2653,12 @@ linewidth=4,
                     combined_y, bins=bin_edges,
                     color='black', linewidth=4, label='LLAMA Galaxies', alpha=0.5 #,histtype='step'
                 )
-                median_combined = np.median(combined_y)
-                ax_hist_only.axvline(median_combined, color='black', linestyle='--')
-                ax_hist_only.text(
-                    median_combined, ax_hist_only.get_ylim()[1]*0.9,
-                    f"{median_combined:.2f}", color='black', fontsize=9, ha='center'
-                )
+                # median_combined = np.median(combined_y)
+                # ax_hist_only.axvline(median_combined, color='black', linestyle='--')
+                # ax_hist_only.text(
+                #     median_combined, ax_hist_only.get_ylim()[1]*0.9,
+                #     f"{median_combined:.2f}", color='black', fontsize=9, ha='center'
+                # )
 
             # --- External samples ---
             if soloplot is None and use_gb21:
@@ -2662,65 +2666,66 @@ linewidth=4,
                     y_gb21, bins=bin_edges,
                     color='green', histtype='step', linewidth=4, label='GB21'
                 )
-                median_gb21 = np.median(y_gb21)
-                ax_hist_only.axvline(median_gb21, color='green', linestyle='--')
-                ax_hist_only.text(
-                    median_gb21, ax_hist_only.get_ylim()[1]*0.9,
-                    f"{median_gb21:.2f}", color='green', fontsize=9, ha='center'
-                )
+                # median_gb21 = np.median(y_gb21)
+                # ax_hist_only.axvline(median_gb21, color='green', linestyle='--')
+                # ax_hist_only.text(
+                #     median_gb21, ax_hist_only.get_ylim()[1]*0.9,
+                #     f"{median_gb21:.2f}", color='green', fontsize=9, ha='center'
+                # )
 
             if use_wis:
                 ax_hist_only.hist(
                     y_wis, bins=bin_edges,
                     color='purple', histtype='step', linewidth=4, label='WISDOM'
                 )
-                median_wis = np.median(y_wis)
-                ax_hist_only.axvline(median_wis, color='purple', linestyle='--')
-                ax_hist_only.text(
-                    median_wis, ax_hist_only.get_ylim()[1]*0.9,
-                    f"{median_wis:.2f}", color='purple', fontsize=9, ha='center'
-                )
+                # median_wis = np.median(y_wis)
+                # ax_hist_only.axvline(median_wis, color='purple', linestyle='--')
+                # ax_hist_only.text(
+                #     median_wis, ax_hist_only.get_ylim()[1]*0.9,
+                #     f"{median_wis:.2f}", color='purple', fontsize=9, ha='center'
+                # )
 
             if use_phangs:
                 ax_hist_only.hist(
                     y_phangs, bins=bin_edges,
                     color='orange', histtype='step', linewidth=4, label='PHANGS'
                 )
-                median_phangs = np.median(y_phangs)
-                ax_hist_only.axvline(median_phangs, color='orange', linestyle='--')
-                ax_hist_only.text(
-                    median_phangs, ax_hist_only.get_ylim()[1]*0.9,
-                    f"{median_phangs:.2f}", color='orange', fontsize=9, ha='center'
-                )
+                # median_phangs = np.median(y_phangs)
+                # ax_hist_only.axvline(median_phangs, color='orange', linestyle='--')
+                # ax_hist_only.text(
+                #     median_phangs, ax_hist_only.get_ylim()[1]*0.9,
+                #     f"{median_phangs:.2f}", color='orange', fontsize=9, ha='center'
+                # )
 
             if use_sim:
                 ax_hist_only.hist(
                     y_sim, bins=bin_edges,
                     color='brown', histtype='step', linewidth=4, label='Simulations'
                 )
-                median_sim = np.median(y_sim)
-                ax_hist_only.axvline(median_sim, color='brown', linestyle='--')
-                ax_hist_only.text(
-                    median_sim, ax_hist_only.get_ylim()[1]*0.9,
-                    f"{median_sim:.2f}", color='brown', fontsize=9, ha='center'
-                )
+                # median_sim = np.median(y_sim)
+                # ax_hist_only.axvline(median_sim, color='brown', linestyle='--')
+                # ax_hist_only.text(
+                #     median_sim, ax_hist_only.get_ylim()[1]*0.9,
+                #     f"{median_sim:.2f}", color='brown', fontsize=9, ha='center'
+                # )
 
             # Axis labels
             try:
-                ax_hist_only.set_xlabel(axis_label_lookup[y_column])
+                ax_hist_only.set_xlabel(axis_label_lookup[y_column],fontsize=20)
             except:
-                ax_hist_only.set_xlabel(y_column)
+                ax_hist_only.set_xlabel(y_column,fontsize=20)
 
-            ax_hist_only.set_ylabel("Number of galaxies")
+            ax_hist_only.set_ylabel("Number of galaxies",fontsize=20)
 
             # Match x-limits to scatter y-range
             
             if logy:
                 ax_hist_only.set_xscale("log")
             ax_hist_only.set_xlim(ylower, yupper)
+            ax_hist_only.tick_params(axis='both', which='major', labelsize=14)
 
             #ax_hist_only.legend(fontsize=8)
-            ax_hist_only.grid(True, axis='y', alpha=0.3)
+            ax_hist_only.grid(False, axis='y', alpha=0.3)
 
 
             legend_elements = []
@@ -2746,9 +2751,11 @@ linewidth=4,
             if use_sim:
                 legend_elements.append(Line2D([0], [0], color='brown', lw=6, alpha=0.5, label='Simulations'))
 
-            ax_hist_only.legend(
-                handles=legend_elements, loc = 'best'
-            )
+            if not leg_alone:
+
+                ax_hist_only.legend(
+                    handles=legend_elements, loc = 'best'
+                )
 
             # Save
             parts = []
@@ -2786,33 +2793,35 @@ linewidth=4,
             print(f"Saved histogram to: {hist_path}")
 
 
-            ###############################
-            # Standalone Legend Figure
-            ###############################
+            # ###############################
+            # # Standalone Legend Figure
+            # ###############################
+
+            if leg_alone:
 
 
-            fig_leg = plt.figure(figsize=(4, 2))
-            ax_leg = fig_leg.add_subplot(111)
-            ax_leg.axis("off")
+                fig_leg = plt.figure(figsize=(4, 2))
+                ax_leg = fig_leg.add_subplot(111)
+                ax_leg.axis("off")
 
-            ax_leg.legend(
-                handles=legend_elements,
-                loc="center",
-                frameon=False,
-                fontsize=9,
-                ncol=2
-            )
+                ax_leg.legend(
+                    handles=legend_elements,
+                    loc="center",
+                    frameon=False,
+                    fontsize=12,
+                    ncol=1
+                )
 
-            legend_path = (
-                f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/"
-                f"histograms/{masky}_{R_kpcy}kpc/{suffix}_legend.png"
-            )
+                legend_path = (
+                    f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/"
+                    f"histograms/{masky}_{R_kpcy}kpc/{suffix}_legend.png"
+                )
 
-            plt.tight_layout()
-            plt.savefig(legend_path, dpi=300)
-            plt.close(fig_leg)
+                plt.tight_layout()
+                plt.savefig(legend_path, dpi=300)
+                plt.close(fig_leg)
 
-            print(f"Saved legend to: {legend_path}")
+                print(f"Saved legend to: {legend_path}")
 
 
         ############################### X histogram bin edges ##############################
@@ -2833,15 +2842,19 @@ linewidth=4,
 
             # --- AGN ---
             if soloplot in (None, 'AGN') and not comb_llama:
+                # ax_hist_x.hist(
+                #     x_agn, bins=bin_edges_x,
+                #     color='red', histtype='step', linewidth=4, label='AGN'
+                # )
                 ax_hist_x.hist(
                     x_agn, bins=bin_edges_x,
-                    color='red', histtype='step', linewidth=4, label='AGN'
+                    color='red', linewidth=4,alpha=0.5, label='AGN'
                 )
                 median_agn = np.median(x_agn)
-                ax_hist_x.axvline(median_agn, color='red', linestyle='--')
+                ax_hist_x.axvline(median_agn-(bin_edges_x[1]-bin_edges_x[0])/2, color='red', linestyle='--')
                 ax_hist_x.text(
                     median_agn, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_agn:.2f}", color='red', fontsize=9, ha='center'
+                    f"{median_agn:.2f}", color='darkred', fontsize=14, ha='center'
                 )
 
             # --- Inactive ---
@@ -2851,10 +2864,10 @@ linewidth=4,
                     color='blue', histtype='step', linewidth=4, label='Inactive'
                 )
                 median_inactive = np.median(x_inactive)
-                ax_hist_x.axvline(median_inactive, color='blue', linestyle='--')
+                ax_hist_x.axvline(median_inactive-(bin_edges_x[1]-bin_edges_x[0])/2, color='blue', linestyle='--')
                 ax_hist_x.text(
                     median_inactive, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_inactive:.2f}", color='blue', fontsize=9, ha='center'
+                    f"{median_inactive:.2f}", color='navy', fontsize=14, ha='center'
                 )
 
             # --- Combined LLAMA ---
@@ -2864,12 +2877,12 @@ linewidth=4,
                     combined_x, bins=bin_edges_x,
                     color='black', linewidth=4,alpha=0.5, label='LLAMA Galaxies'
                 )
-                median_combined = np.median(combined_x)
-                ax_hist_x.axvline(median_combined, color='black', linestyle='--')
-                ax_hist_x.text(
-                    median_combined, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_combined:.2f}", color='black', fontsize=9, ha='center'
-                )
+                # median_combined = np.median(combined_x)
+                # ax_hist_x.axvline(median_combined, color='black', linestyle='--')
+                # ax_hist_x.text(
+                #     median_combined, ax_hist_x.get_ylim()[1]*0.9,
+                #     f"{median_combined:.2f}", color='black', fontsize=9, ha='center'
+                # )
 
             # --- External samples ---
             if soloplot is None and use_gb21:
@@ -2877,66 +2890,66 @@ linewidth=4,
                     x_gb21, bins=bin_edges_x,
                     color='green', histtype='step', linewidth=4, label='GB21'
                 )
-                median_gb21 = np.median(x_gb21)
-                ax_hist_x.axvline(median_gb21, color='green', linestyle='--')
-                ax_hist_x.text(
-                    median_gb21, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_gb21:.2f}", color='green', fontsize=9, ha='center'
-                )
+                # median_gb21 = np.median(x_gb21)
+                # ax_hist_x.axvline(median_gb21, color='green', linestyle='--')
+                # ax_hist_x.text(
+                #     median_gb21, ax_hist_x.get_ylim()[1]*0.9,
+                #     f"{median_gb21:.2f}", color='green', fontsize=9, ha='center'
+                # )
 
             if use_wis:
                 ax_hist_x.hist(
                     x_wis, bins=bin_edges_x,
                     color='purple', histtype='step', linewidth=4, label='WISDOM'
                 )
-                median_wis = np.median(x_wis)
-                ax_hist_x.axvline(median_wis, color='purple', linestyle='--')
-                ax_hist_x.text(
-                    median_wis, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_wis:.2f}", color='purple', fontsize=9, ha='center'
-                )
+                # median_wis = np.median(x_wis)
+                # ax_hist_x.axvline(median_wis, color='purple', linestyle='--')
+                # ax_hist_x.text(
+                #     median_wis, ax_hist_x.get_ylim()[1]*0.9,
+                #     f"{median_wis:.2f}", color='purple', fontsize=9, ha='center'
+                # )
 
             if use_phangs:
                 ax_hist_x.hist(
                     x_phangs, bins=bin_edges_x,
                     color='orange', histtype='step', linewidth=4, label='PHANGS'
                 )
-                median_phangs = np.median(x_phangs)
-                ax_hist_x.axvline(median_phangs, color='orange', linestyle='--')
-                ax_hist_x.text(
-                    median_phangs, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_phangs:.2f}", color='orange', fontsize=9, ha='center'
-                )
+                # median_phangs = np.median(x_phangs)
+                # ax_hist_x.axvline(median_phangs, color='orange', linestyle='--')
+                # ax_hist_x.text(
+                #     median_phangs, ax_hist_x.get_ylim()[1]*0.9,
+                #     f"{median_phangs:.2f}", color='orange', fontsize=9, ha='center'
+                # )
 
             if use_sim:
                 ax_hist_x.hist(
                     x_sim, bins=bin_edges_x,
                     color='brown', histtype='step', linewidth=4, label='Simulations'
                 )
-                median_sim = np.median(x_sim)
-                ax_hist_x.axvline(median_sim, color='brown', linestyle='--')
-                ax_hist_x.text(
-                    median_sim, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_sim:.2f}", color='brown', fontsize=9, ha='center'
-                )
+                # median_sim = np.median(x_sim)
+                # ax_hist_x.axvline(median_sim, color='brown', linestyle='--')
+                # ax_hist_x.text(
+                #     median_sim, ax_hist_x.get_ylim()[1]*0.9,
+                #     f"{median_sim:.2f}", color='brown', fontsize=9, ha='center'
+                # )
 
             # Axis labels
 
             try:
-                ax_hist_x.set_xlabel(axis_label_lookup[x_column])
+                ax_hist_x.set_xlabel(axis_label_lookup[x_column],fontsize=20)
             except:
-                ax_hist_x.set_xlabel(x_column)
+                ax_hist_x.set_xlabel(x_column,fontsize=20)
 
-            ax_hist_x.set_ylabel("Number of galaxies")
+            ax_hist_x.set_ylabel("Number of galaxies",fontsize=20)
 
             # Match x-limits to scatter
 
             if logx:
                 ax_hist_only.set_xscale("log")
             ax_hist_x.set_xlim(xlower, xupper)
-
+            ax_hist_x.tick_params(axis='both', which='major', labelsize=14)
             #ax_hist_x.legend(fontsize=8)
-            ax_hist_x.grid(True, axis='y', alpha=0.3)
+            ax_hist_x.grid(False, axis='y', alpha=0.3)
 
             # Save
             parts = []
@@ -3518,89 +3531,89 @@ linewidth=4,
                 plt.close(fig)
 
 
-                ###########################################################
-                # Fractional obscuration-split histogram
-                ###########################################################
+                # ###########################################################
+                # # Fractional obscuration-split histogram
+                # ###########################################################
 
-                fig, ax = plt.subplots(figsize=(8, 5))
+                # fig, ax = plt.subplots(figsize=(8, 5))
 
-                for obsclass in ["o", "i", "u"]:
+                # for obsclass in ["o", "i", "u"]:
 
-                    stats = stats_by_class[obsclass]
+                #     stats = stats_by_class[obsclass]
 
-                    ax.hist(
-                        diffs_frac_obs[obsclass],
-                        bins=12,
-                        histtype="step",
-                        linewidth=3,
-                        color=obs_colors[obsclass],
-                        label=f"{labels[obsclass]} (N={stats['n_frac']})",
-                    )
+                #     ax.hist(
+                #         diffs_frac_obs[obsclass],
+                #         bins=12,
+                #         histtype="step",
+                #         linewidth=3,
+                #         color=obs_colors[obsclass],
+                #         label=f"{labels[obsclass]} (N={stats['n_frac']})",
+                #     )
 
-                    ax.axvline(
-                        stats["mean_frac"],
-                        color=obs_colors[obsclass],
-                        linestyle="--",
-                        linewidth=2,
-                    )
+                #     ax.axvline(
+                #         stats["mean_frac"],
+                #         color=obs_colors[obsclass],
+                #         linestyle="--",
+                #         linewidth=2,
+                #     )
 
-                    ax.axvline(
-                        stats["mean_frac"] - stats["sigma_frac"],
-                        color=obs_colors[obsclass],
-                        linestyle=":",
-                        linewidth=1.5,
-                    )
+                #     ax.axvline(
+                #         stats["mean_frac"] - stats["sigma_frac"],
+                #         color=obs_colors[obsclass],
+                #         linestyle=":",
+                #         linewidth=1.5,
+                #     )
 
-                    ax.axvline(
-                        stats["mean_frac"] + stats["sigma_frac"],
-                        color=obs_colors[obsclass],
-                        linestyle=":",
-                        linewidth=1.5,
-                    )
+                #     ax.axvline(
+                #         stats["mean_frac"] + stats["sigma_frac"],
+                #         color=obs_colors[obsclass],
+                #         linestyle=":",
+                #         linewidth=1.5,
+                #     )
 
-                ax.axvline(0, color="black", linestyle="-")
+                # ax.axvline(0, color="black", linestyle="-")
 
-                try:
-                    ax.set_xlabel(
-                        fr"$\Delta$ {axis_label_lookup[y_column]} (1 - Inactive/AGN)",
-                        fontsize=font,
-                    )
-                except:
-                    ax.set_xlabel(
-                        fr"$\Delta$ {y_column} (1 - Inactive/AGN)",
-                        fontsize=font,
-                    )
+                # try:
+                #     ax.set_xlabel(
+                #         fr"$\Delta$ {axis_label_lookup[y_column]} (1 - Inactive/AGN)",
+                #         fontsize=font,
+                #     )
+                # except:
+                #     ax.set_xlabel(
+                #         fr"$\Delta$ {y_column} (1 - Inactive/AGN)",
+                #         fontsize=font,
+                #     )
 
-                ax.set_ylabel("Number of pairs", fontsize=font)
+                # ax.set_ylabel("Number of pairs", fontsize=font)
 
-                title = "\n".join(
-                    [
-                        f"{labels[o]}: p={stats_by_class[o]['p_value_frac']:.3g}"
-                        for o in ["o", "i", "u"]
-                    ]
-                )
+                # title = "\n".join(
+                #     [
+                #         f"{labels[o]}: p={stats_by_class[o]['p_value_frac']:.3g}"
+                #         for o in ["o", "i", "u"]
+                #     ]
+                # )
 
-                ax.set_title(title, fontsize=font-2)
+                # ax.set_title(title, fontsize=font-2)
 
-                ax.legend()
+                # ax.legend()
 
-                outputdir_frac_obs = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/frac/obsclass/{masky}_{R_kpcy}kpc/'
-                os.makedirs(outputdir_frac_obs, exist_ok=True)
+                # outputdir_frac_obs = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/frac/obsclass/{masky}_{R_kpcy}kpc/'
+                # os.makedirs(outputdir_frac_obs, exist_ok=True)
 
-                output_path_frac_obs = outputdir_frac_obs + f'{y_column}_pair_differences_obsclass.png'
+                # output_path_frac_obs = outputdir_frac_obs + f'{y_column}_pair_differences_obsclass.png'
 
-                if co21only:
-                    output_path_frac_obs = outputdir_frac_obs + f'{y_column}_pair_differences_obsclass_co21only.png'
-                if nativey and y_column == "flux (Jy km/s)":
-                    output_path_frac_obs = outputdir_frac_obs + 'fluxjykms_native_pair_differences_obsclass.png'
-                elif nativey:
-                    output_path_frac_obs = outputdir_frac_obs + f'{y_column}_native_pair_differences_obsclass.png'
-                elif y_column == "flux (Jy km/s)":
-                    output_path_frac_obs = outputdir_frac_obs + 'fluxjykms_pair_differences_obsclass.png'
+                # if co21only:
+                #     output_path_frac_obs = outputdir_frac_obs + f'{y_column}_pair_differences_obsclass_co21only.png'
+                # if nativey and y_column == "flux (Jy km/s)":
+                #     output_path_frac_obs = outputdir_frac_obs + 'fluxjykms_native_pair_differences_obsclass.png'
+                # elif nativey:
+                #     output_path_frac_obs = outputdir_frac_obs + f'{y_column}_native_pair_differences_obsclass.png'
+                # elif y_column == "flux (Jy km/s)":
+                #     output_path_frac_obs = outputdir_frac_obs + 'fluxjykms_pair_differences_obsclass.png'
 
-                plt.savefig(output_path_frac_obs)
-                print(f"Saved obscuration-split plot to: {output_path_frac_obs}")
-                plt.close(fig)
+                # plt.savefig(output_path_frac_obs)
+                # print(f"Saved obscuration-split plot to: {output_path_frac_obs}")
+                # plt.close(fig)
 
 
 
@@ -4454,8 +4467,8 @@ axis_label_lookup = {
 masks = ['broad', 'strict','flux90_strict']
 radii = [1.5,0.3,1]
 
-masks = ['broad']
-radii = [0.3,1.5]
+masks = ['strict']
+radii = [1.5]
 
 for mask in masks:
     for R_kpc in radii:
@@ -4543,12 +4556,12 @@ for mask in masks:
 
 # #         ############### CAS with resolution #############
 
-        # plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
-        # plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
-        # plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
-        # plot_llama_property('Resolution (pc)', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
-        # plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image=None ,legend_loc='center right',isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
-        # plot_llama_property('Resolution (pc)', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        plot_llama_property('Resolution (pc)', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image=None ,legend_loc='center right',isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+        plot_llama_property('Resolution (pc)', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
    
         # plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,logx=False,logy=True,background_image='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Leroy2013_plots/Clumping.png',manual_limits=[0,500,1,200],legend_loc='center right',exclude_names=exclude,res_comp=False,comb_llama=False,yhist=False)
         # plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_leroy=True,mask=mask,R_kpc=R_kpc,logx=False,logy=True,exclude_names=exclude,res_comp=False,manual_limits=[0,350,1,100],comb_llama=True,yhist=False,nativex=True,nativey=True)
@@ -4604,7 +4617,7 @@ for mask in masks:
 #### safe for pairdiffs
 
         # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
+        # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
         # plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
         # plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
         # plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
@@ -4628,21 +4641,21 @@ for mask in masks:
 
 # # #     ############# CAS WISDOM, PHANGS coplot   #############
 
-#         if R_kpc == 1.5 and mask != 'broad':
+        # if R_kpc == 1.5 and mask != 'broad':
 
-# # # #             plot_llama_property('Gini', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
-# # # #             plot_llama_property('Asymmetry', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
-# # # #             plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
+# # #             plot_llama_property('Gini', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
+# # #             plot_llama_property('Asymmetry', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
+# # #             plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
 
-#             plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False)
-#             plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False)
-#             plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False)
-#             plot_llama_property('Hubble Stage', 'Distance (Mpc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False)
+            # plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+            # plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+            # plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+            # plot_llama_property('Hubble Stage', 'Distance (Mpc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
 
 
-#             plot_llama_property('Asymmetry', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True,force_names=True,plotshared=False)
-#             plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True,force_names=True,plotshared=False)
-#             plot_llama_property('Gini', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True,force_names=True,plotshared=False)
+            # plot_llama_property('Asymmetry', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True,force_names=True,plotshared=False)
+            # plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True,force_names=True,plotshared=False)
+            # plot_llama_property('Gini', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True,force_names=True,plotshared=False)
 
 # #             ############# Flux (jy) comparison with extra arrays (aux) #####################
 

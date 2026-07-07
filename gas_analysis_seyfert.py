@@ -1070,26 +1070,62 @@ def resolve_galaxy_beam_scale(
         elif base_name == 'NGC3749':
             RA = (11+35/60+53.2244/3600)*360/24
             DEC = - (37 + 59/60 + 50.938/3600)
+            try:
+                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+            except Exception:
+                pass
         elif base_name == 'NGC3717':
             RA = (11+31/60+31.8861/3600)*360/24
             DEC = - (30 + 18/60 + 27.892/3600)
-        elif base_name == 'NGC4224':
-            RA = (12+16/60+33.7838/3600)*360/24
-            DEC = - (7 + 27/60 + 43.529/3600)
-        elif base_name == 'NGC4254':
-            RA = (12+18/60+49.6014/3600)*360/24
-            DEC = - (14 + 24/60 + 59.382/3600)
+            try:
+                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+            except Exception:
+                pass    
+        # elif base_name == 'NGC4224':
+        #     RA = (12+16/60+33.7838/3600)*360/24
+        #     DEC = - (7 + 27/60 + 43.529/3600)
+        #     try:
+        #         I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+        #         PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+        #     except Exception:
+        #         pass
+        # elif base_name in ['NGC4254','ngc4254_phangs']:
+        #     RA = (12+18/60+49.6014/3600)*360/24
+        #     DEC = - (14 + 24/60 + 59.382/3600)
+        #     try:
+        #         I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+        #         PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+        #     except Exception:
+        #         pass
         elif base_name == 'NGC5037':
             RA = (13+14/60+59.3733/3600)*360/24
             DEC = - (16 + 35/60 + 24.961/3600)
-        elif base_name == 'NGC5921':
-            RA = (15+21/60+56.4857/3600)*360/24
-            DEC = - (5 + 04/60 + 14.340/3600)
+            try:
+                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+            except Exception:
+                pass
+        # elif base_name == 'NGC5921':
+        #     RA = (15+21/60+56.4857/3600)*360/24
+        #     DEC = - (5 + 4/60 + 14.340/3600)
+        #     try:
+        #         I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+        #         PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+        #     except Exception:
+        #         pass
 
         else:
             Ned_table = query_ned_with_retries(ned_name)
             RA = Ned_table['RA'][0]
             DEC = Ned_table['DEC'][0]
+
+            try:
+                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+            except Exception:
+                pass
 
         try:
             D_Mpc = llamatab[llamatab['id'] == base_name]['D [Mpc]'][0]
@@ -1097,9 +1133,6 @@ def resolve_galaxy_beam_scale(
             # name_replace_arr = ['NGC7172',"NGC3351","NGC4254","NGC1365"]
             # if base_name in name_replace_arr:
             #     D_Mpc = D_Mpc_replace_arr[name_replace_arr.index(base_name)]
-            I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
-            PA = llamatab[llamatab['id'] == base_name]['PA'][0]
-
         except Exception:
             pass
 
@@ -1121,8 +1154,24 @@ def resolve_galaxy_beam_scale(
             I = np.nanmedian(result[0]['i'])
         except Exception:
             result = Vizier.query_object(ned_name, catalog="VII/145/catalog")
-            I = np.nanmedian(result[0]['i'])
+            if len(result) == 0:
+                print('No vizier result!!!')
+                I = 0
+            else:
+                I = np.nanmedian(result[0]['i'])
 
+        result = Vizier.query_object(ned_name, catalog="J/ApJS/197/21/cgs")
+
+        if len(result):
+            I = np.nanmedian(result[0]['i'])
+        else:
+            result = Vizier.query_object(ned_name, catalog="VII/145/catalog")
+            if len(result):
+                I = np.nanmedian(result[0]['i'])
+            else:
+                print('No vizier result!!!')
+                I = 0
+                
 ##################################################################
     # ---- beam scale ----
     pixel_scale_arcsec = np.abs(header.get("CDELT1", 0)) * 3600
@@ -1333,6 +1382,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
+    print(gal_cen)
     wcs_full = WCS(header).celestial
 
     ny, nx = image_untrimmed.shape
@@ -1526,8 +1576,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     ######################## carry out manual rebin if missing ########################
-    # if manual_rebin:
-    #     smooth_factor = rebin / native_res
+    if manual_rebin:
+        smooth_factor = rebin / native_res
     #     if rebin is not None and smooth_factor > 1:
     #         pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
     #         sigma_kernel_pc = np.sqrt(rebin**2 - native_res**2)
@@ -2186,25 +2236,25 @@ if __name__ == '__main__':
                                                         # "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
                                                         # "plot":  []
     
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
 
-    colourbar_list = [] 
+    # colourbar_list = [] 
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    isolate = 'plot'
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    # isolate = 'plot'
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
     # isolate = None
     # colourbar_list = [] 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
