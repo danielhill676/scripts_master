@@ -1290,8 +1290,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     # if name in ['NGC3783','NGC1315','NGC3717','NGC1375','NGC5037','MCG514','ESO021']: this is a set of ones that crashed on the ned search for some reason
     #     return
 
-    # if name not in ['NGC5921','NGC3717','NGC4254','NGC4260','NGC5037','NGC3749']: #'NGC4224',
-    #     return
+    if name not in ['ngc4254_phangs']:
+        return
     
 ##############################################################################
 
@@ -2200,7 +2200,7 @@ active_to_nums = {
     "ESO 021-G004": [17],
     "NGC 5728": [13, 17],
     "MCG-05-14-012": [20],
-}
+}   
 
 # Build all pairs (one row per link)
 rows = []
@@ -2239,40 +2239,40 @@ if __name__ == '__main__':
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
 
-    # colourbar_list = [] 
+    colourbar_list = [] 
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    # isolate = 'plot'
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
-    # isolate = None
-    # colourbar_list = [] 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    isolate = 'plot'
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
+    isolate = None
+    colourbar_list = [] 
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
 
 
