@@ -121,7 +121,7 @@ def select_resolution_df(base, minres, maxres, native_flag, res_comp_flag):
 def fit_concentration_50pc(df,
                            R_col='Resolution (pc)',
                            C_col='Concentration',
-                           R_sat=160,
+                           R_sat=376.8,
                            C_sat=0.057,
                            #C_sat=0.081,
                            R_target=50,
@@ -3209,8 +3209,12 @@ linewidth=4,
                         if y_column == 'Concentration':
                             agn_row[y_column] = fit_concentration_50pc(agn_row,extrapolate_hires=False)
                             inactive_row[y_column] = fit_concentration_50pc(inactive_row,extrapolate_hires=False)
-                        val_agn = agn_row[y_column]
-                        val_inactive = inactive_row[y_column]
+                        if logy:
+                            val_agn = np.log10(agn_row[y_column])
+                            val_inactive = np.log10(inactive_row[y_column])
+                        else:
+                            val_agn = agn_row[y_column]
+                            val_inactive = inactive_row[y_column]
 
                         indep_AGN = agn_row[x_column]
                         indep_inactive = inactive_row[x_column]
@@ -3246,7 +3250,10 @@ linewidth=4,
                     else:
                         for _, agn_row in agn_rows.iterrows():
                             res_agn = agn_row["Resolution (pc)"]
-                            val_agn = agn_row[y_column]
+                            if logy:
+                                val_agn = np.log10(agn_row[y_column])
+                            else:
+                                val_agn = agn_row[y_column]
                             indep_AGN = agn_row[x_column]
 
                             if not np.isfinite(val_agn) or not np.isfinite(indep_AGN):
@@ -3262,7 +3269,10 @@ linewidth=4,
                                 continue
 
                             inactive_row = match_inactive.iloc[0]
-                            val_inactive = inactive_row[y_column]
+                            if logy:                           
+                                val_inactive = np.log10(inactive_row[y_column])
+                            else:
+                                val_inactive = inactive_row[y_column]
                             indep_inactive = inactive_row[x_column]
                         
 
@@ -3375,9 +3385,9 @@ linewidth=4,
 
 
                 try:
-                    ax.set_xlabel(fr"$\Delta$ {axis_label_lookup[y_column]} (AGN - Inactive)", fontsize=font)
+                    ax.set_xlabel(fr"$\Delta$ {axis_label_lookup[y_column]} (AGN - Inactive)", fontsize=font) if not logy else ax.set_xlabel(fr"$\Delta$ log {axis_label_lookup[y_column]} (AGN - Inactive)", fontsize=font)
                 except:
-                    ax.set_xlabel(fr"$\Delta$ {y_column} (AGN - Inactive)", fontsize=font)
+                    ax.set_xlabel(fr"$\Delta$ {y_column} (AGN - Inactive)", fontsize=font)  if not logy else ax.set_xlabel(fr"$\Delta$ log {y_column} (AGN - Inactive)", fontsize=font)
 
                 ax.set_ylabel("Number of pairs", fontsize=font)
 
@@ -3415,9 +3425,9 @@ linewidth=4,
 
 
                 try:
-                    ax.set_xlabel(fr"$\Delta$ {axis_label_lookup[y_column]} (1 - Inactive/AGN)", fontsize=font)
+                    ax.set_xlabel(fr"$\Delta$ {axis_label_lookup[y_column]} (1 - Inactive/AGN)", fontsize=font) if not logy else ax.set_xlabel(fr"$\Delta$ log {axis_label_lookup[y_column]} (1 - Inactive/AGN)", fontsize=font)
                 except:
-                    ax.set_xlabel(fr"$\Delta$ {y_column} (1 - Inactive/AGN)", fontsize=font)
+                    ax.set_xlabel(fr"$\Delta$ {y_column} (1 - Inactive/AGN)", fontsize=font) if not logy else  ax.set_xlabel(fr"$\Delta$ log {y_column} (1 - Inactive/AGN)", fontsize=font)
 
                 ax.set_ylabel("Number of pairs", fontsize=font)
 
@@ -4467,8 +4477,8 @@ axis_label_lookup = {
 masks = ['broad', 'strict','flux90_strict']
 radii = [1.5,0.3,1]
 
-# masks = ['strict']
-# radii = [1.5]
+# masks = ['broad']
+# radii = [0.3]
 
 for mask in masks:
     for R_kpc in radii:
@@ -4513,7 +4523,7 @@ for mask in masks:
 
 # #         # using GB24 for concentration
 
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
         # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=True)
 
 
@@ -4540,9 +4550,9 @@ for mask in masks:
         # plot_llama_property('Gini', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,nativex=True,nativey=True,yhist=False,force_names=True,plotshared=False)
         # plot_llama_property('Asymmetry', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativex=True,nativey=True,yhist=False,force_names=True,plotshared=False)
         # plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativex=True,nativey=True,yhist=False,force_names=True,plotshared=False)
-#         plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativex=True,nativey=True)
+        # plot_llama_property('Gini', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativex=True,nativey=True)
         # plot_llama_property('Smoothness_davis', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativex=True,nativey=True,yhist=False,comb_llama=True,logy=True)
-#         plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativex=True,nativey=True)
+        # plot_llama_property('Asymmetry', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativex=True,nativey=True)
 
 
 
@@ -4616,17 +4626,17 @@ for mask in masks:
 
 #### safe for pairdiffs
 
-        plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
-        plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
+        # plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        # plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        # plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
 
 
         plot_llama_property('emission_pixels', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
         plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
-        plot_llama_property('emission_pixels', 'L\'CO (K km_s pc2)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
-        plot_llama_property('emission_pixels', 'flux (Jy km/s)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
+        # plot_llama_property('emission_pixels', 'L\'CO (K km_s pc2)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
+        # plot_llama_property('emission_pixels', 'flux (Jy km/s)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
 
         # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=True)
         # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=True)
@@ -4639,18 +4649,18 @@ for mask in masks:
         plot_llama_property('emission_pixels', 'Resolution (pc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativex=True,nativey=True)
 
 
-# # #     ############# CAS WISDOM, PHANGS coplot   #############
+# #     ############# CAS WISDOM, PHANGS coplot   #############
 
-        # if R_kpc == 1.5 and mask != 'broad':
+#         if R_kpc == 1.5 and mask != 'broad':
 
 # # #             plot_llama_property('Gini', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
 # # #             plot_llama_property('Asymmetry', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
 # # #             plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
 
-            # plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
-            # plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
-            # plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
-            # plot_llama_property('Hubble Stage', 'Distance (Mpc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+#             plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+#             plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+#             plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+#             plot_llama_property('Hubble Stage', 'Distance (Mpc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
 
 
             # plot_llama_property('Asymmetry', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True,force_names=True,plotshared=False)

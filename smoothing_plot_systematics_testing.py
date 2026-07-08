@@ -484,9 +484,9 @@ r = 1.5
 
 
 # plot_llama_triptych(
-#     x_column1='Gini_davis', y_column1='Smoothness',
-#     x_column2='Asymmetry_davis', y_column2='Smoothness',
-#     x_column3='Asymmetry_davis', y_column3='Gini_davis',
+#     x_column1='Gini', y_column1='Smoothness',
+#     x_column2='Asymmetry', y_column2='Smoothness',
+#     x_column3='Asymmetry', y_column3='Gini',
 # base_AGN=base_AGN, base_inactive=base_inactive,
 #     log_axes={'x_shared': False, 'y_shared': False},
 #     bins=10,

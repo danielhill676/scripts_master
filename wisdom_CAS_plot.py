@@ -87,7 +87,6 @@ def plot_llama_triptych(
               f"\nReading inactive data from: {path_inactive}"
               f"\nReading auxiliary data from: {aux_path}")
         fit_data_AGN = pd.read_csv(path_AGN)
-        display(fit_data_AGN)
         fit_data_inactive = pd.read_csv(path_inactive)
         try:
             fit_data_aux = pd.read_csv(aux_path)
@@ -793,7 +792,6 @@ def plot_llama_triptych(
 
                 # --- apply filter cleanly ---
                 combined_df = combined_df.loc[~mask].copy()
-                display(combined_df["Galaxy"])
 
             for key, xcol, ycol in [
                 ("left", x_column1, y_column1),
@@ -999,8 +997,8 @@ base_AGN = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN"
 base_inactive = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive"
 base_aux = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/aux"
 
-wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df.csv")
-phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_df.csv")
+wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_new.csv")
+phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_new.csv")
 
 exclude = ['NGC1375','NGC1315','NGC2775','MCG630']
 exclude1 = ['NGC1375','NGC1315','NGC2775']
@@ -1011,29 +1009,15 @@ excludewisphagns= ['NGC1375','NGC1315','NGC2775','NGC5064_WIS','NGC1387_WIS']
 m = 'strict'
 r = 1.5
 
-
-# plot_llama_triptych(
-#     x_column1='Gini_davis', y_column1='Smoothness',
-#     x_column2='Asymmetry_davis', y_column2='Smoothness',
-#     x_column3='Asymmetry_davis', y_column3='Gini_davis',
-# base_AGN=base_AGN, base_inactive=base_inactive,
-#     log_axes={'x_shared': False, 'y_shared': False},
-#     bins=10,
-#     figsize=9, m = m, r = r, native_res=False, hist=False, exclude_names=['NGC1375','NGC1315','NGC2775','NGC5845','MCG630']
-# )
-
-
-
-
-# plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness_davis',
-#     x_column2='Asymmetry', y_column2='Smoothness_davis',
-#     x_column3='Asymmetry', y_column3='Gini',
-# base_AGN=base_AGN, base_inactive=base_inactive,
-#     log_axes={'x_shared': False, 'y_shared': False},
-#     bins=10,
-#     figsize=9, m = m, r = r, native_res=True, hist=False, exclude_names=exclude1
-# )
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness_davis',
+    x_column2='Asymmetry', y_column2='Smoothness_davis',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, m = m, r = r, native_res=True, hist=False, exclude_names=exclude1
+)
 
 # ################################################################ AGN vs inactive CAS triptych wis phangs comparison ###################################################################
 
@@ -1056,54 +1040,54 @@ base_AGN=base_AGN, base_inactive=base_inactive, base_aux=base_aux,
 
 ################################################################ comparison of mask and apertures ###################################################################
 
-# plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness_davis',
-#     x_column2='Asymmetry', y_column2='Smoothness_davis',
-#     x_column3='Asymmetry', y_column3='Gini',
-# base_AGN=base_AGN, base_inactive=base_inactive,
-#     log_axes={'x_shared': False, 'y_shared': False},
-#     bins=10,
-#     figsize=9, comb_llama=True, which_compare=[['strict','flux90_strict'],[0.3,1,1.5]], native_res=True, colours_list={
-#   "\'strict\' mask and 0.6x0.6kpc aperture": "#0F2FFF",
-#   "\'strict\' mask and 2.0x2.0kpc aperture": "#AF0FFF",
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "#FF0F9B",
-#   "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "#00EDED"
-# }, markers_list={
-#   "\'strict\' mask and 0.6x0.6kpc aperture": "D",
-#   "\'strict\' mask and 2.0x2.0kpc aperture": "s",
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "o",
-# "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "P"
-# }, exclude_names=exclude1,hist=False)
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness_davis',
+    x_column2='Asymmetry', y_column2='Smoothness_davis',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, comb_llama=True, which_compare=[['strict','flux90_strict'],[0.3,1,1.5]], native_res=True, colours_list={
+  "\'strict\' mask and 0.6x0.6kpc aperture": "#0F2FFF",
+  "\'strict\' mask and 2.0x2.0kpc aperture": "#AF0FFF",
+  "\'strict\' mask and 3.0x3.0kpc aperture": "#FF0F9B",
+  "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "#00EDED"
+}, markers_list={
+  "\'strict\' mask and 0.6x0.6kpc aperture": "D",
+  "\'strict\' mask and 2.0x2.0kpc aperture": "s",
+  "\'strict\' mask and 3.0x3.0kpc aperture": "o",
+"\'flux90_strict\' mask and 3.0x3.0kpc aperture": "P"
+}, exclude_names=exclude1,hist=False)
 
 
-# plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness_davis',
-#     x_column2='Asymmetry', y_column2='Smoothness_davis',
-#     x_column3='Asymmetry', y_column3='Gini',
-# base_AGN=base_AGN, base_inactive=base_inactive,
-#     log_axes={'x_shared': False, 'y_shared': False},
-#     bins=10,
-#     figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, 
-#     colours_list=  
-#     {"\'strict\' mask and 3.0x3.0kpc aperture": "#008891",
-#   "\'broad\' mask and 3.0x3.0kpc aperture": "#CC6900"
-# }, markers_list={
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "D",
-#   "\'broad\' mask and 3.0x3.0kpc aperture": "s",
-# }, exclude_names=exclude1,hist=False)
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness_davis',
+    x_column2='Asymmetry', y_column2='Smoothness_davis',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, 
+    colours_list=  
+    {"\'strict\' mask and 3.0x3.0kpc aperture": "#008891",
+  "\'broad\' mask and 3.0x3.0kpc aperture": "#CC6900"
+}, markers_list={
+  "\'strict\' mask and 3.0x3.0kpc aperture": "D",
+  "\'broad\' mask and 3.0x3.0kpc aperture": "s",
+}, exclude_names=exclude1,hist=False)
 
 
-# plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness_davis',
-#     x_column2='Asymmetry', y_column2='Smoothness_davis',
-#     x_column3='Asymmetry', y_column3='Gini',
-# base_AGN=base_AGN, base_inactive=base_inactive,
-#     log_axes={'x_shared': False, 'y_shared': False},
-#     bins=10,
-#     figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict'],[1.5]], native_res=True, colours_list={
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "#83CC90",
-#   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "#00470E"
-# }, markers_list={
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "D",
-#   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
-# }, exclude_names=exclude1,hist=False)
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness_davis',
+    x_column2='Asymmetry', y_column2='Smoothness_davis',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict'],[1.5]], native_res=True, colours_list={
+  "\'strict\' mask and 3.0x3.0kpc aperture": "#83CC90",
+  "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "#00470E"
+}, markers_list={
+  "\'strict\' mask and 3.0x3.0kpc aperture": "D",
+  "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
+}, exclude_names=exclude1,hist=False)
