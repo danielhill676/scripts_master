@@ -3213,8 +3213,8 @@ linewidth=4,
                             agn_row[y_column] = fit_concentration_50pc(agn_row,extrapolate_hires=False)
                             inactive_row[y_column] = fit_concentration_50pc(inactive_row,extrapolate_hires=False)
                         if logy:
-                            val_agn = np.log10(agn_row[y_column])
-                            val_inactive = np.log10(inactive_row[y_column])
+                            val_agn = np.log10(agn_row[y_column]) if agn_row[y_column] > 0 else 0
+                            val_inactive = np.log10(inactive_row[y_column]) if inactive_row[y_column] > 0 else 0
                         else:
                             val_agn = agn_row[y_column]
                             val_inactive = inactive_row[y_column]
@@ -3254,7 +3254,7 @@ linewidth=4,
                         for _, agn_row in agn_rows.iterrows():
                             res_agn = agn_row["Resolution (pc)"]
                             if logy:
-                                val_agn = np.log10(agn_row[y_column])
+                                val_agn = np.log10(agn_row[y_column]) if agn_row[y_column] > 0 else 0
                             else:
                                 val_agn = agn_row[y_column]
                             indep_AGN = agn_row[x_column]
@@ -3273,7 +3273,7 @@ linewidth=4,
 
                             inactive_row = match_inactive.iloc[0]
                             if logy:                           
-                                val_inactive = np.log10(inactive_row[y_column])
+                                val_inactive = np.log10(inactive_row[y_column]) if inactive_row[y_column] > 0 else 0
                             else:
                                 val_inactive = inactive_row[y_column]
                             indep_inactive = inactive_row[x_column]
@@ -3377,10 +3377,14 @@ linewidth=4,
 
                 #########################################################
 
-                bin_edges = np.histogram_bin_edges(diffs, bins=9)
+                bin_edges = np.histogram_bin_edges(diffs, bins=12)
+                # print('\nbin edges=\n')
+                # print(list(bin_edges))
+                if y_column == 'avg_mass_dens':
+                    bin_edges = bin_edges_mass_dens_large
 
                 fig, ax = plt.subplots(figsize=(8, 5))
-                ax.hist(diffs, bins=12, color="lightgrey", histtype='bar', linewidth=4)
+                ax.hist(diffs, bins=bin_edges, color="lightgrey", histtype='bar', linewidth=4)
                 ax.axvline(mean, color="red", linestyle="--", label=f"Mean = {mean:.2g} ± {mean_err:.2g}")
                 ax.axvline(mean - sigma, color="blue", linestyle="--")
                 ax.axvline(mean + sigma, color="blue", linestyle="--",label=f"$1\sigma = {(sigma):.2g}$" if sigma > 0 else r"$1\sigma = \infty$")
@@ -3420,7 +3424,7 @@ linewidth=4,
                 ###########################################################
 
                 fig, ax = plt.subplots(figsize=(8, 5))
-                ax.hist(diffs_frac , bins=12, color="lightgrey", histtype='bar', linewidth=4)
+                ax.hist(diffs_frac , bins=bin_edges, color="lightgrey", histtype='bar', linewidth=4)
                 ax.axvline(mean_frac , color="red", linestyle="--", label=f"Mean = {mean_frac :.2g} ± {mean_err_frac:.2g}")
                 ax.axvline(mean_frac  - sigma_frac , color="blue", linestyle="--")
                 ax.axvline(mean_frac  + sigma_frac , color="blue", linestyle="--",label=f"$1\sigma = {(sigma_frac):.2g}$" if sigma_frac > 0 else r"$1\sigma = \infty$")
@@ -3504,18 +3508,11 @@ linewidth=4,
                     # )
 
                 ax.axvline(0, color="black", linestyle="-")
-
+                
                 try:
-                    ax.set_xlabel(
-                        fr"$\Delta$ {axis_label_lookup[y_column]} (AGN - Inactive)",
-                        fontsize=font,
-                    )
+                    ax.set_xlabel(fr"$\Delta$ {axis_label_lookup[y_column]} (AGN - Inactive)", fontsize=font) if not logy else ax.set_xlabel(fr"$\Delta$ log {axis_label_lookup[y_column]} (AGN - Inactive)", fontsize=font)
                 except:
-                    ax.set_xlabel(
-                        fr"$\Delta$ {y_column} (AGN - Inactive)",
-                        fontsize=font,
-                    )
-
+                    ax.set_xlabel(fr"$\Delta$ {y_column} (AGN - Inactive)", fontsize=font) if not logy else  ax.set_xlabel(fr"$\Delta$ log {y_column} (AGN - Inactive)", fontsize=font)
                 ax.set_ylabel("Number of pairs", fontsize=font)
 
                 title = "\n".join(
@@ -3998,7 +3995,7 @@ linewidth=4,
 
 
 
-
+bin_edges_mass_dens_large =  [-0.7018729549586915, 0.08062241139172499, 0.8631177777421415, 1.6456131440925579, 2.4281085104429745, 3.210603876793391, 3.9930992431438073, 4.775594609494224, 5.5580899758446405, 6.340585342195057, 7.123080708545474, 7.90557607489589, 8.688071441246306]
 
 AGN_data = [
     {"Name": "NGC 1365", "Distance (Mpc)": 18.0, "AGN Classification": "Sy 1.8a", "log LH (L⊙)": 10.58,
@@ -4461,7 +4458,7 @@ axis_label_lookup = {
     "Smoothness_davis": "Clumpiness",
     "log LX": "$\log{L_{2-10}}$ (erg s$^{-1}$)",
     "total_mass (M_sun)": "Total Molecular Gas Mass ($M_\odot$)",
-    "avg_mass_dens": "Average molecular Mass Surface Density ($M_\odot$kpc$^{-2}$)",
+    "avg_mass_dens": "H$_2$ Mass Surface Density ($M_\odot$kpc$^{-2}$)",
     "L'CO_JCMT (K km s pc2)": "ALMA L$'$ CO (K km s pc$^2$)",
     "L'CO_APEX (K km s pc2)": "ALMA L$'$ CO (K km s pc$^2$)",
     'log L′ CO': "Single-dish L$'$ CO (K km s pc$^2$)",
@@ -4481,8 +4478,8 @@ axis_label_lookup = {
 # masks = ['broad', 'strict','flux90_strict']
 # radii = [1.5,0.3,1]
 
-masks = ['strict','broad']
-radii = [0.3]
+masks = ['broad']
+radii = [0.3,1.5]
 
 for mask in masks:
     for R_kpc in radii:
@@ -4527,9 +4524,9 @@ for mask in masks:
 
 # #         # using GB24 for concentration
 
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
         # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False,fitc=False)
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=True)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=True)
 
 
         # plot_llama_property('log LX', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,mask=mask,R_kpc=R_kpc,soloplot='AGN',nativex=True,nativey=True,logy=True,yhist=False,plotshared=False,c_column='Concentration')#,exclude_names=['NGC 3783','MCG-05-23-016'])
@@ -4615,7 +4612,7 @@ for mask in masks:
 
 ########################## Clumpiness with LX, differing aperture and sigma #######################################
 
-        plot_llama_property('log LX', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude,plotshared=False)
+        # plot_llama_property('log LX', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude,plotshared=False)
         # plot_llama_property('log LX', 'smoothness_espocito50_sig25', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude)
         # plot_llama_property('log LX', 'smoothness_espocito200_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude,plotshared=False)
         # plot_llama_property('log LX', 'smoothness_espocito200_sig25', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude)
@@ -4639,7 +4636,7 @@ for mask in masks:
 
 
         # plot_llama_property('emission_pixels', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
-        # plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
+        plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
         # plot_llama_property('emission_pixels', 'L\'CO (K km_s pc2)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
         # plot_llama_property('emission_pixels', 'flux (Jy km/s)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
 
