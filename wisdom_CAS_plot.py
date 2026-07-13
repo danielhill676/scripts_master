@@ -315,18 +315,18 @@ def plot_llama_triptych(
 
 
         default_label_styles = {
-            "LLAMA AGN": ("s", 'red'),
-            "LLAMA inactive": ("D", 'blue'),
-            "Comparison-control": ("*", "dodgerblue"),
-            "WISDOM": ("H", "indigo"),
-            "PHANGS": ("D", "orange")
+            "LLAMA AGN": ("s", 'red',6),
+            "LLAMA inactive": ("D", 'blue',6),
+            "Comparison-control": ("*", "dodgerblue",6),
+            "WISDOM": ("H", "indigo",7),
+            "PHANGS": ("D", "orange",5)
         }
 
         # Build label_styles
         label_styles = {}
 
         if comb_llama:
-            label_styles['LLAMA'] = ('o', 'black')  # Combined AGN+inactive
+            label_styles['LLAMA'] = ('o', 'black',6)  # Combined AGN+inactive
         else:
             if 'LLAMA AGN' in datasets_for_plotting:
                 label_styles['LLAMA AGN'] = default_label_styles['LLAMA AGN']
@@ -353,69 +353,69 @@ def plot_llama_triptych(
         for key in panels:
             ax = axes[key]
             pdata = panels[key]
-            for label, (marker, color) in label_styles.items():
+            for label, (marker, color, size) in label_styles.items():
                 x, y, xerr, yerr, names = pdata[label]
                 ax.errorbar(
                     x, y,
                     xerr=xerr, yerr=yerr,
-                    fmt=marker, markersize=6,
+                    fmt=marker, markersize=size,
                     capsize=2, elinewidth=1,
                     alpha=0.85, color=color,
                     label=label if key == "left" else None
                 )
 
 
-                # --------------------------------------------------
-                # Annotate shared galaxies (both datasets)
-                # --------------------------------------------------
-                if label in ["WISDOM", "PHANGS"]: #### edited to print out all names
+                # # --------------------------------------------------
+                # # Annotate shared galaxies (both datasets)
+                # # --------------------------------------------------
+                # if label in ["WISDOM", "PHANGS"]: #### edited to print out all names
 
-                    for xi, yi, name in zip(x, y, names):
+                #     for xi, yi, name in zip(x, y, names):
 
-                        key_name = name
+                #         key_name = name
 
-                        if key_name in llama_lookup[key]:
+                #         if key_name in llama_lookup[key]:
 
-                            # --- annotate optional dataset point ---
-                            ax.text(
-                                float(xi),
-                                float(yi),
-                                str(name),
-                                fontsize=7,
-                                color=color,
-                                zorder=10
-                            )
+                #             # --- annotate optional dataset point ---
+                #             ax.text(
+                #                 float(xi),
+                #                 float(yi),
+                #                 str(name),
+                #                 fontsize=7,
+                #                 color=color,
+                #                 zorder=10
+                #             )
                             
 
-                            # --- annotate corresponding LLAMA point ---
-                            xL, yL = llama_lookup[key][key_name]
+                #             # --- annotate corresponding LLAMA point ---
+                #             xL, yL = llama_lookup[key][key_name]
 
-                            ax.text(
-                                xL,
-                                yL,
-                                str(name),
-                                fontsize=7,
-                                color="black",   # distinguish LLAMA labels
-                                zorder=10
-                            )
-                            print(
-                                f"{key}: {pdata['xcol']} vs {pdata['ycol']} | "
-                                f"{name} | "
-                                f"davis22=({xi:.3f}, {yi:.3f}) | "
-                                f"llama=({xL:.3f}, {yL:.3f}) | "
-                                f"ratio=({xL/xi:.3f}, {yL/yi:.3f})"
-                            )
-                elif label == "Comparison-control": 
-                    # Annotate ALL points (no matching condition)
-                    for xi, yi, name in zip(x, y, names):
-                        ax.text(
-                            float(xi),
-                            float(yi),
-                            str(name),
-                            fontsize=7,
-                            color=color,
-                            zorder=10
-                        )
+                #             ax.text(
+                #                 xL,
+                #                 yL,
+                #                 str(name),
+                #                 fontsize=7,
+                #                 color="black",   # distinguish LLAMA labels
+                #                 zorder=10
+                #             )
+                #             print(
+                #                 f"{key}: {pdata['xcol']} vs {pdata['ycol']} | "
+                #                 f"{name} | "
+                #                 f"davis22=({xi:.3f}, {yi:.3f}) | "
+                #                 f"llama=({xL:.3f}, {yL:.3f}) | "
+                #                 f"ratio=({xL/xi:.3f}, {yL/yi:.3f})"
+                #             )
+                # elif label == "Comparison-control": 
+                #     # Annotate ALL points (no matching condition)
+                #     for xi, yi, name in zip(x, y, names):
+                #         ax.text(
+                #             float(xi),
+                #             float(yi),
+                #             str(name),
+                #             fontsize=7,
+                #             color=color,
+                #             zorder=10
+                #         )
 
                 ax.grid(False)
         # --------------------------------------------------
@@ -560,14 +560,14 @@ def plot_llama_triptych(
         legend_marker_sizes = {
         "LLAMA AGN": 8,
         "LLAMA inactive": 12,
-        "LLAMA": 8,
-        "WISDOM": 8,
-        "PHANGS": 8,
+        "LLAMA": 10,
+        "WISDOM": 12,
+        "PHANGS": 9,
         "Comparison-control": 14   # make it bigger
     }
         
         legend_handles = []
-        for label, (marker, color) in label_styles.items():
+        for label, (marker, color,size) in label_styles.items():
             msize = legend_marker_sizes.get(label, 8)
             legend_handles.append(
                 Line2D([0], [0], marker=marker, color='w', label=label,
@@ -828,7 +828,7 @@ def plot_llama_triptych(
                 ax.errorbar(
                     x, y,
                     xerr=xerr, yerr=yerr,
-                    fmt=marker, markersize=8,
+                    fmt=marker, markersize=6,
                     capsize=2, elinewidth=1,
                     alpha=0.15, color=color,
                     label=label if key == "left" else None
@@ -951,8 +951,9 @@ def plot_llama_triptych(
 
         # Create legend handles manually without error bars
         legend_marker_sizes = {
-            "WISDOM": 8,
-            "PHANGS": 8
+            "WISDOM": 12,
+            "PHANGS": 9,
+            "LLAMA": 10
         }
 
         # All other labels (mask/radius combinations) use a larger size
@@ -980,9 +981,11 @@ def plot_llama_triptych(
 axis_label_lookup = {
     "Resolution (pc)": "Resolution (pc)",
     "log LH (L⊙)": "$\log{L_H}$ (L$_\odot$)",
-    "Smoothness": "Clumpiness",
+    "Smoothness": "$C$",
     "clumping_factor": "Clumping Factor",
-    "Smoothness_davis": "Clumpiness",
+    "Smoothness_davis": "$C$",
+    "Asymmetry": "$A$",
+    "Gini": "$G$",
     "log LX": "$\log{L_{2-10}}$ (erg s$^{-1}$)",
     "total_mass (M_sun)": "Total Molecular Gas Mass ($M_\odot$)",
     "avg_mass_dens": "Average molecular Mass Surface Density ($M_\odot$kpc$^{-2}$)",
@@ -1040,54 +1043,54 @@ base_AGN=base_AGN, base_inactive=base_inactive, base_aux=None,
 
 ################################################################ comparison of mask and apertures ###################################################################
 
-# plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness_davis',
-#     x_column2='Asymmetry', y_column2='Smoothness_davis',
-#     x_column3='Asymmetry', y_column3='Gini',
-# base_AGN=base_AGN, base_inactive=base_inactive,
-#     log_axes={'x_shared': False, 'y_shared': False},
-#     bins=10,
-#     figsize=9, comb_llama=True, which_compare=[['strict','flux90_strict'],[0.3,1,1.5]], native_res=True, colours_list={
-#   "\'strict\' mask and 0.6x0.6kpc aperture": "#0F2FFF",
-#   "\'strict\' mask and 2.0x2.0kpc aperture": "#AF0FFF",
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "#FF0F9B",
-#   "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "#00EDED"
-# }, markers_list={
-#   "\'strict\' mask and 0.6x0.6kpc aperture": "D",
-#   "\'strict\' mask and 2.0x2.0kpc aperture": "s",
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "o",
-# "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "P"
-# }, exclude_names=exclude1,hist=False)
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness_davis',
+    x_column2='Asymmetry', y_column2='Smoothness_davis',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, comb_llama=True, which_compare=[['strict','flux90_strict'],[0.3,1,1.5]], native_res=True, colours_list={
+  "\'strict\' mask and 0.6x0.6kpc aperture": "#0F2FFF",
+  "\'strict\' mask and 2.0x2.0kpc aperture": "#AF0FFF",
+  "\'strict\' mask and 3.0x3.0kpc aperture": "#FF0F9B",
+  "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "#00EDED"
+}, markers_list={
+  "\'strict\' mask and 0.6x0.6kpc aperture": "D",
+  "\'strict\' mask and 2.0x2.0kpc aperture": "s",
+  "\'strict\' mask and 3.0x3.0kpc aperture": "o",
+"\'flux90_strict\' mask and 3.0x3.0kpc aperture": "P"
+}, exclude_names=exclude1,hist=False)
 
 
-# plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness_davis',
-#     x_column2='Asymmetry', y_column2='Smoothness_davis',
-#     x_column3='Asymmetry', y_column3='Gini',
-# base_AGN=base_AGN, base_inactive=base_inactive,
-#     log_axes={'x_shared': False, 'y_shared': False},
-#     bins=10,
-#     figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, 
-#     colours_list=  
-#     {"\'strict\' mask and 3.0x3.0kpc aperture": "#008891",
-#   "\'broad\' mask and 3.0x3.0kpc aperture": "#CC6900"
-# }, markers_list={
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "D",
-#   "\'broad\' mask and 3.0x3.0kpc aperture": "s",
-# }, exclude_names=exclude1,hist=False)
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness_davis',
+    x_column2='Asymmetry', y_column2='Smoothness_davis',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, 
+    colours_list=  
+    {"\'strict\' mask and 3.0x3.0kpc aperture": "#008891",
+  "\'broad\' mask and 3.0x3.0kpc aperture": "#CC6900"
+}, markers_list={
+  "\'strict\' mask and 3.0x3.0kpc aperture": "D",
+  "\'broad\' mask and 3.0x3.0kpc aperture": "s",
+}, exclude_names=exclude1,hist=False)
 
 
-# plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness_davis',
-#     x_column2='Asymmetry', y_column2='Smoothness_davis',
-#     x_column3='Asymmetry', y_column3='Gini',
-# base_AGN=base_AGN, base_inactive=base_inactive,
-#     log_axes={'x_shared': False, 'y_shared': False},
-#     bins=10,
-#     figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict'],[1.5]], native_res=True, colours_list={
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "#83CC90",
-#   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "#00470E"
-# }, markers_list={
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "D",
-#   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
-# }, exclude_names=exclude1,hist=False)
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness_davis',
+    x_column2='Asymmetry', y_column2='Smoothness_davis',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict'],[1.5]], native_res=True, colours_list={
+  "\'strict\' mask and 3.0x3.0kpc aperture": "#83CC90",
+  "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "#00470E"
+}, markers_list={
+  "\'strict\' mask and 3.0x3.0kpc aperture": "D",
+  "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
+}, exclude_names=exclude1,hist=False)

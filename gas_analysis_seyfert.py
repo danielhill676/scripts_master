@@ -605,6 +605,7 @@ def exp_profile(r, Sigma0, rs):
 
 
 def compute_surface_density(data, pixel_area_arcsec2, D_Mpc,R_31, R_21,alpha_CO,pixel_area_pc2):
+    
     Lprime = data * 23.5 * pixel_area_arcsec2 * D_Mpc**2
 
     if co32:
@@ -613,6 +614,12 @@ def compute_surface_density(data, pixel_area_arcsec2, D_Mpc,R_31, R_21,alpha_CO,
     Lprime_10 = Lprime / (R_31 if co32 else R_21)
     mass = alpha_CO * Lprime_10
     return mass / pixel_area_pc2
+
+def conver_emap(emap, pixel_per_beam):
+    invar = 1/emap**2
+    invar_pix = invar / pixel_per_beam
+    emap_pix = 1/np.sqrt(invar_pix)
+    return emap_pix
 
 # ----------------- Moment map plotting ------------------
 
@@ -736,7 +743,10 @@ def resolve_galaxy_beam_scale(
     name,
     fits_file,
     llamatab,
-    max_retries=1
+    output_dir,
+    max_retries=1,
+    search = True
+
 ):
     header = fits.getheader(fits_file)
 
@@ -757,11 +767,15 @@ def resolve_galaxy_beam_scale(
                     requests.exceptions.ReadTimeout):
                 if attempt == max_retries - 1:
                     raise
-                time.sleep(5)
+                time.sleep(1)
 
     # ---- determine NED target ----
     if base_name in llamatab['id']:
         ned_name = llamatab[llamatab['id'] == base_name]['name'][0]
+        if llamatab[llamatab['id'] == base_name]['type'][0] == 'i':
+            gal_type = 'inactive'
+        else:
+            gal_type = 'AGN'
         needs_extended = False
     else:
         ned_name = base_name
@@ -771,184 +785,201 @@ def resolve_galaxy_beam_scale(
     # ---- metadata resolution ----
     if not needs_extended:
 
-        ################### Special replacements: ####################
-        # GB24 replacements
-        if base_name == 'NGC7582':
-            RA = (23+18/60+23.643/3600)*360/24
-            DEC = - (42 + 22/60 + 13.54/3600)
-            PA = 344
-            I = 52       
-        elif base_name == 'NGC7213':
-            RA = (22+9/60+16.209/3600)*360/24
-            DEC = - (47 + 10/60 + 0.12/3600)
-            PA = 133
-            I = 35  
-        elif base_name == 'NGC3081':
-            RA = (9+59/60+29.546/3600)*360/24
-            DEC = - (22 + 49/60 + 34.78/3600)
-            PA = 71
-            I = 61    
-        elif base_name == 'NGC4388':
-            RA = (12+25/60+46.781/3600)*360/24
-            DEC = + (12 + 39/60 + 43.75/3600)
-            PA = 82
-            I = 79
-        elif base_name == 'NGC2110':
-            RA = (5+52/60+11.377/3600)*360/24
-            DEC = - (7 + 27/60 + 22.48/3600)
-            PA = 175
-            I =46
-        elif base_name in ['NGC7172','NGC7172_wis']:
-            RA = (22+2/60+1.891/3600)*360/24
-            DEC = - (31 + 52/60 + 10.48/3600)
-            PA = 92
-            I =85
-        elif base_name == 'NGC4593':
-            RA = (12+39/60+39.444/3600)*360/24
-            DEC = - (5 + 20/60 + 39.03/3600)
-            PA = 38
-            I =33
-        elif base_name == 'NGC6814':
-            RA = (19+42/60+40.587/3600)*360/24 
-            DEC = - (10 + 19/60 + 25.10/3600) 
-            PA = 84
-            I =57
-        elif base_name == 'NGC5506':
-            RA = (14+13/60+14.878/3600)*360/24
-            DEC = - (3 + 12/60 + 27.66/3600)
-            PA = 275
-            I = 80
-        elif base_name in ['NGC1365','ngc1365_phangs']:
-            RA = (3+33/60+36.638/3600)*360/24
-            DEC = - (36 + 8/60 + 25.50/3600)
-            PA = 40.0
-            I = 41.0
-        elif base_name == 'NGC5728':
-            RA = (14+42/60+23.84/3600)*360/24
-            DEC = - (17 + 15/60 + 11.7/3600)
-            PA = 15
-            I = 59    
-        elif base_name == 'NGC2992':
-            RA = (9+45/60+41.943/3600)*360/24
-            DEC = - (14 + 19/60 + 34.57/3600)
-            PA = 29.0
-            I = 80.0
-        elif base_name in ['NGC3351', 'ngc3351_phangs']:
-            RA = (10+43/60+57.731/3600)*360/24
-            DEC = + (11 + 42/60 + 13.35/3600)
-            PA = 193
-            I = 45
-        elif base_name in ['ESO137']:
-            RA = (16+35/60+13.996/3600)*360/24 
-            DEC = - (58 + 4/60 + 47.77/3600) 
-            PA = 18
-            I = 41
-        # inactive proposal replacements
+        if search:
 
-        elif base_name == 'NGC3749':
-            RA = (11+35/60+53.2244/3600)*360/24
-            DEC = - (37 + 59/60 + 50.938/3600)
+            ################### Special replacements: ####################
+            # GB24 replacements
+            if base_name == 'NGC7582':
+                RA = (23+18/60+23.643/3600)*360/24
+                DEC = - (42 + 22/60 + 13.54/3600)
+                PA = 344
+                I = 52       
+            elif base_name == 'NGC7213':
+                RA = (22+9/60+16.209/3600)*360/24
+                DEC = - (47 + 10/60 + 0.12/3600)
+                PA = 133
+                I = 35  
+            elif base_name == 'NGC3081':
+                RA = (9+59/60+29.546/3600)*360/24
+                DEC = - (22 + 49/60 + 34.78/3600)
+                PA = 71
+                I = 61    
+            elif base_name == 'NGC4388':
+                RA = (12+25/60+46.781/3600)*360/24
+                DEC = + (12 + 39/60 + 43.75/3600)
+                PA = 82
+                I = 79
+            elif base_name == 'NGC2110':
+                RA = (5+52/60+11.377/3600)*360/24
+                DEC = - (7 + 27/60 + 22.48/3600)
+                PA = 175
+                I =46
+            elif base_name in ['NGC7172','NGC7172_wis']:
+                RA = (22+2/60+1.891/3600)*360/24
+                DEC = - (31 + 52/60 + 10.48/3600)
+                PA = 92
+                I =85
+            elif base_name == 'NGC4593':
+                RA = (12+39/60+39.444/3600)*360/24
+                DEC = - (5 + 20/60 + 39.03/3600)
+                PA = 38
+                I =33
+            elif base_name == 'NGC6814':
+                RA = (19+42/60+40.587/3600)*360/24 
+                DEC = - (10 + 19/60 + 25.10/3600) 
+                PA = 84
+                I =57
+            elif base_name == 'NGC5506':
+                RA = (14+13/60+14.878/3600)*360/24
+                DEC = - (3 + 12/60 + 27.66/3600)
+                PA = 275
+                I = 80
+            elif base_name in ['NGC1365','ngc1365_phangs']:
+                RA = (3+33/60+36.638/3600)*360/24
+                DEC = - (36 + 8/60 + 25.50/3600)
+                PA = 40.0
+                I = 41.0
+            elif base_name == 'NGC5728':
+                RA = (14+42/60+23.84/3600)*360/24
+                DEC = - (17 + 15/60 + 11.7/3600)
+                PA = 15
+                I = 59    
+            elif base_name == 'NGC2992':
+                RA = (9+45/60+41.943/3600)*360/24
+                DEC = - (14 + 19/60 + 34.57/3600)
+                PA = 29.0
+                I = 80.0
+            elif base_name in ['NGC3351', 'ngc3351_phangs']:
+                RA = (10+43/60+57.731/3600)*360/24
+                DEC = + (11 + 42/60 + 13.35/3600)
+                PA = 193
+                I = 45
+            elif base_name in ['ESO137']:
+                RA = (16+35/60+13.996/3600)*360/24 
+                DEC = - (58 + 4/60 + 47.77/3600) 
+                PA = 18
+                I = 41
+            # inactive proposal replacements
+
+            elif base_name == 'NGC3749':
+                RA = (11+35/60+53.2244/3600)*360/24
+                DEC = - (37 + 59/60 + 50.938/3600)
+                try:
+                    I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                    PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+                except Exception:
+                    pass
+            elif base_name == 'NGC3717':
+                RA = (11+31/60+31.8861/3600)*360/24
+                DEC = - (30 + 18/60 + 27.892/3600)
+                try:
+                    I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                    PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+                except Exception:
+                    pass    
+            elif base_name == 'NGC4224':
+                RA = (12+16/60+33.7838/3600)*360/24
+                DEC = (7 + 27/60 + 43.529/3600)
+                try:
+                    I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                    PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+                except Exception:
+                    pass
+            elif base_name in ['NGC4254','ngc4254_phangs']:
+                RA = (12+18/60+49.6014/3600)*360/24
+                DEC = (14 + 24/60 + 59.382/3600)
+                try:
+                    I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                    PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+                except Exception:
+                    pass
+            elif base_name == 'NGC5037':
+                RA = (13+14/60+59.3733/3600)*360/24
+                DEC = - (16 + 35/60 + 24.961/3600)
+                try:
+                    I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                    PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+                except Exception:
+                    pass
+            elif base_name == 'NGC5921':
+                RA = (15+21/60+56.4857/3600)*360/24
+                DEC = (5 + 4/60 + 14.340/3600)
+                try:
+                    I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                    PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+                except Exception:
+                    pass
+
+            else:
+                Ned_table = query_ned_with_retries(ned_name)
+                RA = Ned_table['RA'][0]
+                DEC = Ned_table['DEC'][0]
+
+                try:
+                    I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
+                    PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+                except Exception:
+                    pass
+
             try:
-                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
-                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
-            except Exception:
-                pass
-        elif base_name == 'NGC3717':
-            RA = (11+31/60+31.8861/3600)*360/24
-            DEC = - (30 + 18/60 + 27.892/3600)
-            try:
-                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
-                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
-            except Exception:
-                pass    
-        elif base_name == 'NGC4224':
-            RA = (12+16/60+33.7838/3600)*360/24
-            DEC = (7 + 27/60 + 43.529/3600)
-            try:
-                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
-                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
-            except Exception:
-                pass
-        elif base_name in ['NGC4254','ngc4254_phangs']:
-            RA = (12+18/60+49.6014/3600)*360/24
-            DEC = (14 + 24/60 + 59.382/3600)
-            try:
-                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
-                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
-            except Exception:
-                pass
-        elif base_name == 'NGC5037':
-            RA = (13+14/60+59.3733/3600)*360/24
-            DEC = - (16 + 35/60 + 24.961/3600)
-            try:
-                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
-                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
-            except Exception:
-                pass
-        elif base_name == 'NGC5921':
-            RA = (15+21/60+56.4857/3600)*360/24
-            DEC = (5 + 4/60 + 14.340/3600)
-            try:
-                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
-                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
+                D_Mpc = llamatab[llamatab['id'] == base_name]['D [Mpc]'][0]
+                # D_Mpc_replace_arr = [33.9, 9.96, 13.1, 19.57]
+                # name_replace_arr = ['NGC7172',"NGC3351","NGC4254","NGC1365"]
+                # if base_name in name_replace_arr:
+                #     D_Mpc = D_Mpc_replace_arr[name_replace_arr.index(base_name)]
             except Exception:
                 pass
 
         else:
+            table_path = '/data/c3040163/llama/alma/gas_analysis_results/' + gal_type + '/table.csv'
+            table = pd.read_csv(table_path)
+            D_Mpc = table.loc[table["id"] == base_name, "D_Mpc"].iloc[0]
+            RA = table.loc[table["id"] == base_name, "RA (deg)"].iloc[0]
+            DEC = table.loc[table["id"] == base_name, "DEC (deg)"].iloc[0]
+            I = table.loc[table["id"] == base_name, "Inclination (deg)"].iloc[0]
+            PA = table.loc[table["id"] == base_name, "PA (deg)"].iloc[0]
+
+
+
+
+    else:
+        if search:
             Ned_table = query_ned_with_retries(ned_name)
             RA = Ned_table['RA'][0]
             DEC = Ned_table['DEC'][0]
 
+            simbad.add_votable_fields('mesdistance')
+            tbl = simbad.query_object(ned_name)
+            D_Mpc = tbl['mesdistance.dist'][0]
+
+            diam_table = Ned.get_table(ned_name, table='diameters')
+            PA = diam_table['Position Angle'][0]
+
             try:
-                I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
-                PA = llamatab[llamatab['id'] == base_name]['PA'][0]
-            except Exception:
-                pass
-
-        try:
-            D_Mpc = llamatab[llamatab['id'] == base_name]['D [Mpc]'][0]
-            # D_Mpc_replace_arr = [33.9, 9.96, 13.1, 19.57]
-            # name_replace_arr = ['NGC7172',"NGC3351","NGC4254","NGC1365"]
-            # if base_name in name_replace_arr:
-            #     D_Mpc = D_Mpc_replace_arr[name_replace_arr.index(base_name)]
-        except Exception:
-            pass
-
-
-    else:
-        Ned_table = query_ned_with_retries(ned_name)
-        RA = Ned_table['RA'][0]
-        DEC = Ned_table['DEC'][0]
-
-        simbad.add_votable_fields('mesdistance')
-        tbl = simbad.query_object(ned_name)
-        D_Mpc = tbl['mesdistance.dist'][0]
-
-        diam_table = Ned.get_table(ned_name, table='diameters')
-        PA = diam_table['Position Angle'][0]
-
-        try:
-            result = Vizier.query_object(ned_name, catalog="J/ApJS/197/21/cgs")
-            I = np.nanmedian(result[0]['i'])
-        except Exception:
-            result = Vizier.query_object(ned_name, catalog="VII/145/catalog")
-            if len(result) == 0:
-                print('No vizier result!!!')
-                I = 0
-            else:
+                result = Vizier.query_object(ned_name, catalog="J/ApJS/197/21/cgs")
                 I = np.nanmedian(result[0]['i'])
+            except Exception:
+                result = Vizier.query_object(ned_name, catalog="VII/145/catalog")
+                if len(result) == 0:
+                    print('No vizier result!!!')
+                    I = 0
+                else:
+                    I = np.nanmedian(result[0]['i'])
 
-        result = Vizier.query_object(ned_name, catalog="J/ApJS/197/21/cgs")
+            result = Vizier.query_object(ned_name, catalog="J/ApJS/197/21/cgs")
 
-        if len(result):
-            I = np.nanmedian(result[0]['i'])
-        else:
-            result = Vizier.query_object(ned_name, catalog="VII/145/catalog")
             if len(result):
                 I = np.nanmedian(result[0]['i'])
             else:
-                print('No vizier result!!!')
-                I = 0
+                result = Vizier.query_object(ned_name, catalog="VII/145/catalog")
+                if len(result):
+                    I = np.nanmedian(result[0]['i'])
+                else:
+                    print('No vizier result!!!')
+                    I = 0
+        else:
+            print('Cannot find non LLAMA values')
+            return None
                 
 ##################################################################
     # ---- beam scale ----
@@ -1128,12 +1159,22 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             image_untrimmed = image_untrimmed[:, :1600]
             error_map_untrimmed = error_map_untrimmed[:, :1600]
             mask_untrimmed = mask_untrimmed[:, :1600]
+    try:
+        main_meta = resolve_galaxy_beam_scale(
+        name=name,
+        fits_file=mom0_file,
+        llamatab=llamatab,
+        output_dir=output_dir,
+        search=False
+    )
+    except Exception as e:
+        print('Failed resolve_galaxy_beam_scale, skipping target')
+        print(type(e).__name__, e)
+        raise
+    if main_meta is None:
+        print('Failed resolve_galaxy_beam_scale, skipping target')
+        return
 
-    main_meta = resolve_galaxy_beam_scale(
-    name=name,
-    fits_file=mom0_file,
-    llamatab=llamatab
-)
     RA = main_meta["RA"]
     DEC = main_meta["DEC"]
     PA = main_meta["PA"]
@@ -1232,7 +1273,9 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 pair_meta = resolve_galaxy_beam_scale(
                     name=pair_name_norm,
                     fits_file=pair_fits,
-                    llamatab=llamatab
+                    llamatab=llamatab,
+                    output_dir=output_dir,
+                    search = False
                 )
 
                 beam_scales_pc.append(pair_meta["beam_scale_pc"])
@@ -1354,7 +1397,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     ######################## carry out manual rebin if missing ########################
-    if manual_rebin:
+    if manual_rebin and rebin is not None:
         smooth_factor = rebin / native_res
     #     if rebin is not None and smooth_factor > 1:
     #         pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
@@ -1547,7 +1590,19 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         mass_surface_density_rms_noise = compute_surface_density(rms_noise,pixel_area_arcsec2,D_Mpc,R_31,R_21,alpha_CO,pixel_area_pc2)
 
         mass_surface_density_map_nd = NDData(data=mass_surface_density_map, wcs=wcs_trimmed)
-        mass_surface_density_rms_noise_nd = NDData(data=mass_surface_density_rms_noise, wcs=wcs_trimmed)
+        #mass_surface_density_rms_noise_nd = NDData(data=mass_surface_density_rms_noise, wcs=wcs_trimmed)
+
+        # for limits #
+
+        sigma2_error = error_map*2
+        error_map_pix = conver_emap(sigma2_error,pixels_per_beam)
+        error_map_pix_nd = NDData(error_map_pix,wcs=wcs_trimmed)
+
+        mass_surface_density_emap_pix = compute_surface_density(error_map_pix_nd.data,pixel_area_arcsec2,D_Mpc,R_31,R_21,alpha_CO,pixel_area_pc2)
+        mass_surface_density_emap_pix_kpc = mass_surface_density_emap_pix * 1000**2
+        mass_dens_lim = np.nanmedian(mass_surface_density_emap_pix_kpc)
+        print('avg mass dens limit = ',mass_dens_lim)
+        
 
 # pix_per_beam_1kpc = beam_area_arcsec2_1kpc / pixel_area_arcsec2# Lprime_map_1kpc = image_1kpc_nd.data * 23.5 * beam_area_arcsec2_1kpc/pix_per_beam_1kpc * D_Mpc**2# if co32:#     Lprime_map_1kpc = (Lprime_map_1kpc / R_31) * R_21# Lprime_10_map_1kpc = Lprime_map_1kpc / (R_31 if co32 else R_21)# mass_map_1kpc =  alpha_CO * Lprime_10_map_1kpc# mass_surface_density_map_1kpc = mass_map_1kpc / pixel_area_pc2# mass_surface_density_map_nd_1kpc = NDData(data=mass_surface_density_map_1kpc, wcs=wcs_trimmed)
 
@@ -1626,26 +1681,13 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             "PA (deg)": PA,
             "Inclination (deg)": I,
             "D_Mpc": D_Mpc,
-
             "Smoothness": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=500), 3), "Smoothness_err": 0.0,
-
-            # "smoothness_espocito200_sig100": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=100,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig100_err": 0.0,
-            # "smoothness_espocito200_sig75": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=75,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig75_err": 0.0,
-            # "smoothness_espocito200_sig50": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=50,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig50_err": 0.0,
-            # "smoothness_espocito200_sig25": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=25,aperture=aperture_clump_espocito200), 3), "smoothness_espocito200_sig25_err": 0.0,
-
             "smoothness_espocito50_sig100": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=100,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig100_err": 0.0,
-            # "smoothness_espocito50_sig75": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=75,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig75_err": 0.0,
-            # "smoothness_espocito50_sig50": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=50,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig50_err": 0.0,
-            # "smoothness_espocito50_sig25": round(smoothness_single_espocito(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=25,aperture=aperture_clump_espocito50), 3), "smoothness_espocito50_sig25_err": 0.0,
-            
             "Smoothness_davis": round(smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask), 3), "Smoothness_davis_err": 0.0,
             "Concentration": round(concentration_single(image, mask, aperturesmall=aperture_clump_espocito50,aperturebig=aperture_clump_espocito200),3), "Concentration_err": 0.0,
             "Gini": round(gini_single(image, mask), 3), "Gini_err": 0.0,
             "Asymmetry": round(asymmetry_single(image, mask), 3), "Asymmetry_err": 0.0,
-
-            "clumping_factor": round(clumping_factor_single(mass_surface_density_map,combmask,pixel_scale_arcsec, pc_per_arcsec, res_pc, R_kpc), 3),
-                        
+            "clumping_factor": round(clumping_factor_single(mass_surface_density_map,combmask,pixel_scale_arcsec, pc_per_arcsec, res_pc, R_kpc), 3),      
             "L'CO (K km_s pc2)": round(LCO_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_err (K km_s pc2)": 0.0,
             "L'CO_JCMT (K km s pc2)": round(LCO_single_JCMT(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_JCMT_err (K km s pc2)": 0.0,
             "L'CO_APEX (K km s pc2)": round(LCO_single_APEX(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_APEX_err (K km s pc2)": 0.0,
@@ -1653,7 +1695,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             "flux (Jy km/s)": round(SCOdv_single(image,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2), 3),"flux (Jy km/s)_err": 0.0,
             "flux (Jy km/s) 1as": round(SCOdv_single(image_nd,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2,aperture1as), 3),
             "total_mass (M_sun)": round(mass_tot, 2),"total_mass_err (M_sun)": 0.0,
-
+            "avg_mass_dens_lim_per_kpc": round(mass_dens_lim,2),
             "emission_pixels": emission_pixels,
             "emission_fraction": emission_fraction
         })
@@ -1804,6 +1846,9 @@ def process_directory(
 
     for args, meta in zip(args_list, meta_info):
         name, group, _, manual_rebin = meta
+        ########### override to manual rebin all ###########
+        manual_rebin = True
+
         res = process_file(
             args,
             images_too_small,
@@ -2021,32 +2066,32 @@ if __name__ == '__main__':
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
 
-    # colourbar_list = [] 
+    colourbar_list = [] 
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    # isolate = 'plot'
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
-    # isolate = None
-    # colourbar_list = [] 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
+    isolate = 'plot'
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
+    isolate = None
+    colourbar_list = [] 
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
@@ -2056,7 +2101,7 @@ if __name__ == '__main__':
     isolate = None
     colourbar_list = [] 
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
 
 

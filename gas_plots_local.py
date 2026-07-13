@@ -628,6 +628,15 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         fit_data_inactive["avg_mass_dens"] = fit_data_inactive["total_mass (M_sun)"] / (2*R_kpc)**2
         if use_aux:
             fit_data_aux["avg_mass_dens"] = fit_data_aux["total_mass (M_sun)"] / (2*R_kpc)**2
+        
+        for df in [fit_data_AGN, fit_data_inactive]:
+            empty = df["avg_mass_dens"] < 1e3
+
+            if y_column == "avg_mass_dens":
+                for _, row in df.loc[empty].iterrows():
+                    print(f"Replacing mass density with limit for {row['Galaxy']}")
+                    print(f"New value = {row['avg_mass_dens_lim_per_kpc']}")
+            df.loc[empty, "avg_mass_dens"] = df.loc[empty, "avg_mass_dens_lim_per_kpc"]
        
 
         rebinx  = rebin  if rebinxc  is None else rebinxc
@@ -2568,7 +2577,8 @@ linewidth=4,
                 bin_edges = np.histogram_bin_edges(y_for_bins, bins=9)
 
             ############################### Scatter labels ###############################
-            font = 20
+            font = 25
+            font_leg = 15
 
             if not ratiox:
                 try:
@@ -2607,7 +2617,7 @@ linewidth=4,
                 handles.append(inactive_proxy)
 
 
-            leg=ax_scatter.legend(handles=handles,loc=legend_loc)
+            leg=ax_scatter.legend(handles=handles,loc=legend_loc,fontsize=font_leg)
             leg.set_zorder(30)
 
             ############################### Standalone histogram ###############################
@@ -2756,7 +2766,7 @@ linewidth=4,
             if not leg_alone:
 
                 ax_hist_only.legend(
-                    handles=legend_elements, loc = 'best'
+                    handles=legend_elements, loc = 'best', fontsize=font_leg
                 )
 
             # Save
@@ -3229,6 +3239,8 @@ linewidth=4,
                             continue
 
                         diff = float(val_agn) - float(val_inactive)
+
+                        print(agn_row['Name_clean'],val_agn,inactive_row['Name_clean'],val_inactive,diff)
                         diffs.append(diff)
                         diffs_obs[obsclass].append(diff)
                         # denom = abs(val_agn) + abs(val_inactive)
@@ -3283,6 +3295,7 @@ linewidth=4,
                                 continue
 
                             diff = float(val_agn) - float(val_inactive)
+                            
                             # denom = abs(val_agn) + abs(val_inactive)
                             # if denom == 0:
                             #     diff_frac = 0.0
@@ -3376,10 +3389,10 @@ linewidth=4,
 
 
                 #########################################################
-
+                font = 18
                 bin_edges = np.histogram_bin_edges(diffs, bins=12)
-                # print('\nbin edges=\n')
-                # print(list(bin_edges))
+                print('\nbin edges=\n')
+                print(list(bin_edges))
                 if y_column == 'avg_mass_dens':
                     bin_edges = bin_edges_mass_dens_large
 
@@ -3398,10 +3411,10 @@ linewidth=4,
 
                 ax.set_ylabel("Number of pairs", fontsize=font)
 
-                ax.set_title(f"One-sample t-test p-value: {p_value_t:.4f}", fontsize=font)
+                ax.set_title(f"One-sample t-test p-value: {p_value_t:.5f}", fontsize=font)
                 # else:
                 #     ax.set_title(f"Wilcoxon test p-value: {p_value_w:.3f}")
-                ax.legend()
+                ax.legend(fontsize=font_leg)
                 outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{masky}_{R_kpcy}kpc/'
                 os.makedirs(outputdir, exist_ok=True)
                 output_path = outputdir+f'{y_column}_pair_differences.png'
@@ -3414,7 +3427,7 @@ linewidth=4,
 
                 if y_column =="flux (Jy km/s)":
                     output_path = outputdir+'fluxjykms_pair_differences.png'
-                
+                plt.tight_layout()
                 plt.savefig(output_path)
                 print(f"Saved matched-pairs plot to: {output_path}")
                 plt.close(fig)
@@ -3441,7 +3454,7 @@ linewidth=4,
                 ax.set_title(f"One-sample t-test p-value: {p_value_t_frac:.4f}", fontsize=font)
                 # else:
                 #     ax.set_title(f"Wilcoxon test p-value: {p_value_w:.3f}")
-                ax.legend()
+                ax.legend( fontsize=font_leg)
                 outputdir_frac = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/frac/{masky}_{R_kpcy}kpc/'
                 os.makedirs(outputdir_frac, exist_ok=True)
                 output_path = outputdir_frac+f'{y_column}_pair_differences.png'
@@ -3453,6 +3466,7 @@ linewidth=4,
                     output_path = outputdir_frac+f'fluxjykms_native_pair_differences.png'
                 elif nativey and not y_column =="flux (Jy km/s)":
                     output_path = outputdir_frac+f'{y_column}_native_pair_differences.png'
+                plt.tight_layout()
                 plt.savefig(output_path)
                 print(f"Saved matched-pairs plot to: {output_path}")
                 plt.close(fig)
@@ -3524,7 +3538,7 @@ linewidth=4,
 
                 ax.set_title(title, fontsize=font-2)
 
-                ax.legend()
+                ax.legend(fontsize=font_leg)
 
                 outputdir_obs = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/obsclass/{masky}_{R_kpcy}kpc/'
                 os.makedirs(outputdir_obs, exist_ok=True)
@@ -3538,6 +3552,7 @@ linewidth=4,
                 if y_column == "flux (Jy km/s)":
                     output_path_obs = outputdir_obs + 'fluxjykms_pair_differences_obsclass.png'
 
+                plt.tight_layout()
                 plt.savefig(output_path_obs)
                 print(f"Saved obscuration-split plot to: {output_path_obs}")
                 plt.close(fig)
@@ -3667,7 +3682,7 @@ linewidth=4,
                     except:
                         ax.set_ylabel(fr"$\Delta$ {y_column}", fontsize=font)
 
-                    ax.legend()
+                    ax.legend( fontsize=font_leg)
 
                     # Save
                     outputdir_scatter = outputdir + '/scatters/'
@@ -3726,7 +3741,7 @@ linewidth=4,
                     except:
                         ax.set_ylabel(fr"frac $\Delta$ {y_column}", fontsize=font)
 
-                    ax.legend()
+                    ax.legend( fontsize=font_leg)
 
                     # Save
                     outputdir_scatter = outputdir_frac + '/scatters/'
@@ -3995,7 +4010,7 @@ linewidth=4,
 
 
 
-bin_edges_mass_dens_large =  [-0.7018729549586915, 0.08062241139172499, 0.8631177777421415, 1.6456131440925579, 2.4281085104429745, 3.210603876793391, 3.9930992431438073, 4.775594609494224, 5.5580899758446405, 6.340585342195057, 7.123080708545474, 7.90557607489589, 8.688071441246306]
+bin_edges_mass_dens_large =  [-1.6453252557068394, -1.301824039101714, -0.9583228224965886, -0.6148216058914633, -0.27132038928633784, 0.07218082731878761, 0.41568204392391284, 0.7591832605290385, 1.1026844771341637, 1.446185693739289, 1.7896869103444146, 2.13318812694954, 2.4766893435546646]
 
 AGN_data = [
     {"Name": "NGC 1365", "Distance (Mpc)": 18.0, "AGN Classification": "Sy 1.8a", "log LH (L⊙)": 10.58,
@@ -4475,11 +4490,11 @@ axis_label_lookup = {
 
 
 
-# masks = ['broad', 'strict','flux90_strict']
-# radii = [1.5,0.3,1]
+masks = ['broad','strict']
+radii = [1.5,0.3]
 
-masks = ['broad']
-radii = [0.3,1.5]
+# masks = ['broad']
+# radii = [1.5,0.3]
 
 for mask in masks:
     for R_kpc in radii:
@@ -4628,11 +4643,11 @@ for mask in masks:
 
 #### safe for pairdiffs
 
-        # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
-        # plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        # plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        # plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
+        plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
 
 
         # plot_llama_property('emission_pixels', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
@@ -4651,18 +4666,43 @@ for mask in masks:
         # plot_llama_property('emission_pixels', 'Resolution (pc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativex=True,nativey=True)
 
 
+####################################################################################################
+######################### all paper plots #######################################################
+####################################################################################################
+
+# plot_llama_property('log L′ CO',"L'CO_JCMT (K km s pc2)",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True, logy=True,square=True,best_fit=False,mask='broad',R_kpc=1.5,comb_llama=True, exclude_names=None,yhist=False)
+
+# plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask='broad',R_kpc=0.3,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
+# plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='broad',R_kpc=0.3,exclude_names=exclude,nativey=True,co21only=False)
+
+# plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='strict',R_kpc=1.5,exclude_names=exclude,co21only=False)
+# plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='strict',R_kpc=1.5,exclude_names=exclude,co21only=False)
+# plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='strict',R_kpc=1.5,exclude_names=exclude,co21only=False)
+# plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='strict',R_kpc=1.5,exclude_names=exclude,co21only=False)
+
+# plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='strict',R_kpc=0.3,exclude_names=exclude,co21only=False)
+# plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='strict',R_kpc=0.3,exclude_names=exclude,co21only=False)
+# plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='strict',R_kpc=0.3,exclude_names=exclude,co21only=False)
+# plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='strict',R_kpc=0.3,exclude_names=exclude,co21only=False)
+
+# plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='broad',R_kpc=1.5,exclude_names=None,co21only=False,nativey=True,logy=True)
+# plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask='broad',R_kpc=0.3,exclude_names=None,co21only=False,nativey=True,logy=True)
+
+
+
+
 # #     ############# CAS WISDOM, PHANGS coplot   #############
 
-#         if R_kpc == 1.5 and mask != 'broad':
+        # if R_kpc == 1.5 and mask != 'broad':
 
 # # #             plot_llama_property('Gini', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
 # # #             plot_llama_property('Asymmetry', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
 # # #             plot_llama_property('Asymmetry', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=True,use_phangs=True,use_sim=False,comb_llama=True,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True)
 
-#             plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
-#             plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
-#             plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
-#             plot_llama_property('Hubble Stage', 'Distance (Mpc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+            # plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+            # plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+            # plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+            # plot_llama_property('Hubble Stage', 'Distance (Mpc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
 
 
             # plot_llama_property('Asymmetry', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,use_wis=False,use_phangs=False,use_sim=False,comb_llama=False,rebin=120,mask=mask,R_kpc=R_kpc,exclude_names=exclude,use_aux=True,force_names=True,plotshared=False)
