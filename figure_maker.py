@@ -90,10 +90,77 @@ def figure_maker(
     #fig.suptitle(fig_title, y=0.99)
 
     plt.savefig(
-        '/Users/administrator/Astro/LLAMA/ALMA/' + f'{fig_title}.png',
+        '/Users/administrator/Astro/LLAMA/ALMA/' + f'{fig_title}.pdf',
         bbox_inches='tight',
         pad_inches=0.2,
         format='png'
+    )
+
+    plt.close(fig)
+
+
+def stack_with_colourbar(
+    top_image,
+    bottom_image,
+    colourbar_image,
+    output_file,
+    figsize=(6, 8),
+    width_ratios=(1, 0.1),
+):
+    """
+    Stack two images vertically with a colourbar image alongside.
+
+    Parameters
+    ----------
+    top_image : str
+        Path to top image.
+    bottom_image : str
+        Path to bottom image.
+    colourbar_image : str
+        Path to tall colourbar image.
+    output_file : str
+        Output filename.
+    figsize : tuple
+        Figure size in inches.
+    width_ratios : tuple
+        Relative widths of image and colourbar columns.
+    """
+
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+
+    gs = GridSpec(
+        2,
+        2,
+        figure=fig,
+        width_ratios=width_ratios,
+        height_ratios=[1, 1],
+    )
+
+    ax_top = fig.add_subplot(gs[0, 0])
+    ax_bottom = fig.add_subplot(gs[1, 0])
+    ax_cbar = fig.add_subplot(gs[:, 1])
+
+    # Read images
+    top = mpimg.imread(top_image)
+    bottom = mpimg.imread(bottom_image)
+    cbar = mpimg.imread(colourbar_image)
+
+    # Display
+    ax_top.imshow(top)
+    ax_bottom.imshow(bottom)
+    ax_cbar.imshow(cbar)
+
+    # Remove axes
+    for ax in (ax_top, ax_bottom, ax_cbar):
+        ax.axis("off")
+
+    plt.tight_layout()
+
+    plt.savefig(
+        output_file,
+        dpi=300,
+        bbox_inches="tight",
+        pad_inches=0.05,
     )
 
     plt.close(fig)
@@ -110,14 +177,13 @@ rows = 4
 for R_kpc in [1.5,0.3]:
 
     ########### normalised ###########
-    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Strict mask Moment 0 maps for LLAMA AGN, normalised {2*R_kpc}x{2*R_kpc}kpc','AGN',norm=True,colourbar=True,R_kpc=R_kpc,mask='strict')
-    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'Strict mask Moment 0 maps for LLAMA Inactive galaxies, normalised {2*R_kpc}x{2*R_kpc}kpc','inactive',norm=True,colourbar=True,R_kpc=R_kpc,mask='strict')
-    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Strict mask Moment 0 maps for LLAMA AGN, normalised {2*R_kpc}x{2*R_kpc}kpc','AGN',norm=True,colourbar=True,R_kpc=R_kpc,mask='broad')
-    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'Strict mask Moment 0 maps for LLAMA Inactive galaxies, normalised {2*R_kpc}x{2*R_kpc}kpc','inactive',norm=True,colourbar=True,R_kpc=R_kpc,mask='broad')
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Strict mask Moment 0 maps for LLAMA AGN, normalised {2*R_kpc}x{2*R_kpc}kpc','AGN',norm=True,colourbar=False,R_kpc=R_kpc,mask='strict')
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'Strict mask Moment 0 maps for LLAMA Inactive galaxies, normalised {2*R_kpc}x{2*R_kpc}kpc','inactive',norm=True,colourbar=False,R_kpc=R_kpc,mask='strict')
 
 
-    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Moment 0 maps for LLAMA AGN {2*R_kpc}x{2*R_kpc}kpc','AGN',norm=False,colourbar=False,R_kpc=R_kpc)
-    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'Moment 0 maps for LLAMA Inactive galaxies{2*R_kpc}x{2*R_kpc}kpc','inactive',norm=False,colourbar=False,R_kpc=R_kpc)
+
+    # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Moment 0 maps for LLAMA AGN {2*R_kpc}x{2*R_kpc}kpc','AGN',norm=False,colourbar=False,R_kpc=R_kpc)
+    # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'Moment 0 maps for LLAMA Inactive galaxies{2*R_kpc}x{2*R_kpc}kpc','inactive',norm=False,colourbar=False,R_kpc=R_kpc)
 
 
     # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Strict mask Moment 0 maps for LLAMA AGN {2*R_kpc}x{2*R_kpc}kpc','AGN',rebin=None,mask='strict',R_kpc=R_kpc)
@@ -133,3 +199,10 @@ for R_kpc in [1.5,0.3]:
 
 
 # plt.show()
+
+stack_with_colourbar(
+    top_image="/Users/administrator/Astro/LLAMA/ALMA/Strict mask Moment 0 maps for LLAMA AGN, normalised 3.0x3.0kpc.pdf",
+    bottom_image="/Users/administrator/Astro/LLAMA/ALMA/Strict mask Moment 0 maps for LLAMA Inactive galaxies, normalised 3.0x3.0kpc.pdf",
+    colourbar_image="/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/colourbar_1.5_None_False.png",
+    output_file="/Users/administrator/Astro/LLAMA/ALMA/Strict mask Moment 0 maps for combined LLAMA, normalised 3.0x3.0kpc.pdf",
+)

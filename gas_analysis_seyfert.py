@@ -125,16 +125,16 @@ def smoothness_single_espocito(image, mask, pc_per_arcsec, pixel_scale_arcsec, F
     smooth_image = gaussian_filter(image_filled, sigma=size, mode='constant',cval=0.0)
     valid_smooth = (~mask) & np.isfinite(image) & np.isfinite(smooth_image)
     if np.sum(valid_smooth) == 0: return np.nan
-    data = np.where(valid_smooth, image, np.nan)
-    data_smooth = np.where(valid_smooth, smooth_image, np.nan) 
-    diff_smooth = data - data_smooth
+    # data = np.where(valid_smooth, image, np.nan)
+    # data_smooth = np.where(valid_smooth, smooth_image, np.nan) 
+    diff_smooth = image - smooth_image
     diff_smooth[diff_smooth<0] = 0 # addition for espocito
     if aperture == None:
         total_diff = np.nansum(diff_smooth)
-        total_flux = np.nansum(data)
+        total_flux = np.nansum(image)
     else:
-        diff_phot = aperture_photometry(diff_smooth, aperture, method='exact')
-        image_phot = aperture_photometry(data, aperture, method='exact')
+        diff_phot = aperture_photometry(diff_smooth, aperture, method='exact',mask=mask)
+        image_phot = aperture_photometry(image, aperture, method='exact',mask=mask)
         total_diff = diff_phot['aperture_sum'][0]
         total_flux = image_phot['aperture_sum'][0]
 
@@ -163,16 +163,30 @@ def smoothness_single_espocito(image, mask, pc_per_arcsec, pixel_scale_arcsec, F
 def concentration_single(image, mask, aperturesmall=None,aperturebig=None, **kwargs):
 
     valid = (~mask) & np.isfinite(image)
+    
 
     # Apply mask directly to image (important for photutils)
-    data = np.where(valid, image, np.nan)
-
+    #data = np.where(valid, image, np.nan)
     # --- Sub-pixel photometry ---
-    phot_50 = aperture_photometry(data, aperturesmall, method='exact')
-    phot_200 = aperture_photometry(data, aperturebig, method='exact')
+    phot_50 = aperture_photometry(
+    image,
+    aperturesmall,
+    method='exact',
+    mask=mask
+)
+    phot_200 = aperture_photometry(
+    image,
+    aperturebig,
+    method='exact',
+    mask=mask
+)
 
     flux_50 = phot_50['aperture_sum'][0]
+    
+    
     flux_200 = phot_200['aperture_sum'][0]
+
+
 
     # --- Normalisation (surface density-like) ---
     area_50 = aperturesmall.area
@@ -183,8 +197,13 @@ def concentration_single(image, mask, aperturesmall=None,aperturebig=None, **kwa
 
     if flux_50 <= 0 or flux_200 <= 0:
         return np.nan
+    C = np.log10(flux_50 / flux_200)
 
-    return np.log10(flux_50 / flux_200)
+    # print('flux_50',flux_50)
+    # print('flux_200',flux_200)
+    # print('C',C)
+
+    return C
 
 
 def SCOdv_single(
@@ -469,10 +488,9 @@ def clumping_factor_single(
     Sigma2_native = Sigma_native**2
 
     pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
-    sigma_kernel_pc = np.sqrt((1000*R_kpc)**2 - native_res**2)
+    sigma_kernel_pc = np.sqrt((1000*R_kpc)**2 - native_res**2) / 2.355
     sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
     kernel = Gaussian2DKernel(sigma_kernel_pix)
-    print('convolving')
     Sigma_1kpc = convolve_fft(
         Sigma_native,
         kernel,
@@ -486,7 +504,6 @@ def clumping_factor_single(
         nan_treatment='interpolate',
         normalize_kernel=True
     )
-    print('convoling complete')
 
     # numerator = np.sum(Sigma**2 * pixel_area_pc2)
     # denominator = np.sum(Sigma * pixel_area_pc2)
@@ -638,7 +655,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     add_scalebar(ax,1/3600,label="1''",corner='top left',color='lime',borderpad=2,size_vertical=0.5)
     linewith = 2 * R_kpc
     add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='lime',borderpad=2,fill=True,linewidth=linewith)
-    print('noise:', noise)
+    # print('noise:', noise)
     vmin = 2 * noise if noise is not None and np.isfinite(noise) else 0
     vmax = np.nanpercentile(image.data[np.isfinite(image.data)], 99.5)
 
@@ -648,7 +665,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     if normalise_norm and res_src in ['native','rebin']:
         vmin = np.nanmin(colourbar_list)
         vmax = np.nanmax(colourbar_list)
-    print('vmin:', vmin, 'vmax:', vmax)
+    # print('vmin:', vmin, 'vmax:', vmax)
     if vmin >= vmax:
         vmin = 0
     if not normalise_norm:
@@ -670,35 +687,44 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     im.axes.get_yaxis().set_visible(False)
 
     if aperture is not None:
-        # Regions EllipsePixelRegion parameters:
-        cx = aperture.center.x
-        cy = aperture.center.y
-        width = aperture.width     # = 2*a in pixels
-        height = aperture.height   # = 2*b in pixels
-        angle_deg = aperture.angle.to_value("deg")
 
-        ellipse_patch = Ellipse(
-            (cx, cy), width=width, height=height,
-            angle=angle_deg,
-            edgecolor='lime',       # visible bright color
-            facecolor='none',
-            linewidth=3,
-        )
-        ax.add_patch(ellipse_patch)
+        # Accept either a single aperture or an iterable of apertures
+        if not isinstance(aperture, (list, tuple)):
+            apertures = [aperture]
+        else:
+            apertures = aperture
+
+        for ap in apertures:
+            cx = ap.center.x
+            cy = ap.center.y
+            width = ap.width       # = 2*a in pixels
+            height = ap.height     # = 2*b in pixels
+            angle_deg = ap.angle.to_value("deg")
+
+            ellipse_patch = Ellipse(
+                (cx, cy),
+                width=width,
+                height=height,
+                angle=angle_deg,
+                edgecolor='lime',
+                facecolor='none',
+                linewidth=3,
+            )
+            ax.add_patch(ellipse_patch)
 
     if rebin is not None and not normalise_norm:
         if not flux_mask and not normalise_norm:
-            plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+            plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.pdf',bbox_inches='tight',pad_inches=0.0)
         elif flux_mask and not normalise_norm:
-            plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}.png',bbox_inches='tight',pad_inches=0.0)
+            plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}.pdf',bbox_inches='tight',pad_inches=0.0)
         elif not flux_mask and normalise_norm:
-            plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_{res_src}_norm.png',bbox_inches='tight',pad_inches=0.0)
+            plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_{res_src}_norm.pdf',bbox_inches='tight',pad_inches=0.0)
         elif flux_mask and normalise_norm:
-            plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_{res_src}_norm.png',bbox_inches='tight',pad_inches=0.0)
+            plt.savefig(outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_{res_src}_norm.pdf',bbox_inches='tight',pad_inches=0.0)
     elif rebin is None and not normalise_norm:
-        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}.png',bbox_inches='tight',pad_inches=0.0)
+        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}.pdf',bbox_inches='tight',pad_inches=0.0)
     elif rebin is None and normalise_norm:
-        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_norm.png',bbox_inches='tight',pad_inches=0.0)
+        plt.savefig(outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_norm.pdf',bbox_inches='tight',pad_inches=0.0)
     else:
         raise ValueError("Invalid combination of rebin and normalise_norm parameters.")
     plt.close(fig)
@@ -716,7 +742,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
             cb.locator = mticker.MaxNLocator(nbins=5)
             cb.update_ticks()
         cb.set_label('Surface density (M☉pc⁻²)', fontsize=fontsize*5)
-        plt.savefig('/data/c3040163/llama/alma/gas_analysis_results'+ f'/colourbar_{R_kpc}_{rebin}_{flux_mask}.png', bbox_inches='tight', pad_inches=0)
+        plt.savefig('/data/c3040163/llama/alma/gas_analysis_results'+ f'/colourbar_{R_kpc}_{rebin}_{flux_mask}.pdf', bbox_inches='tight', pad_inches=0)
         plt.close(cbar_fig)
         
 # ------------------ Processing ------------------
@@ -780,7 +806,7 @@ def resolve_galaxy_beam_scale(
     else:
         ned_name = base_name
         needs_extended = name.endswith(("_phangs", "_wis"))
-    print(f"[INFO] {ned_name}: needs_extended={needs_extended}")
+    # print(f"[INFO] {ned_name}: needs_extended={needs_extended}")
 
     # ---- metadata resolution ----
     if not needs_extended:
@@ -1099,7 +1125,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     # if name in ['NGC3783','NGC1315','NGC3717','NGC1375','NGC5037','MCG514','ESO021']: this is a set of ones that crashed on the ned search for some reason
     #     return
 
-    # if name not in ['ngc4254_phangs']:
+    # if name not in ['MCG630','NGC5824']:
     #     return
     
 ##############################################################################
@@ -1139,7 +1165,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     if co32 and name not in co32_list:
         return None
 
-    print(f"Processing {name}...")
+    print(f"\nProcessing {name}...")
 
     # Load FITS
     image_untrimmed = fits.getdata(file, memmap=True)
@@ -1201,7 +1227,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
-    print(gal_cen)
     wcs_full = WCS(header).celestial
 
     ny, nx = image_untrimmed.shape
@@ -1233,10 +1258,34 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     mask[yp1:yp2, xp1:xp2] = mask_untrimmed[y1i:y2i, x1i:x2i]
 
 
-            # ---------- NaN handling ----------
+    # ------------------ Signal to noise mask ------------------
+    if error_map is not None:
+        rms_noise = np.sqrt(np.mean(error_map[np.isfinite(error_map)]**2))
+        # print(f"RMS noise (from error map) = {rms_noise}")
+        if rms_noise != float(0):
+            #sn_mask = image > 2 * abs(error_map)
+            sn_mask = image != float(0)
+            if name in ['NGC5845','MCG630']: sn_mask = image > 3 * abs(error_map)
+            combmask = ~sn_mask | mask  # combine with existing mask
+
+
+        elif rms_noise == float(0):
+
+            print('masking out 0s instead of using error map')
+            sn_mask = image != float(0)
+            combmask = ~sn_mask | mask
+
+        # sn_mask_path = output_dir + '/masks'+ f'/{R_kpc}_{PHANGS_mask}_{rebin}_{name}_snmask.fits'  
+        # if not os.path.exists(os.path.dirname(sn_mask_path)):
+        #     os.makedirs(os.path.dirname(sn_mask_path))
+        # fits.writeto(sn_mask_path, combmask.astype(int), overwrite=True)
+        if name in ['NGC5845','MCG630']: mask = combmask
+    
+
+    # ---------- NaN handling ----------
     nan_pixels = np.isnan(image)
     if nan_pixels.any():
-        image[nan_pixels] = 0.0
+        image[mask] = 0.0
         mask[nan_pixels] = False
         error_map[nan_pixels] = np.nanmean(error_map)
 
@@ -1287,8 +1336,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 print(f"Failed to process pair {pair_name_norm}: {e}")
     
     elif res_comp:
-        n = 10
-        beam_scales_pc = np.linspace(beam_scale_pc,161.22,num=n)
+        n = 20
+        beam_scales_pc = np.linspace(beam_scale_pc,400,num=n)
         beam_scale_labels = ['native']
         for i in range(n-1):
             beam_scale_labels.append(str(i+2))
@@ -1489,7 +1538,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         beam_area_pc2 = beam_area_arcsec2 * pc_per_arcsec**2
         pixels_per_beam = beam_area_arcsec2/pixel_area_arcsec2
 
-        print(f'processing {name}, beam_scale_pc: {beam_scale_pc}, pc res')
+        print(f'\nProcessing {name}, beam_scale_pc: {beam_scale_pc}, pc res')
         # print('beam_area_arcsec2', beam_area_arcsec2,'arcsec2')
         # print('beam_area_pc2', beam_area_pc2,'pc2')
         # print('LCO factor using omega_beam (should be equal to beam_area_pc2)',beam_area_arcsec2*23.5*D_Mpc**2)
@@ -1526,10 +1575,10 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             mask = flux_mask_90 | mask
             aperture_to_plot = flux_aperture_90
 
-            flux_mask_path = output_dir + '/masks'+ f'/{name}_flux90_mask.fits'  
-            if not os.path.exists(os.path.dirname(flux_mask_path)):
-                os.makedirs(os.path.dirname(flux_mask_path))
-            fits.writeto(flux_mask_path, mask.astype(int), overwrite=True)
+            # flux_mask_path = output_dir + '/masks'+ f'/{name}_flux90_mask.fits'  
+            # if not os.path.exists(os.path.dirname(flux_mask_path)):
+            #     os.makedirs(os.path.dirname(flux_mask_path))
+            # fits.writeto(flux_mask_path, mask.astype(int), overwrite=True)
 
         else:
             aperture_to_plot = None
@@ -1550,39 +1599,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
         aperture1as = CircleSkyRegion(center=gal_cen, radius=(1/3600) * u.deg)
 
-        # ------------------ Signal to noise mask ------------------
-        if error_map is not None:
-            rms_noise = np.sqrt(np.mean(error_map[np.isfinite(error_map)]**2))
-            print(f"RMS noise (from error map) = {rms_noise}")
-            if rms_noise != float(0):
-                #sn_mask = image > 2 * abs(error_map)
-                sn_mask = image != float(0)
-                if name in ['NGC5845','MCG630']: sn_mask = image > 3 * abs(error_map)
-                combmask = ~sn_mask | mask  # combine with existing mask
-                mask_clump_espocito200 = ~sn_mask | mask_clump_espocito200
-                mask_clump_espocito50 = ~sn_mask | mask_clump_espocito50
-
-            elif rms_noise == float(0):
-
-                print('masking out 0s instead of using error map')
-                sn_mask = image != float(0)
-                combmask = ~sn_mask | mask
-                mask_clump_espocito200 = ~sn_mask | mask_clump_espocito200
-                mask_clump_espocito50 = ~sn_mask | mask_clump_espocito50
-
-                # mean, median , std = sigma_clipped_stats(image, sigma=5)
-                # print('RMS noise (from sigma-clipped stats) = ', std)
-                # sn_mask = image > 2 * std
-                #mask = ~sn_mask | mask  # combine with existing mask
-
-
-
-            sn_mask_path = output_dir + '/masks'+ f'/{R_kpc}_{PHANGS_mask}_{rebin}_{name}_snmask.fits'  
-            if not os.path.exists(os.path.dirname(sn_mask_path)):
-                os.makedirs(os.path.dirname(sn_mask_path))
-            fits.writeto(sn_mask_path, combmask.astype(int), overwrite=True)
-            if name in ['NGC5845','MCG630']: mask = combmask
-
 
         # ------------ Convert to mass surface density ------------
 
@@ -1601,12 +1617,13 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         mass_surface_density_emap_pix = compute_surface_density(error_map_pix_nd.data,pixel_area_arcsec2,D_Mpc,R_31,R_21,alpha_CO,pixel_area_pc2)
         mass_surface_density_emap_pix_kpc = mass_surface_density_emap_pix * 1000**2
         mass_dens_lim = np.nanmedian(mass_surface_density_emap_pix_kpc)
-        print('avg mass dens limit = ',mass_dens_lim)
+        # print('avg mass dens limit = ',mass_dens_lim)
         
 
-# pix_per_beam_1kpc = beam_area_arcsec2_1kpc / pixel_area_arcsec2# Lprime_map_1kpc = image_1kpc_nd.data * 23.5 * beam_area_arcsec2_1kpc/pix_per_beam_1kpc * D_Mpc**2# if co32:#     Lprime_map_1kpc = (Lprime_map_1kpc / R_31) * R_21# Lprime_10_map_1kpc = Lprime_map_1kpc / (R_31 if co32 else R_21)# mass_map_1kpc =  alpha_CO * Lprime_10_map_1kpc# mass_surface_density_map_1kpc = mass_map_1kpc / pixel_area_pc2# mass_surface_density_map_nd_1kpc = NDData(data=mass_surface_density_map_1kpc, wcs=wcs_trimmed)
-
         # ---------- Plot ----------
+
+        # aperture_to_plot = [aperture_clump_espocito50, aperture_clump_espocito200]
+
         if isolate is None or 'plot' in isolate:
             norm_type = 'sqrt' if normalise_norm else 'linear'
             plot_moment_map(
@@ -1616,58 +1633,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 aperture=aperture_to_plot, res_src=res_src, norm_type=norm_type, normalise_norm=normalise_norm, noise = mass_surface_density_rms_noise
             )
 
-        # if isolate == None or any(m in isolate for m in ['gini','asym','smooth','conc','tmass','LCO','mw','aw','clump']): #     # Generate Monte-Carlo images (full set) #     N_MC = 2000 #     # ---- PARALLEL MC PROCESSING HERE ---- #     dtype = image.dtype  # e.g. np.float64 #     shape = image.shape #     shm_img = ne_memory.SharedMemory(create=True, size=image.nbytes) #     shm_err = shared_memory.SharedMemory(create=True, size=error_map.nbytes) #     # write into shared memory #     shm_array_img = np.ndarray(shape, dtype=dtype, buffer=shm_img.buf) #     shm_array_err = np.ndarray(shape, dtype=dtype, buffer=shm_err.buf) #     shm_array_img[:] = image[:]       # copy once #     shm_array_err[:] = error_map[:]   # copy once #     cpu = min( max(1, multiprocessing.cpu_count()-1), 8 )  # e.g., reserve one core #     iters_per_worker = [N_MC // cpu] * cpu #     for i in range(N_MC % cpu): #         iters_per_worker[i] += 1 #     metric_kwargs_small = dict( #         name=name, #         co32=co32, #         pixel_area_pc2=pixel_area_pc2, #         beam_area_pc2=beam_area_pc2, #         beam_scale_pc=beam_scale_pc, #         pixel_area_arcsec2=pixel_area_arcsec2, #         beam_area_arcsec2=beam_area_arcsec2, #         D_Mpc=D_Mpc, #         R_21=R_21, #         R_31=R_31, #         alpha_CO=alpha_CO, #         pc_per_arcsec=pc_per_arcsec, #         pixel_scale_arcsec=pixel_scale_arcsec, #         jy_per_K = jy_per_K, #         flux_mask = flux_mask, #         snmask = combmask #     ) #     print('single') #     print('G=', gini_single(image, mask)) #     print('A=', asymmetry_single(image, mask)) #     print('S=', smoothness_single_davis(image, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask)) #     print('C=', clumping_factor_single(image, combmask,pixel_area_pc2,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32)) #     with ProcessPoolExecutor(max_workers=cpu) as ex: #         futures = [] #         for w, n_iter_chunk in enumerate(iters_per_worker): #             seed = np.random.SeedSequence().entropy + w #             futures.append(ex.submit( #                 process_mc_chunk_shm, #                 n_iter_chunk, #                 shm_img.name, #                 shm_err.name, #                 shape, #                 str(dtype), #                 mask, #                 metric_kwargs_small, #                 isolate, #                 seed #             )) #         results = [f.result() for f in futures] #     # When done, unlink the shared memory #     shm_img.close() #     shm_img.unlink() #     shm_err.close() #     shm_err.unlink() #     def merge_global(metric_name): #         """Concatenate raw MC values across chunks and compute global stats.""" #         # Collect lists from every chunk #         all_values = [] #         for r in results: #             if metric_name in r: #                 all_values.extend(r[metric_name]) #         # Convert to array #         arr = np.array(all_values, dtype=float) #         # Handle case where everything failed #         if len(arr) == 0 or np.all(np.isnan(arr)): #             print(f"All MC calculations failed for metric {metric_name} in galaxy {name}.") #             return np.nan, np.nan #         # Global median and std #         return float(np.nanmedian(arr)), float(np.nanstd(arr)) #     gini, gini_err = merge_global("gini") #     asym, asym_err = merge_global("asym") #     smooth, smooth_err = merge_global("smooth") #     conc, conc_err = merge_global("conc") #     total_mass, total_mass_err = merge_global("tmass") #     SCOdv, SCOdv_err = merge_global("SCOdv") #     LCO, LCO_err = merge_global("LCO") #     LCO_JCMT, LCO_JCMT_err = merge_global("LCO_JCMT") #     LCO_APEX, LCO_APEX_err = merge_global("LCO_APEX") #     mw_sd, mw_sd_err = merge_global("mw") #     aw_sd, aw_sd_err = merge_global("aw") #     clump, clump_err = merge_global("clump") # else: #     print("Skipping metric calculations as per isolate parameter.") #     gini, gini_err = np.nan, np.nan #     asym, asym_err = np.nan, np.nan #     smooth, smooth_err = np.nan, np.nan #     conc, conc_err = np.nan, np.nan #     total_mass, total_mass_err = np.nan, np.nan #     SCOdv, SCOdv_err = np.nan, np.nan, #     LCO, LCO_err = np.nan, np.nan #     LCO_JCMT, LCO_JCMT_err = np.nan, np.nan #     LCO_APEX, LCO_APEX_err = np.nan, np.nan #     mw_sd, mw_sd_err = np.nan, np.nan #     aw_sd, aw_sd_err = np.nan, np.nan #     clump, clump_err = np.nan, np.nan # print('bootstrap') # print('G=',gini) # print('A=',asym) # print('S=',smooth)
 
-    #     if isolate == None or 'expfit' in isolate:
-
-    #         # Radial profile unchanged
-    #         try:
-    #             radii, profile, profile_err = radial_profile_with_errors(image, error_map, mask, nbins=10)
-    #             valid = np.isfinite(profile) & np.isfinite(profile_err)
-    #             radii, profile, profile_err = radii[valid], profile[valid], profile_err[valid]
-    #         except:
-    #             radii, profile, profile_err = np.array([]), np.array([]), np.array([])
-    #             print(f"Radial profile extraction failed for {name}.")
-
-    #         try:
-    #             popt, pcov = curve_fit(exp_profile, radii, profile, sigma=profile_err,
-    #                                 absolute_sigma=True, p0=[np.max(profile), 20], maxfev=2000)
-    #             perr = np.sqrt(np.diag(pcov))
-    #             sigma0 = f"{popt[0]:.2e} ± {perr[0]:.2e}"
-    #             rs_pc = popt[1] * pc_per_arcsec * pixel_scale_arcsec
-    #             rs_pc_err = perr[1] * pc_per_arcsec * pixel_scale_arcsec
-    #             rs = f"{rs_pc:.2f} ± {rs_pc_err:.2f}"
-
-    #             # --- Create decently sized figure and control font sizes ---
-    #             plt.figure(figsize=(8, 6))           # Larger canvas
-    #             plt.rcParams.update({
-    #                 'font.size': 10,                 # base font size
-    #                 'axes.titlesize': 12,            # title
-    #                 'axes.labelsize': 11,            # axis labels  
-    #                 'xtick.labelsize': 10,
-    #                 'ytick.labelsize': 10,
-    #                 'legend.fontsize': 10
-    # })
-
-    #             bin_widths = np.diff(np.linspace(0, radii.max(), len(radii)+1))
-    #             bin_widths_pc = bin_widths * pixel_scale_arcsec * pc_per_arcsec
-    #             radii_pc = radii * pixel_scale_arcsec * pc_per_arcsec
-    #             plt.errorbar(radii_pc, profile, yerr=profile_err, fmt='x', label="Data", capsize=3, xerr=bin_widths_pc / 2)
-    #             plt.plot(radii_pc, exp_profile(radii, *popt), label="Fit", color='orange')
-    #             plt.xlabel("Radius (pc)")
-    #             plt.ylabel("Integrated intensity [Jy/beam km/s]")
-    #             plt.title(name)
-    #             plt.legend()
-    #             plt.tight_layout()
-    #             plot_path = os.path.join(output_dir, f"{name}_{PHANGS_mask}_{rebin}_{R_kpc}kpc_expfit.png")
-    #             if save_exp == True:
-    #                 plt.savefig(plot_path,dpi=200)
-    #             plt.close()
-
-    #         except:
-    #             sigma0, rs = "fit failed", "fit failed"
-    #     else:
-    #         sigma0, rs = np.nan, np.nan
         
         LCO_10 , mass_tot = total_mass_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32)
         # ---------- assemble row ----------
@@ -1687,7 +1653,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             "Concentration": round(concentration_single(image, mask, aperturesmall=aperture_clump_espocito50,aperturebig=aperture_clump_espocito200),3), "Concentration_err": 0.0,
             "Gini": round(gini_single(image, mask), 3), "Gini_err": 0.0,
             "Asymmetry": round(asymmetry_single(image, mask), 3), "Asymmetry_err": 0.0,
-            "clumping_factor": round(clumping_factor_single(mass_surface_density_map,combmask,pixel_scale_arcsec, pc_per_arcsec, res_pc, R_kpc), 3),      
+            # "clumping_factor": round(clumping_factor_single(mass_surface_density_map,combmask,pixel_scale_arcsec, pc_per_arcsec, res_pc, R_kpc), 3),      
             "L'CO (K km_s pc2)": round(LCO_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_err (K km_s pc2)": 0.0,
             "L'CO_JCMT (K km s pc2)": round(LCO_single_JCMT(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_JCMT_err (K km s pc2)": 0.0,
             "L'CO_APEX (K km s pc2)": round(LCO_single_APEX(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),"L'CO_APEX_err (K km s pc2)": 0.0,
@@ -1716,7 +1682,7 @@ def process_directory(
     isolate=None, res_comp = False, normalise_norm=False
 ):
     print(
-        f"Processing directory: {outer_dir} "
+        f"\n\nProcessing directory: {outer_dir} "
         f"(CO32={co32}, rebin={rebin}, mask={mask}, R_kpc={R_kpc}), flux_mask={flux_mask}, res_comp={res_comp}"
         f"isolate={isolate})"
     )
@@ -2060,17 +2026,14 @@ if __name__ == '__main__':
                                                         # "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
                                                         # "plot":  []
     
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,flux_mask=True, isolate=isolate)
-
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
 
     colourbar_list = [] 
 
@@ -2081,27 +2044,25 @@ if __name__ == '__main__':
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
     isolate = None
     colourbar_list = [] 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
 
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
 
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
-    isolate = 'plot'
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True,normalise_norm=True)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True,normalise_norm=True)
-    isolate = None
-    colourbar_list = [] 
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate,res_comp=True)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate,res_comp=True)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
+
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=0.3,isolate=isolate,flux_mask=False)
 
 

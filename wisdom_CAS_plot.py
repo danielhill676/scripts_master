@@ -581,7 +581,7 @@ def plot_llama_triptych(
         outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/{m}_{r}kpc"
         if m == '120pc_flux90_strict':
             outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/flux90_strict_{r}kpc"
-        plt.savefig(f"{outfolder}/wisdom_CAS_triptych_{m}_{r}kpc_native{native_res}.png", dpi=300)
+        plt.savefig(f"{outfolder}/wisdom_CAS_triptych_{m}_{r}kpc_native{native_res}.pdf", dpi=300)
 
 ###################################################################################################################################################################################################################################################################
 # COMPARISON OF MASK/APERTURE
@@ -976,14 +976,14 @@ def plot_llama_triptych(
 
         #plt.tight_layout()
         outfolder = f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/plots/"
-        plt.savefig(f"{outfolder}/wisdom_CAS_triptych_comparison{which_compare}native{native_res}.png", dpi=300)
+        plt.savefig(f"{outfolder}/wisdom_CAS_triptych_comparison{which_compare}native{native_res}.pdf", dpi=300)
 
 axis_label_lookup = {
     "Resolution (pc)": "Resolution (pc)",
     "log LH (L⊙)": "$\log{L_H}$ (L$_\odot$)",
-    "Smoothness": "$C$",
+    "Smoothness": "$S$",
     "clumping_factor": "Clumping Factor",
-    "Smoothness_davis": "$C$",
+    "Smoothness_davis": "$S$",
     "Asymmetry": "$A$",
     "Gini": "$G$",
     "log LX": "$\log{L_{2-10}}$ (erg s$^{-1}$)",
@@ -1010,17 +1010,17 @@ excludewisphagns= ['NGC1375','NGC1315','NGC2775','NGC5064_WIS','NGC1387_WIS']
 ################################################################### AGN vs inactive CAS triptych ###################################################################
 
 m = 'strict'
-# r = 1.5
+r = 1.5
 
-# plot_llama_triptych(
-#     x_column1='Gini', y_column1='Smoothness_davis',
-#     x_column2='Asymmetry', y_column2='Smoothness_davis',
-#     x_column3='Asymmetry', y_column3='Gini',
-# base_AGN=base_AGN, base_inactive=base_inactive,
-#     log_axes={'x_shared': False, 'y_shared': False},
-#     bins=10,
-#     figsize=9, m = m, r = r, native_res=True, hist=False, exclude_names=exclude1
-# )
+plot_llama_triptych(
+    x_column1='Gini', y_column1='Smoothness_davis',
+    x_column2='Asymmetry', y_column2='Smoothness_davis',
+    x_column3='Asymmetry', y_column3='Gini',
+base_AGN=base_AGN, base_inactive=base_inactive,
+    log_axes={'x_shared': False, 'y_shared': False},
+    bins=10,
+    figsize=9, m = m, r = r, native_res=True, hist=False, exclude_names=exclude1
+)
 
 # ################################################################ AGN vs inactive CAS triptych wis phangs comparison ###################################################################
 
