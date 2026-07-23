@@ -13,6 +13,8 @@ base_dir = "/Users/administrator/Astro/LLAMA/ALMA/pipeline_cubes"
 AGN_table_dir = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/gas_analysis_summary_broad_1.5kpc.csv"
 inactive_table_dir = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/gas_analysis_summary_broad_1.5kpc.csv"
 
+# 5845 options [83, 119]
+
 ranges = {
     "ESO021": [51, 114],
     "ESO093": [77, 115],
@@ -45,7 +47,7 @@ ranges = {
     "NGC5037": [66, 133],
     "NGC5506": [60, 103],
     "NGC5728": [54, 107],
-    "NGC5845": [83, 119],
+    "NGC5845": [45, 116],
     "NGC5921": [80, 118],
     #"NGC6814": [137, 162],
     "NGC6814": [87, 112],
@@ -72,7 +74,7 @@ for name in os.listdir(base_dir):
     # if os.path.exists(outsubdir+'/_allplots.pdf'):
     #     continue
 
-    if name not in['NGC6814']:
+    if name not in['NGC5845']:
         continue
 
     print(f"Processing {name}")
@@ -125,6 +127,7 @@ for name in os.listdir(base_dir):
     plotter.obj_dec = DEC
     plotter.gal_distance=D
     if not ranges[name][0] == 0 and not ranges[name][1] == 0:
+        print('using manual channel ranges')
         plotter.chans2do = ranges[name]
     else:
         continue

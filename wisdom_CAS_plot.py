@@ -315,18 +315,18 @@ def plot_llama_triptych(
 
 
         default_label_styles = {
-            "LLAMA AGN": ("s", 'red',6),
-            "LLAMA inactive": ("D", 'blue',6),
+            "LLAMA AGN": ("s", 'magenta',8),
+            "LLAMA inactive": ("D", 'slategrey',8),
             "Comparison-control": ("*", "dodgerblue",6),
-            "WISDOM": ("H", "indigo",7),
-            "PHANGS": ("D", "orange",5)
+            "WISDOM": ("H", "darkseagreen",8),
+            "PHANGS": ("D", "cadetblue",6)
         }
 
         # Build label_styles
         label_styles = {}
 
         if comb_llama:
-            label_styles['LLAMA'] = ('o', 'black',6)  # Combined AGN+inactive
+            label_styles['LLAMA'] = ('*', 'red',14)  # Combined AGN+inactive
         else:
             if 'LLAMA AGN' in datasets_for_plotting:
                 label_styles['LLAMA AGN'] = default_label_styles['LLAMA AGN']
@@ -361,6 +361,7 @@ def plot_llama_triptych(
                     fmt=marker, markersize=size,
                     capsize=2, elinewidth=1,
                     alpha=0.85, color=color,
+                    zorder=10 if label == "LLAMA" else 5,
                     label=label if key == "left" else None
                 )
 
@@ -558,11 +559,11 @@ def plot_llama_triptych(
         # Create legend handles manually without error bars
 
         legend_marker_sizes = {
-        "LLAMA AGN": 8,
-        "LLAMA inactive": 12,
-        "LLAMA": 10,
-        "WISDOM": 12,
-        "PHANGS": 9,
+        "LLAMA AGN": 15,
+        "LLAMA inactive": 15,
+        "LLAMA": 25,
+        "WISDOM": 20,
+        "PHANGS": 15,
         "Comparison-control": 14   # make it bigger
     }
         
@@ -1080,17 +1081,17 @@ base_AGN=base_AGN, base_inactive=base_inactive,
 }, exclude_names=exclude1,hist=False)
 
 
-plot_llama_triptych(
-    x_column1='Gini', y_column1='Smoothness_davis',
-    x_column2='Asymmetry', y_column2='Smoothness_davis',
-    x_column3='Asymmetry', y_column3='Gini',
-base_AGN=base_AGN, base_inactive=base_inactive,
-    log_axes={'x_shared': False, 'y_shared': False},
-    bins=10,
-    figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict'],[1.5]], native_res=True, colours_list={
-  "\'strict\' mask and 3.0x3.0kpc aperture": "#83CC90",
-  "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "#00470E"
-}, markers_list={
-  "\'strict\' mask and 3.0x3.0kpc aperture": "D",
-  "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
-}, exclude_names=exclude1,hist=False)
+# plot_llama_triptych(
+#     x_column1='Gini', y_column1='Smoothness_davis',
+#     x_column2='Asymmetry', y_column2='Smoothness_davis',
+#     x_column3='Asymmetry', y_column3='Gini',
+# base_AGN=base_AGN, base_inactive=base_inactive,
+#     log_axes={'x_shared': False, 'y_shared': False},
+#     bins=10,
+#     figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict'],[1.5]], native_res=True, colours_list={
+#   "\'strict\' mask and 3.0x3.0kpc aperture": "#83CC90",
+#   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "#00470E"
+# }, markers_list={
+#   "\'strict\' mask and 3.0x3.0kpc aperture": "D",
+#   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
+# }, exclude_names=exclude1,hist=False)

@@ -22,6 +22,7 @@ from collections import defaultdict
 from scipy.stats import t
 from scipy.stats import ttest_1samp
 from scipy.stats import wilcoxon
+from matplotlib import cm
 pd.set_option('future.no_silent_downcasting', True)
 
 plt.rcParams.update({
@@ -121,8 +122,8 @@ def select_resolution_df(base, minres, maxres, native_flag, res_comp_flag):
 def fit_concentration_50pc(df,
                            R_col='Resolution (pc)',
                            C_col='Concentration',
-                           R_sat=376.8,
-                           C_sat=0.057,
+                           R_sat=400,
+                           C_sat=0.0426,
                            #C_sat=0.081,
                            R_target=50,
                            extrapolate_hires=False):
@@ -249,7 +250,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
         compare_masks = ['strict', 'broad','flux90_strict','flux90_broad','120pc_flux90_strict', '120pc_flux90_broad','120pc_strict', '120pc_broad']
         compare_radii = [0.3, 1, 1.5]
-        colours = ['red', 'blue', 'green', 'orange', 'purple', 'brown','pink', 'gray', 'olive', 'cyan', 'magenta', 'yellow', 'teal', 'navy', 'maroon', 'lime', 'coral', 'gold', 'indigo', 'violet', 'turquoise', 'salmon', 'plum', 'orchid']
+        colours = ['red', 'blue', 'green', 'cadetblue', 'darkseagreen', 'brown','pink', 'gray', 'olive', 'cyan', 'magenta', 'yellow', 'teal', 'navy', 'maroon', 'lime', 'coral', 'gold', 'indigo', 'violet', 'turquoise', 'salmon', 'plum', 'orchid']
         markers = ['o', 's', '^', 'D', 'v', 'P', 'X', '*', '<', '>', 'H', '+', '1', '2', '3', '4', '|', '_', '.', ',', '8', 'p', 'h']
 
         if which_compare is not None:
@@ -1419,20 +1420,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             y_aux = df_y_aux['LCO_selected'] if use_aux else None
 
             # --------------------------------------------------
-            # Error columns (must be *_err)
-            # --------------------------------------------------
-            df_y_agn['LCO_selected_err'] = select_LCO_vectorised(df_y_agn, tel_to_err)
-            df_y_inactive['LCO_selected_err'] = select_LCO_vectorised(df_y_inactive, tel_to_err)
-            if use_aux:
-                df_y_aux['LCO_selected_err'] = select_LCO_vectorised(df_y_aux, tel_to_err) if use_aux else None
-            df_y_agn['LCO_selected_err'] = pd.to_numeric(
-                df_y_agn['LCO_selected_err'], errors='coerce'
-            )
-            df_y_inactive['LCO_selected_err'] = pd.to_numeric(
-                df_y_inactive['LCO_selected_err'], errors='coerce'
-            )
-            if use_aux:df_y_aux['LCO_selected_err'] = pd.to_numeric( df_y_aux['LCO_selected_err'], errors='coerce' )
-            # --------------------------------------------------
             # Errors (now works as designed)
             # --------------------------------------------------
             xerr_agn = get_errorbars(df_x_agn, x_column)
@@ -1972,10 +1959,13 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             ############################### Plot scatter points ##############################
 
-            def connect_resolution_series(ax, x, y, names, res_pc, color='gray', alpha=0.4, lw=1.0, zorder=1):
-                """
-                Connect points with the same name, ordered by increasing resolution (pc).
-                """
+            name_aliases = {
+                "MCG630": "MCG-06-30-015",
+                # Add any future aliases here
+            }
+
+            def connect_resolution_series(ax, x, y, names, res_pc, colour_map,
+                                        alpha=0.6, lw=5.0, zorder=1):
 
                 groups = defaultdict(list)
 
@@ -1988,11 +1978,24 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     if len(pts) < 2:
                         continue
 
-                    pts_sorted = sorted(pts, key=lambda t: t[0])  # increasing resolution
-                    rs, xs, ys = zip(*pts_sorted)
+                    pts_sorted = sorted(pts, key=lambda t: t[0])
+                    _, xs, ys = zip(*pts_sorted)
 
-                    ax.plot(xs, ys, color=color, alpha=alpha, lw=lw, zorder=zorder)
+                    # Convert aliases to the canonical name used in colour_map
+                    lookup_name = name_aliases.get(name, name)
 
+                    # Fall back to a default colour if still not found
+                    colour = colour_map.get(lookup_name, "black")
+
+                    ax.plot(
+                        xs,
+                        ys,
+                        color=colour,
+                        alpha=alpha,
+                        lw=lw,
+                        zorder=zorder,
+                        label=name
+                    )
             def highlight_highest_resolution(
                 ax, x, y, names, res_pc,
                 marker='o', color='black',
@@ -2036,7 +2039,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     )
 
             def draw_x_upper_limit(ax, x, y, color,
-                                bar_pts=8, arrow_pts=10,
+                                bar_pts=8, arrow_pts=11,
                                 lw=1.6, zorder=6):
                 """
                 Draw a fixed-size x upper-limit marker |<-- at (x, y).
@@ -2151,12 +2154,13 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                             ratios_y.append(y_end-y_start)
                 # print('median xratio',np.median(ratios_x))
                 # print('mean xratio',np.mean(ratios_x))
-                print(ratios_y)
+                print('\nConcentation differences with GB24\n')
+                print(list(ratios_y))
                 # print('median yratio',np.median(ratios_y))
                 # print('mean yratio',np.mean(ratios_y))
             if c_column is None:
-                colour_AGN = 'red'
-                colour_inactive = 'blue'
+                colour_AGN = 'magenta'
+                colour_inactive = 'slategrey'
             else:
                 colour_AGN = None
                 colour_inactive = None
@@ -2169,16 +2173,16 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if comb_llama:
 
                 if c_column is None:
-                    colour_AGN = 'black'
-                    colour_inactive = 'black'
+                    colour_AGN = 'black' if not use_phangs else 'red'
+                    colour_inactive = 'black'if not use_phangs else 'red'
                 else:
                     colour_AGN = None
                     colour_inactive = None
 
                 label_AGN = 'LLAMA Galaxies'
                 label_inactive = None
-                marker_AGN = 'o'
-                marker_inactive = 'o'
+                marker_AGN = 'o' if not use_phangs else '*'
+                marker_inactive = 'o'  if not use_phangs else '*'
 
             # ---------------------------------------------------------
             # Shared colour normalization
@@ -2214,114 +2218,114 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             # =========================================================
 
             if soloplot in (None, 'AGN'):
+                if not res_comp:
+                    if c_column is None:
 
-                if c_column is None:
+                        ax_scatter.errorbar(
+                            x_agn, y_agn,
+                            xerr=xerr_agn,
+                            yerr=yerr_agn,
+                            fmt=marker_AGN,
+                            color=colour_AGN,
+                            label=label_AGN,
+                            markersize=10,
+                            capsize=2,
+                            elinewidth=1,
+                            alpha=0.8
+                        )
 
-                    ax_scatter.errorbar(
-                        x_agn, y_agn,
-                        xerr=xerr_agn,
-                        yerr=yerr_agn,
-                        fmt=marker_AGN,
-                        color=colour_AGN,
-                        label=label_AGN,
-                        markersize=8,
-                        capsize=2,
-                        elinewidth=1,
-                        alpha=0.8
-                    )
+                    else:
+
+                        sc_agn = ax_scatter.scatter(
+                            x_agn,
+                            y_agn,
+                            c=c_agn,
+                            cmap='viridis',
+                            norm=norm,
+                            marker=marker_AGN,
+                            label=label_AGN,
+                            s=64,
+                            alpha=0.8,
+                            edgecolors='black',
+                            linewidths=0.5,
+                            zorder=3
+                        )
+
+                        ax_scatter.errorbar(
+                            x_agn,
+                            y_agn,
+                            xerr=xerr_agn,
+                            yerr=yerr_agn,
+                            fmt='none',
+                            ecolor='black',
+                            capsize=2,
+                            elinewidth=1,
+                            zorder=2
+                        )
+
+                    if not comb_llama and plotshared:
+                        for x, y, name in zip(x_agn, y_agn, names_agn):
+                            ax_scatter.text(
+                                float(x + 0.005),
+                                float(y),
+                                name,
+                                fontsize=font_names,
+                                color='darkred',
+                                zorder=10
+                            )
+
+                    elif comb_llama and use_phangs and use_wis:
+                        names_phangs_wis = list(names_phangs) + list(names_wis)
+                        shared_names_agn = [x if x in names_phangs_wis else None for x in names_agn]
+
+                        for x, y, name in zip(x_agn, y_agn, shared_names_agn):
+                            ax_scatter.text(
+                                float(x + 0.005),
+                                float(y),
+                                name,
+                                fontsize=font_names,
+                                color='black',
+                                zorder=10
+                            )
+
+                    elif comb_llama and use_phangs and not use_wis:
+                        shared_names_agn = [x if x in names_wis else None for x in names_agn]
+
+                        for x, y, name in zip(x_agn, y_agn, shared_names_agn):
+                            ax_scatter.text(
+                                float(x + 0.005),
+                                float(y),
+                                name,
+                                fontsize=font_names,
+                                color='black',
+                                zorder=10
+                            )
+
+                    elif comb_llama and use_wis and not use_phangs :
+                        shared_names_agn = [x if x in names_phangs else None for x in names_agn]
+
+                        for x, y, name in zip(x_agn, y_agn, shared_names_agn):
+                            ax_scatter.text(
+                                float(x + 0.005),
+                                float(y),
+                                name,
+                                fontsize=font_names,
+                                color='black',
+                                zorder=10
+                            )
+
+                    elif comb_llama and force_names:
+                        for x, y, name in zip(x_agn, y_agn, names_agn):
+                            ax_scatter.text(
+                                float(x + 0.005),
+                                float(y),
+                                name,
+                                fontsize=font_names,
+                                color='black',
+                                zorder=10
+                            )
 
                 else:
-
-                    sc_agn = ax_scatter.scatter(
-                        x_agn,
-                        y_agn,
-                        c=c_agn,
-                        cmap='viridis',
-                        norm=norm,
-                        marker=marker_AGN,
-                        label=label_AGN,
-                        s=64,
-                        alpha=0.8,
-                        edgecolors='black',
-                        linewidths=0.5,
-                        zorder=3
-                    )
-
-                    ax_scatter.errorbar(
-                        x_agn,
-                        y_agn,
-                        xerr=xerr_agn,
-                        yerr=yerr_agn,
-                        fmt='none',
-                        ecolor='black',
-                        capsize=2,
-                        elinewidth=1,
-                        zorder=2
-                    )
-
-                if not comb_llama and plotshared:
-                    for x, y, name in zip(x_agn, y_agn, names_agn):
-                        ax_scatter.text(
-                            float(x + 0.005),
-                            float(y),
-                            name,
-                            fontsize=font_names,
-                            color='darkred',
-                            zorder=10
-                        )
-
-                elif comb_llama and use_phangs and use_wis:
-                    names_phangs_wis = list(names_phangs) + list(names_wis)
-                    shared_names_agn = [x if x in names_phangs_wis else None for x in names_agn]
-
-                    for x, y, name in zip(x_agn, y_agn, shared_names_agn):
-                        ax_scatter.text(
-                            float(x + 0.005),
-                            float(y),
-                            name,
-                            fontsize=font_names,
-                            color='black',
-                            zorder=10
-                        )
-
-                elif comb_llama and use_phangs and not use_wis:
-                    shared_names_agn = [x if x in names_wis else None for x in names_agn]
-
-                    for x, y, name in zip(x_agn, y_agn, shared_names_agn):
-                        ax_scatter.text(
-                            float(x + 0.005),
-                            float(y),
-                            name,
-                            fontsize=font_names,
-                            color='black',
-                            zorder=10
-                        )
-
-                elif comb_llama and use_wis and not use_phangs:
-                    shared_names_agn = [x if x in names_phangs else None for x in names_agn]
-
-                    for x, y, name in zip(x_agn, y_agn, shared_names_agn):
-                        ax_scatter.text(
-                            float(x + 0.005),
-                            float(y),
-                            name,
-                            fontsize=font_names,
-                            color='black',
-                            zorder=10
-                        )
-
-                elif comb_llama and force_names:
-                    for x, y, name in zip(x_agn, y_agn, names_agn):
-                        ax_scatter.text(
-                            float(x + 0.005),
-                            float(y),
-                            name,
-                            fontsize=font_names,
-                            color='black',
-                            zorder=10
-                        )
-
-                if res_comp:
 
                     res_pc_agn = df_y_agn["Resolution (pc)"].values
                     x_agn = df_y_agn[x_column].values
@@ -2329,143 +2333,165 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     names_agn = df_y_agn["Galaxy"].values
                     res_pc_agn = df_y_agn["Resolution (pc)"].values
 
+                    unique_names = np.unique(names_llama)
+                    cmap = cm.get_cmap('tab10', len(unique_names))
+                    colour_map = {
+                        name: cmap(i)
+                        for i, name in enumerate(unique_names)
+                    }
+                    colour_list = [
+                        "#0072B2",  # blue
+                        "#D55E00",  # vermillion
+                        "#009E73",  # green
+                        "#CC79A7",  # magenta
+                        "#E69F00",  # cadetblue
+                    ]
+                    colour_map = {
+                        name: colour_list[i % len(colour_list)]
+                        for i, name in enumerate(unique_names)
+                    }
+
+                    ax_scatter.axvline(
+                        161.22,
+                        color="grey",
+                        linestyle="--",
+                        linewidth=2,
+                        alpha = 0.7
+                    )
+
                     connect_resolution_series(
                         ax_scatter,
                         x_agn,
                         y_agn,
                         names_agn,
-                        res_pc_agn,
-                        color='black' if c_column is not None else colour_AGN,
-                        alpha=0.5,
-                        lw=1.0,
-                        zorder=1
+                        res_pc_agn, colour_map
                     )
 
-                    highlight_highest_resolution(
-                        ax_scatter,
-                        x_agn,
-                        y_agn,
-                        names_agn,
-                        res_pc_agn,
-                        marker=marker_AGN,
-                        color='black' if c_column is not None else colour_AGN,
-                        size_factor=2.0
-                    )
+                    # highlight_highest_resolution(
+                    #     ax_scatter,
+                    #     x_agn,
+                    #     y_agn,
+                    #     names_agn,
+                    #     res_pc_agn,
+                    #     marker=marker_AGN,
+                    #     color='black' if c_column is not None else colour_AGN,
+                    #     size_factor=2.0
+                    # )
 
             # =========================================================
             # Inactive sample
             # =========================================================
 
             if soloplot in (None, 'inactive'):
+                if not res_comp:
+                    if c_column is None:
 
-                if c_column is None:
+                        if x_column == 'log LX':
 
-                    if x_column == 'log LX':
+                            ax_scatter.errorbar(
+                                x_inactive,
+                                y_inactive,
+                                yerr=yerr_inactive,
+                                fmt='none',
+                                color=colour_inactive,
+                                label=None,
+                                capsize=2,
+                                elinewidth=1,
+                                alpha=0.8
+                            )
 
-                        ax_scatter.errorbar(
-                            x_inactive,
-                            y_inactive,
-                            yerr=yerr_inactive,
-                            fmt='none',
-                            color=colour_inactive,
-                            label=None,
-                            capsize=2,
-                            elinewidth=1,
-                            alpha=0.8
-                        )
+                            for x, y in zip(x_inactive, y_inactive):
 
-                        for x, y in zip(x_inactive, y_inactive):
+                                draw_x_upper_limit(
+                                    ax_scatter,
+                                    x,
+                                    y,
+                                    color=colour_inactive
+                                )
 
-                            draw_x_upper_limit(
-                                ax_scatter,
-                                x,
-                                y,
-                                color=colour_inactive
+                        else:
+
+                            ax_scatter.errorbar(
+                                x_inactive,
+                                y_inactive,
+                                xerr=xerr_inactive,
+                                yerr=yerr_inactive,
+                                fmt=marker_inactive,
+                                color=colour_inactive,
+                                label=label_inactive,
+                                markersize=8,
+                                capsize=2,
+                                elinewidth=1,
+                                alpha=0.8
                             )
 
                     else:
+
+                        sc_inactive = ax_scatter.scatter(
+                            x_inactive,
+                            y_inactive,
+                            c=c_inactive,
+                            cmap='viridis',
+                            norm=norm,
+                            marker=marker_inactive,
+                            label=label_inactive,
+                            s=64,
+                            alpha=0.8,
+                            edgecolors='black',
+                            linewidths=0.5,
+                            zorder=3
+                        )
 
                         ax_scatter.errorbar(
                             x_inactive,
                             y_inactive,
                             xerr=xerr_inactive,
                             yerr=yerr_inactive,
-                            fmt=marker_inactive,
-                            color=colour_inactive,
-                            label=label_inactive,
-                            markersize=8,
+                            fmt='none',
+                            ecolor='black',
                             capsize=2,
                             elinewidth=1,
-                            alpha=0.8
+    linewidth=4,
+                            zorder=2
                         )
+
+                    if not comb_llama and plotshared:
+                        for x, y, name in zip(x_inactive, y_inactive, names_inactive):
+                            ax_scatter.text(
+                                float(x + 0.005),
+                                float(y),
+                                name,
+                                fontsize=font_names,
+                                color='navy',
+                                zorder=10
+                            )
+
+                    elif comb_llama and use_phangs and use_wis:
+                        names_phangs_wis = list(names_phangs) + list(names_wis)
+                        shared_names_inactive = [x if x in names_phangs_wis else None for x in names_inactive]
+
+                        for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
+                            ax_scatter.text(
+                                float(x + 0.005),
+                                float(y),
+                                name,
+                                fontsize=font_names,
+                                color='black',
+                                zorder=10
+                            )
+
+                    elif comb_llama and force_names:
+                        for x, y, name in zip(x_inactive, y_inactive, names_inactive):
+                            ax_scatter.text(
+                                float(x + 0.005),
+                                float(y),
+                                name,
+                                fontsize=font_names,
+                                color='black',
+                                zorder=10
+                            )
 
                 else:
-
-                    sc_inactive = ax_scatter.scatter(
-                        x_inactive,
-                        y_inactive,
-                        c=c_inactive,
-                        cmap='viridis',
-                        norm=norm,
-                        marker=marker_inactive,
-                        label=label_inactive,
-                        s=64,
-                        alpha=0.8,
-                        edgecolors='black',
-                        linewidths=0.5,
-                        zorder=3
-                    )
-
-                    ax_scatter.errorbar(
-                        x_inactive,
-                        y_inactive,
-                        xerr=xerr_inactive,
-                        yerr=yerr_inactive,
-                        fmt='none',
-                        ecolor='black',
-                        capsize=2,
-                        elinewidth=1,
-linewidth=4,
-                        zorder=2
-                    )
-
-                if not comb_llama and plotshared:
-                    for x, y, name in zip(x_inactive, y_inactive, names_inactive):
-                        ax_scatter.text(
-                            float(x + 0.005),
-                            float(y),
-                            name,
-                            fontsize=font_names,
-                            color='navy',
-                            zorder=10
-                        )
-
-                elif comb_llama and use_phangs and use_wis:
-                    names_phangs_wis = list(names_phangs) + list(names_wis)
-                    shared_names_inactive = [x if x in names_phangs_wis else None for x in names_inactive]
-
-                    for x, y, name in zip(x_inactive, y_inactive, shared_names_inactive):
-                        ax_scatter.text(
-                            float(x + 0.005),
-                            float(y),
-                            name,
-                            fontsize=font_names,
-                            color='black',
-                            zorder=10
-                        )
-
-                elif comb_llama and force_names:
-                    for x, y, name in zip(x_inactive, y_inactive, names_inactive):
-                        ax_scatter.text(
-                            float(x + 0.005),
-                            float(y),
-                            name,
-                            fontsize=font_names,
-                            color='black',
-                            zorder=10
-                        )
-
-                if res_comp:
 
                     res_pc_inactive = df_y_inactive["Resolution (pc)"].values
                     x_inactive = df_y_inactive[x_column].values
@@ -2479,23 +2505,19 @@ linewidth=4,
                         x_inactive,
                         y_inactive,
                         names_inactive,
-                        res_pc_inactive,
-                        color='black' if c_column is not None else colour_inactive,
-                        alpha=0.5,
-                        lw=1.0,
-                        zorder=1
+                        res_pc_inactive, colour_map
                     )
 
-                    highlight_highest_resolution(
-                        ax_scatter,
-                        x_inactive,
-                        y_inactive,
-                        names_inactive,
-                        res_pc_inactive,
-                        marker=marker_inactive,
-                        color='black' if c_column is not None else colour_inactive,
-                        size_factor=2.0
-                    )
+                    # highlight_highest_resolution(
+                    #     ax_scatter,
+                    #     x_inactive,
+                    #     y_inactive,
+                    #     names_inactive,
+                    #     res_pc_inactive,
+                    #     marker=marker_inactive,
+                    #     color='black' if c_column is not None else colour_inactive,
+                    #     size_factor=2.0
+                    # )
 
     ############################## Plot comparison samples ##############################
 
@@ -2526,7 +2548,7 @@ linewidth=4,
             if soloplot is None and use_wis and ratiox != 'wis' and ratioy != 'wis':
                 ax_scatter.scatter(
                 x_wis, y_wis,
-                marker='H', color='purple', label='WISDOM', s=56, alpha=0.8, edgecolors='none'
+                marker='H', color='darkseagreen', label='WISDOM', s=56, alpha=0.8, edgecolors='none'
                 )
                 if not comb_llama:
                     for x, y, name in zip(x_wis, y_wis, names_wis):
@@ -2539,14 +2561,14 @@ linewidth=4,
             if soloplot is None and use_phangs and ratiox != 'phangs' and ratioy != 'phangs':
                 ax_scatter.scatter(
                 x_phangs, y_phangs,
-                marker='D', color='orange', label='PHANGS', s=36, alpha=0.8, edgecolors='none'
+                marker='D', color='cadetblue', label='PHANGS', s=36, alpha=0.8, edgecolors='none'
                 )
                 if not comb_llama:
                     for x, y, name in zip(x_phangs, y_phangs, names_phangs):
-                        ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='darkorange', zorder=10)
+                        ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='darkcadetblue', zorder=10)
                 elif comb_llama and plotshared:
                     for x, y, name in zip(x_phangs, y_phangs, shared_names_phangs):
-                        ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='darkorange', zorder=10)
+                        ax_scatter.text(float(x), float(y), name, fontsize=font_names, color='darkcadetblue', zorder=10)
 
             if soloplot is None and use_sim and ratiox != 'sim' and ratioy != 'sim':
                 ax_scatter.scatter(
@@ -2669,7 +2691,7 @@ linewidth=4,
             os.makedirs(hist_dir, exist_ok=True)
 
             fig_hist, ax_hist_only = plt.subplots(figsize=(6, 4))
-
+            
             # --- AGN ---
             if soloplot in (None, 'AGN') and not comb_llama:
                 # ax_hist_only.hist(
@@ -2678,26 +2700,26 @@ linewidth=4,
                 # )
                 ax_hist_only.hist(
                     y_agn, bins=bin_edges,
-                    color='red', linewidth=4, label='AGN', alpha=0.5 #,histtype='step'
+                    color=colour_AGN, linewidth=4, label='AGN', alpha=0.8 #,histtype='step'
                 )
                 median_agn = np.median(y_agn)
-                ax_hist_only.axvline(median_agn, color='red', linestyle='--')
+                ax_hist_only.axvline(median_agn, color=colour_AGN, linestyle='--')
                 ax_hist_only.text(
                     median_agn-(bin_edges[1]-bin_edges[0])/2, ax_hist_only.get_ylim()[1]*0.9,
-                    f"{median_agn:.2f}", color='darkred', fontsize=14, ha='center'
+                    f"{median_agn:.2f}", color='dark'+colour_AGN, fontsize=14, ha='center'
                 )
 
             # --- Inactive ---
             if soloplot in (None, 'inactive') and not comb_llama:
                 ax_hist_only.hist(
                     y_inactive, bins=bin_edges,
-                    color='blue', histtype='step', linewidth=4, label='Inactive'
+                    color=colour_inactive, histtype='step', linewidth=4, label='Inactive'
                 )
                 median_inactive = np.median(y_inactive)
-                ax_hist_only.axvline(median_inactive, color='blue', linestyle='--')
+                ax_hist_only.axvline(median_inactive, color=colour_inactive, linestyle='--')
                 ax_hist_only.text(
                     median_inactive-(bin_edges[1]-bin_edges[0])/2, ax_hist_only.get_ylim()[1]*0.9,
-                    f"{median_inactive:.2f}", color='navy', fontsize=14, ha='center'
+                    f"{median_inactive:.2f}", color='dark'+colour_inactive, fontsize=14, ha='center'
                 )
 
             # --- Combined LLAMA ---
@@ -2706,7 +2728,7 @@ linewidth=4,
                 combined_y = pd.concat([y_agn, y_inactive])
                 ax_hist_only.hist(
                     combined_y, bins=bin_edges,
-                    color='black', linewidth=4, label='LLAMA Galaxies', alpha=0.5 #,histtype='step'
+                    color='red', linewidth=4, label='LLAMA Galaxies', alpha=0.8 #,histtype='step'
                 )
                 # median_combined = np.median(combined_y)
                 # ax_hist_only.axvline(median_combined, color='black', linestyle='--')
@@ -2731,25 +2753,25 @@ linewidth=4,
             if use_wis:
                 ax_hist_only.hist(
                     y_wis, bins=bin_edges,
-                    color='purple', histtype='step', linewidth=4, label='WISDOM'
+                    color='darkseagreen', histtype='step', linewidth=4, label='WISDOM'
                 )
                 # median_wis = np.median(y_wis)
-                # ax_hist_only.axvline(median_wis, color='purple', linestyle='--')
+                # ax_hist_only.axvline(median_wis, color='darkseagreen', linestyle='--')
                 # ax_hist_only.text(
                 #     median_wis, ax_hist_only.get_ylim()[1]*0.9,
-                #     f"{median_wis:.2f}", color='purple', fontsize=9, ha='center'
+                #     f"{median_wis:.2f}", color='darkseagreen', fontsize=9, ha='center'
                 # )
 
             if use_phangs:
                 ax_hist_only.hist(
                     y_phangs, bins=bin_edges,
-                    color='orange', histtype='step', linewidth=4, label='PHANGS'
+                    color='cadetblue', histtype='step', linewidth=4, label='PHANGS'
                 )
                 # median_phangs = np.median(y_phangs)
-                # ax_hist_only.axvline(median_phangs, color='orange', linestyle='--')
+                # ax_hist_only.axvline(median_phangs, color='cadetblue', linestyle='--')
                 # ax_hist_only.text(
                 #     median_phangs, ax_hist_only.get_ylim()[1]*0.9,
-                #     f"{median_phangs:.2f}", color='orange', fontsize=9, ha='center'
+                #     f"{median_phangs:.2f}", color='cadetblue', fontsize=9, ha='center'
                 # )
 
             if use_sim:
@@ -2786,22 +2808,22 @@ linewidth=4,
             legend_elements = []
 
             if soloplot in (None, 'AGN') and not comb_llama:
-                legend_elements.append(Line2D([0], [0], color='red', lw=6, alpha=0.5, label='AGN'))
+                legend_elements.append(Line2D([0], [0], color=colour_AGN, lw=6, alpha=0.5, label='AGN'))
 
             if soloplot in (None, 'inactive') and not comb_llama:
-                legend_elements.append(Line2D([0], [0], color='blue', lw=6, alpha=0.5, label='Inactive'))
+                legend_elements.append(Line2D([0], [0], color=colour_inactive, lw=6, alpha=0.5, label='Inactive'))
 
             if comb_llama:
-                legend_elements.append(Line2D([0], [0], color='black', lw=6, alpha=0.5, label='LLAMA Galaxies'))
+                legend_elements.append(Line2D([0], [0], color='red', lw=6, alpha=0.5, label='LLAMA Galaxies'))
 
             if soloplot is None and use_gb21:
                 legend_elements.append(Line2D([0], [0], color='green', lw=6, alpha=0.5, label='GB21'))
 
             if use_wis:
-                legend_elements.append(Line2D([0], [0], color='purple', lw=6, alpha=0.5, label='WISDOM'))
+                legend_elements.append(Line2D([0], [0], color='darkseagreen', lw=6, alpha=0.5, label='WISDOM'))
 
             if use_phangs:
-                legend_elements.append(Line2D([0], [0], color='orange', lw=6, alpha=0.5, label='PHANGS'))
+                legend_elements.append(Line2D([0], [0], color='cadetblue', lw=6, alpha=0.5, label='PHANGS'))
 
             if use_sim:
                 legend_elements.append(Line2D([0], [0], color='brown', lw=6, alpha=0.5, label='Simulations'))
@@ -2903,26 +2925,26 @@ linewidth=4,
                 # )
                 ax_hist_x.hist(
                     x_agn, bins=bin_edges_x,
-                    color='red', linewidth=4,alpha=0.5, label='AGN'
+                    color=colour_AGN, linewidth=4,alpha=0.8, label='AGN'
                 )
                 median_agn = np.median(x_agn)
                 ax_hist_x.axvline(median_agn-(bin_edges_x[1]-bin_edges_x[0])/2, color='red', linestyle='--')
                 ax_hist_x.text(
                     median_agn, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_agn:.2f}", color='darkred', fontsize=14, ha='center'
+                    f"{median_agn:.2f}", color='dark'+colour_AGN, fontsize=14, ha='center'
                 )
 
             # --- Inactive ---
             if soloplot in (None, 'inactive') and not comb_llama:
                 ax_hist_x.hist(
                     x_inactive, bins=bin_edges_x,
-                    color='blue', histtype='step', linewidth=4, label='Inactive'
+                    color=colour_inactive, histtype='step', linewidth=4, label='Inactive'
                 )
                 median_inactive = np.median(x_inactive)
                 ax_hist_x.axvline(median_inactive-(bin_edges_x[1]-bin_edges_x[0])/2, color='blue', linestyle='--')
                 ax_hist_x.text(
                     median_inactive, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_inactive:.2f}", color='navy', fontsize=14, ha='center'
+                    f"{median_inactive:.2f}", color='dark'+colour_inactive, fontsize=14, ha='center'
                 )
 
             # --- Combined LLAMA ---
@@ -2931,7 +2953,7 @@ linewidth=4,
                 combined_x = pd.concat([x_agn, x_inactive])
                 ax_hist_x.hist(
                     combined_x, bins=bin_edges_x,
-                    color='black', linewidth=4,alpha=0.5, label='LLAMA Galaxies'
+                    color='red', linewidth=4,alpha=0.8, label='LLAMA Galaxies'
                 )
                 # median_combined = np.median(combined_x)
                 # ax_hist_x.axvline(median_combined, color='black', linestyle='--')
@@ -2956,25 +2978,25 @@ linewidth=4,
             if use_wis:
                 ax_hist_x.hist(
                     x_wis, bins=bin_edges_x,
-                    color='purple', histtype='step', linewidth=4, label='WISDOM'
+                    color='darkseagreen', histtype='step', linewidth=4, label='WISDOM'
                 )
                 # median_wis = np.median(x_wis)
-                # ax_hist_x.axvline(median_wis, color='purple', linestyle='--')
+                # ax_hist_x.axvline(median_wis, color='darkseagreen', linestyle='--')
                 # ax_hist_x.text(
                 #     median_wis, ax_hist_x.get_ylim()[1]*0.9,
-                #     f"{median_wis:.2f}", color='purple', fontsize=9, ha='center'
+                #     f"{median_wis:.2f}", color='darkseagreen', fontsize=9, ha='center'
                 # )
 
             if use_phangs:
                 ax_hist_x.hist(
                     x_phangs, bins=bin_edges_x,
-                    color='orange', histtype='step', linewidth=4, label='PHANGS'
+                    color='cadetblue', histtype='step', linewidth=4, label='PHANGS'
                 )
                 # median_phangs = np.median(x_phangs)
-                # ax_hist_x.axvline(median_phangs, color='orange', linestyle='--')
+                # ax_hist_x.axvline(median_phangs, color='cadetblue', linestyle='--')
                 # ax_hist_x.text(
                 #     median_phangs, ax_hist_x.get_ylim()[1]*0.9,
-                #     f"{median_phangs:.2f}", color='orange', fontsize=9, ha='center'
+                #     f"{median_phangs:.2f}", color='cadetblue', fontsize=9, ha='center'
                 # )
 
             if use_sim:
@@ -3055,22 +3077,22 @@ linewidth=4,
             legend_elements = []
 
             if soloplot in (None, 'AGN') and not comb_llama:
-                legend_elements.append(Line2D([0], [0], color='red', lw=6, alpha=0.8, label='AGN'))
+                legend_elements.append(Line2D([0], [0], color=colour_AGN, lw=6, alpha=0.8, label='AGN'))
 
             if soloplot in (None, 'inactive') and not comb_llama:
-                legend_elements.append(Line2D([0], [0], color='blue', lw=6, alpha=0.8, label='Inactive'))
+                legend_elements.append(Line2D([0], [0], color=colour_inactive, lw=6, alpha=0.8, label='Inactive'))
 
             if comb_llama:
-                legend_elements.append(Line2D([0], [0], color='black', lw=6, alpha=0.8, label='LLAMA Galaxies'))
+                legend_elements.append(Line2D([0], [0], color='red', lw=6, alpha=0.8, label='LLAMA Galaxies'))
 
             if soloplot is None and use_gb21:
                 legend_elements.append(Line2D([0], [0], color='green', lw=6, alpha=0.8, label='GB21'))
 
             if use_wis:
-                legend_elements.append(Line2D([0], [0], color='purple', lw=6, alpha=0.8, label='WISDOM'))
+                legend_elements.append(Line2D([0], [0], color='darkseagreen', lw=6, alpha=0.8, label='WISDOM'))
 
             if use_phangs:
-                legend_elements.append(Line2D([0], [0], color='orange', lw=6, alpha=0.8, label='PHANGS'))
+                legend_elements.append(Line2D([0], [0], color='cadetblue', lw=6, alpha=0.8, label='PHANGS'))
 
             if use_sim:
                 legend_elements.append(Line2D([0], [0], color='brown', lw=6, alpha=0.8, label='Simulations'))
@@ -3139,18 +3161,18 @@ linewidth=4,
 
                 if use_wis:
                     ax_hist.hist(y_wis, bins=bin_edges, orientation='horizontal',
-                                color='purple', histtype='step', linewidth=4, label='WISDOM')
+                                color='darkseagreen', histtype='step', linewidth=4, label='WISDOM')
                     median_wis = np.median(y_wis)
-                    ax_hist.axhline(median_wis, color='purple', linestyle='--')
+                    ax_hist.axhline(median_wis, color='darkseagreen', linestyle='--')
                     ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_wis-(bin_edges[1]-bin_edges[0])/2,
-                                f"{median_wis:.2f}", color='purple', fontsize=8, va='center')
+                                f"{median_wis:.2f}", color='darkseagreen', fontsize=8, va='center')
                 if use_phangs:
                     ax_hist.hist(y_phangs, bins=bin_edges, orientation='horizontal',
-                                color='orange', histtype='step', linewidth=4, label='PHANGS')
+                                color='cadetblue', histtype='step', linewidth=4, label='PHANGS')
                     median_phangs = np.median(y_phangs)
-                    ax_hist.axhline(median_phangs, color='orange', linestyle='--')
+                    ax_hist.axhline(median_phangs, color='cadetblue', linestyle='--')
                     ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_phangs-(bin_edges[1]-bin_edges[0])/2,
-                                f"{median_phangs:.2f}", color='orange', fontsize=8, va='center')
+                                f"{median_phangs:.2f}", color='cadetblue', fontsize=8, va='center')
                 if use_sim:
                     ax_hist.hist(y_sim, bins=bin_edges, orientation='horizontal',
                                 color='brown', histtype='step', linewidth=4, label='Simulations')
@@ -3284,7 +3306,7 @@ linewidth=4,
 
                         diff = float(val_agn) - float(val_inactive)
 
-                        print(agn_row['Name_clean'],val_agn,inactive_row['Name_clean'],val_inactive,diff)
+                        # print(agn_row['Name_clean'],val_agn,inactive_row['Name_clean'],val_inactive,diff)
                         diffs.append(diff)
                         diffs_obs[obsclass].append(diff)
                         # denom = abs(val_agn) + abs(val_inactive)
@@ -3339,6 +3361,7 @@ linewidth=4,
                                 continue
 
                             diff = float(val_agn) - float(val_inactive)
+                            print(agn_row['Name_clean'],val_agn,inactive_row['Name_clean'],val_inactive,diff)
                             
                             # denom = abs(val_agn) + abs(val_inactive)
                             # if denom == 0:
@@ -3435,14 +3458,14 @@ linewidth=4,
                 #########################################################
                 font = 20
                 bin_edges = np.histogram_bin_edges(diffs, bins=12)
-                print('\nbin edges=\n')
-                print(list(bin_edges))
+                # print('\nbin edges=\n')
+                # print(list(bin_edges))
                 if y_column == 'avg_mass_dens':
                     bin_edges = bin_edges_mass_dens_large
 
                 fig, ax = plt.subplots(figsize=(8, 5))
                 ax.hist(diffs, bins=bin_edges, color="lightgrey", histtype='bar', linewidth=4)
-                ax.axvline(mean, color="red", linestyle="--", label=f"Mean = {mean:.2g} ± {mean_err:.2g}")
+                ax.axvline(mean, color="red", linestyle="-", label=f"Mean = {mean:.2g} ± {mean_err:.2g}",linewidth=3)
                 ax.axvline(mean - sigma, color="blue", linestyle="--")
                 ax.axvline(mean + sigma, color="blue", linestyle="--",label=f"$1\sigma = {(sigma):.2g}$" if sigma > 0 else r"$1\sigma = \infty$")
                 ax.axvline(0, color="black", linestyle="solid")  # reference line
@@ -3482,7 +3505,7 @@ linewidth=4,
 
                 fig, ax = plt.subplots(figsize=(8, 5))
                 ax.hist(diffs_frac , bins=bin_edges, color="lightgrey", histtype='bar', linewidth=4)
-                ax.axvline(mean_frac , color="red", linestyle="--", label=f"Mean = {mean_frac :.2g} ± {mean_err_frac:.2g}")
+                ax.axvline(mean_frac , color="red", linestyle="-", label=f"Mean = {mean_frac :.2g} ± {mean_err_frac:.2g}",linewidth=3)
                 ax.axvline(mean_frac  - sigma_frac , color="blue", linestyle="--")
                 ax.axvline(mean_frac  + sigma_frac , color="blue", linestyle="--",label=f"$1\sigma = {(sigma_frac):.2g}$" if sigma_frac > 0 else r"$1\sigma = \infty$")
                 ax.axvline(0, color="black", linestyle="solid")  # reference line
@@ -3547,8 +3570,8 @@ linewidth=4,
                     ax.axvline(
                         stats["mean"],
                         color=obs_colors[obsclass],
-                        linestyle="--",
-                        linewidth=2,  label=f"{labels[obsclass]} Mean = {stats['mean'] :.2g} ± {stats['mean_err']:.2g}")
+                        linestyle="-",
+                        linewidth=3,  label=f"{labels[obsclass]} Mean = {stats['mean'] :.2g} ± {stats['mean_err']:.2g}")
                     
 
                     # ax.axvline(
@@ -3949,18 +3972,18 @@ linewidth=4,
 
                 if soloplot is None and use_wis:
                     ax_hist.hist(y_wis, bins=bin_edges, orientation='horizontal',
-                                color='purple', histtype='step', linewidth=4, label='WISDOM')
+                                color='darkseagreen', histtype='step', linewidth=4, label='WISDOM')
                     median_wis = np.median(y_wis)
-                    ax_hist.axhline(median_wis, color='purple', linestyle='--')
+                    ax_hist.axhline(median_wis, color='darkseagreen', linestyle='--')
                     ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_wis,
-                                f"{median_wis:.2f}", color='purple', fontsize=8, va='center')
+                                f"{median_wis:.2f}", color='darkseagreen', fontsize=8, va='center')
                 if soloplot is None and use_phangs:
                     ax_hist.hist(y_phangs, bins=bin_edges, orientation='horizontal',
-                                color='orange', histtype='step', linewidth=4, label='PHANGS')
+                                color='cadetblue', histtype='step', linewidth=4, label='PHANGS')
                     median_phangs = np.median(y_phangs)
-                    ax_hist.axhline(median_phangs, color='orange', linestyle='--')
+                    ax_hist.axhline(median_phangs, color='cadetblue', linestyle='--')
                     ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_phangs,
-                                f"{median_phangs:.2f}", color='orange', fontsize=8, va='center')
+                                f"{median_phangs:.2f}", color='cadetblue', fontsize=8, va='center')
                 if soloplot is None and use_sim:
                     ax_hist.hist(y_sim, bins=bin_edges, orientation='horizontal',
                                 color='brown', histtype='step', linewidth=4, label='Simulations')
@@ -4537,8 +4560,8 @@ axis_label_lookup = {
 masks = ['broad','strict','flux90_strict']
 radii = [0.3,1.5]
 
-masks = ['strict','broad']
-radii = [1.5]
+masks = ['strict']
+radii = [0.3]
 
 for mask in masks:
     for R_kpc in radii:
@@ -4576,7 +4599,8 @@ for mask in masks:
         # plot_llama_property('Resolution (pc)', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
         # plot_llama_property('Resolution (pc)', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
         # plot_llama_property('Resolution (pc)', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
-        plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
+       
+        # plot_llama_property('Resolution (pc)', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False)
 
 
         # plot_llama_property('Resolution (pc)', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,isolate_names=['NGC 3351','NGC 4254','NGC 6814','NGC 7582','MCG-06-30-015'],res_comp=True,comb_llama=True,yhist=False,manual_limits=[0,400,None,None])
@@ -4596,7 +4620,6 @@ for mask in masks:
         # plot_llama_property('avg_mass_dens', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
         # plot_llama_property('avg_mass_dens', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
         # plot_llama_property('avg_mass_dens', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False)#,c_column = 'Distance (Mpc)')
-        # plot_llama_property('avg_mass_dens', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True,logy=True,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,nativex=True,comb_llama=True,yhist=False,c_column = 'Distance (Mpc)')
 
 # #         # ############### Clumping factor plot #############
 
@@ -4622,8 +4645,7 @@ for mask in masks:
         # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
         # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
         # plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        # plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        # plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
         # plot_llama_property('emission_pixels', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
 
 
@@ -4635,6 +4657,7 @@ for mask in masks:
         
         # plot_llama_property('emission_pixels', 'Resolution (pc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativex=True,nativey=True)
 
+        # plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
 
 
         # plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)

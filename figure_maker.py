@@ -8,6 +8,9 @@ from matplotlib.transforms import Affine2D
 from astropy.table import Table
 from matplotlib import rcParams
 from matplotlib.gridspec import GridSpec
+from pdf2image import convert_from_path
+import numpy as np
+import fitz
 
 
 llamatab = Table.read('/Users/administrator/Astro/LLAMA/llama_main_properties.fits', format='fits')
@@ -21,18 +24,44 @@ def figure_maker(
     norm=False, colourbar=False
 ):
 
-    fig = plt.figure(figsize=(fig_x, fig_y), constrained_layout=True)
-
-    if colourbar:
-        gs = GridSpec(rows, cols + 1, figure=fig,
-                      width_ratios=[1]*cols + [0.25])
-    else:
-        gs = GridSpec(rows, cols, figure=fig)
-
     if type == 'AGN':
         table = llamatab_AGN
     else:
         table = llamatab_inactive
+
+    # create output PDF
+    out = fitz.open()
+
+    # A4-ish page size in points
+    page_width = fig_x * 72
+    page_height = fig_y * 72
+
+    page = out.new_page(
+        width=page_width,
+        height=page_height
+    )
+
+    # grid spacing
+    margin = 30
+    cbar_width = 60 if colourbar else 0
+
+    # gaps between panels
+    h_gap = 7   # horizontal spacing between columns
+    v_gap = 12.5   # vertical spacing between rows (increase this for more vertical separation)
+
+    plot_width = (
+        page_width
+        - 2*margin
+        - cbar_width
+        - (cols-1)*h_gap
+    ) / cols
+
+    plot_height = (
+        page_height
+        - 2*margin
+        - (rows-1)*v_gap
+    ) / rows
+
 
     plot_index = 0
 
@@ -44,59 +73,109 @@ def figure_maker(
         row = plot_index // cols
         col = plot_index % cols
 
-        ax = fig.add_subplot(gs[row, col])
-
         # --- Build file path ---
         if m0 and rebin is None:
-            subplot_path = path + f'/{R_kpc}_no_rebin_{mask}_{table["id"][i]}_native'
+            subplot_path = (
+                path +
+                f'/{R_kpc}_no_rebin_{mask}_{table["id"][i]}_native'
+            )
         elif not m0 and rebin is None:
-            subplot_path = path + f'/0.3_no_rebin_{table["id"][i]}_native'
+            subplot_path = (
+                path +
+                f'/0.3_no_rebin_{table["id"][i]}_native'
+            )
         elif m0 and rebin is not None:
-            subplot_path = path + f'/{R_kpc}_{rebin}_{mask}_{table["id"][i]}'
+            subplot_path = (
+                path +
+                f'/{R_kpc}_{rebin}_{mask}_{table["id"][i]}'
+            )
         else:
-            subplot_path = path + f'/{R_kpc}_{rebin}_{table["id"][i]}'
+            subplot_path = (
+                path +
+                f'/{R_kpc}_{rebin}_{table["id"][i]}'
+            )
 
         if norm:
             subplot_path += '_norm'
 
-        subplot_path += '.png'
+        subplot_path += '.pdf'
+
+
         try:
-            subplot = mpimg.imread(subplot_path)
+            pdf = fitz.open(subplot_path)
         except:
-            return
+            continue
 
-        ax.imshow(subplot)
-        ax.axis('off')
-        ax.set_title(table['name'][i], fontsize=11, pad=1)
 
+        x0 = margin + col*(plot_width + h_gap)
+        y0 = margin + row*(plot_height + v_gap)
+
+        rect = fitz.Rect(
+            x0,
+            y0,
+            x0 + plot_width,
+            y0 + plot_height
+        )
+
+        # insert the PDF page directly
+        page.show_pdf_page(
+            rect,
+            pdf,
+            0
+        )
+
+        text = table['name'][i]
+
+        text_width = fitz.get_text_length(
+            text,
+            fontsize=11
+        )
+
+        x = x0 + (plot_width - text_width)/2
+
+        # put text above subplot
+        y = y0 - 2
+
+        page.insert_text(
+            (x, y),
+            text,
+            fontsize=11
+        )
         plot_index += 1
 
-    # ---------------------------------------
-    # Add colourbar spanning all rows
-    # ---------------------------------------
+
+    # Add colourbar
     if colourbar:
 
-        flux_flag = True if mask == 'flux90_strict' else False
-        colourbar_path = '/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits' + f'/colourbar_{R_kpc}_{rebin}_{flux_flag}.png'
-        try:
-            cbar_img = mpimg.imread(colourbar_path)
-        except:
-            return
+        flux_flag = mask == 'flux90_strict'
 
-        cbar_ax = fig.add_subplot(gs[:, -1])  # span all rows, last column
-        cbar_ax.imshow(cbar_img)
-        cbar_ax.axis('off')
+        colourbar_path = (
+            '/Users/administrator/Astro/LLAMA/ALMA/'
+            'gas_distribution_fits'
+            f'/colourbar_{R_kpc}_{rebin}_{flux_flag}.pdf'
+        )
 
-    #fig.suptitle(fig_title, y=0.99)
+        cbar_pdf = fitz.open(colourbar_path)
 
-    plt.savefig(
-        '/Users/administrator/Astro/LLAMA/ALMA/' + f'{fig_title}.pdf',
-        bbox_inches='tight',
-        pad_inches=0.2,
-        format='png'
+        cbar_rect = fitz.Rect(
+            page_width-cbar_width,
+            margin,
+            page_width-margin,
+            page_height-margin
+        )
+
+        page.show_pdf_page(
+            cbar_rect,
+            cbar_pdf,
+            0
+        )
+
+
+    out.save(
+        f'/Users/administrator/Astro/LLAMA/ALMA/{fig_title}.pdf'
     )
 
-    plt.close(fig)
+    out.close()
 
 
 def stack_with_colourbar(
@@ -104,67 +183,70 @@ def stack_with_colourbar(
     bottom_image,
     colourbar_image,
     output_file,
-    figsize=(6, 8),
-    width_ratios=(1, 0.1),
 ):
-    """
-    Stack two images vertically with a colourbar image alongside.
 
-    Parameters
-    ----------
-    top_image : str
-        Path to top image.
-    bottom_image : str
-        Path to bottom image.
-    colourbar_image : str
-        Path to tall colourbar image.
-    output_file : str
-        Output filename.
-    figsize : tuple
-        Figure size in inches.
-    width_ratios : tuple
-        Relative widths of image and colourbar columns.
-    """
+    # Open PDFs
+    top_pdf = fitz.open(top_image)
+    bottom_pdf = fitz.open(bottom_image)
+    cbar_pdf = fitz.open(colourbar_image)
 
-    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    # Create new PDF
+    out = fitz.open()
 
-    gs = GridSpec(
-        2,
-        2,
-        figure=fig,
-        width_ratios=width_ratios,
-        height_ratios=[1, 1],
+    # Page sizes
+    top_page = top_pdf[0]
+    width = top_page.rect.width
+    height = top_page.rect.height
+
+    # Create new page (roughly double height + colourbar space)
+    new_page = out.new_page(
+        width=width * 1.15,
+        height=height * 2
     )
 
-    ax_top = fig.add_subplot(gs[0, 0])
-    ax_bottom = fig.add_subplot(gs[1, 0])
-    ax_cbar = fig.add_subplot(gs[:, 1])
-
-    # Read images
-    top = mpimg.imread(top_image)
-    bottom = mpimg.imread(bottom_image)
-    cbar = mpimg.imread(colourbar_image)
-
-    # Display
-    ax_top.imshow(top)
-    ax_bottom.imshow(bottom)
-    ax_cbar.imshow(cbar)
-
-    # Remove axes
-    for ax in (ax_top, ax_bottom, ax_cbar):
-        ax.axis("off")
-
-    plt.tight_layout()
-
-    plt.savefig(
-        output_file,
-        dpi=300,
-        bbox_inches="tight",
-        pad_inches=0.05,
+    # Define placements
+    top_rect = fitz.Rect(
+        0,
+        0,
+        width,
+        height
     )
 
-    plt.close(fig)
+    bottom_rect = fitz.Rect(
+        0,
+        height,
+        width,
+        height * 2
+    )
 
+    cbar_rect = fitz.Rect(
+        width,
+        0,
+        width * 1.15,
+        height * 2
+    )
+
+    # Insert PDFs without rasterisation
+    new_page.show_pdf_page(
+        top_rect,
+        top_pdf,
+        0
+    )
+
+    new_page.show_pdf_page(
+        bottom_rect,
+        bottom_pdf,
+        0
+    )
+
+    new_page.show_pdf_page(
+        cbar_rect,
+        cbar_pdf,
+        0
+    )
+
+    out.save(output_file)
+    out.close()
 
     
 # fig_x = 12
@@ -182,12 +264,8 @@ for R_kpc in [1.5,0.3]:
 
 
 
-    # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Moment 0 maps for LLAMA AGN {2*R_kpc}x{2*R_kpc}kpc','AGN',norm=False,colourbar=False,R_kpc=R_kpc)
-    # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'Moment 0 maps for LLAMA Inactive galaxies{2*R_kpc}x{2*R_kpc}kpc','inactive',norm=False,colourbar=False,R_kpc=R_kpc)
-
-
-    # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Strict mask Moment 0 maps for LLAMA AGN {2*R_kpc}x{2*R_kpc}kpc','AGN',rebin=None,mask='strict',R_kpc=R_kpc)
-    # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'Strict mask Moment 0 maps for LLAMA Inactive galaxies {2*R_kpc}x{2*R_kpc}kpc','inactive',rebin=None,mask='strict',R_kpc=R_kpc)
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'Strict mask Moment 0 maps for LLAMA AGN {2*R_kpc}x{2*R_kpc}kpc','AGN',rebin=None,mask='strict',R_kpc=R_kpc)
+    figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'Strict mask Moment 0 maps for LLAMA Inactive galaxies {2*R_kpc}x{2*R_kpc}kpc','inactive',rebin=None,mask='strict',R_kpc=R_kpc)
 
     # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN/m0_plots',f'flux masked 120pc beam Moment 0 maps for LLAMA AGN {2*R_kpc}x{2*R_kpc}kpc','AGN',rebin=120,mask='flux90_strict',R_kpc=R_kpc)
     # figure_maker(fig_y,fig_x,cols,rows,'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive/m0_plots',f'flux masked 120pc beam Moment 0 maps for LLAMA Inactive galaxies {2*R_kpc}x{2*R_kpc}kpc','inactive',rebin=120,mask='flux90_strict',R_kpc=R_kpc)
@@ -203,6 +281,6 @@ for R_kpc in [1.5,0.3]:
 stack_with_colourbar(
     top_image="/Users/administrator/Astro/LLAMA/ALMA/Strict mask Moment 0 maps for LLAMA AGN, normalised 3.0x3.0kpc.pdf",
     bottom_image="/Users/administrator/Astro/LLAMA/ALMA/Strict mask Moment 0 maps for LLAMA Inactive galaxies, normalised 3.0x3.0kpc.pdf",
-    colourbar_image="/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/colourbar_1.5_None_False.png",
+    colourbar_image="/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/colourbar_1.5_None_False.pdf",
     output_file="/Users/administrator/Astro/LLAMA/ALMA/Strict mask Moment 0 maps for combined LLAMA, normalised 3.0x3.0kpc.pdf",
 )
