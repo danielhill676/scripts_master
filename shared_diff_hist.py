@@ -34,6 +34,7 @@ for diffs_frac, metric in zip(
     # -----------------------------
     # Summary statistics
     # -----------------------------
+    n = len(diffs_frac)
     mean_frac = np.mean(diffs_frac)
     sigma_frac = np.std(diffs_frac, ddof=1)
     mean_err_frac = sigma_frac / np.sqrt(len(diffs_frac))
@@ -56,7 +57,7 @@ for diffs_frac, metric in zip(
     ax.set_xlabel(rf"{metric} fractional difference equiv",fontsize=font)
     ax.set_ylabel("Number of measurements",fontsize=font)
     t_stat, p_value_t = ttest_1samp(diffs_frac, 1)
-    ax.set_title(f"One-sample t-test p-value: {p_value_t:.4f}", fontsize=font)
+    ax.set_title(f"p = {(p_value_t*100):.3f}\% \qquad N = {n}", fontsize=font)
 
 
 

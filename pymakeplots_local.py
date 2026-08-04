@@ -74,7 +74,7 @@ for name in os.listdir(base_dir):
     # if os.path.exists(outsubdir+'/_allplots.pdf'):
     #     continue
 
-    if name not in['NGC5845']:
+    if name not in['NGC4254']:
         continue
 
     print(f"Processing {name}")

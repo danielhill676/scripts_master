@@ -5,6 +5,7 @@ from matplotlib import gridspec
 import itertools
 import os
 from IPython.display import display
+from matplotlib.ticker import MaxNLocator
 
 plt.rcParams.update({
     "text.usetex": True,
@@ -64,7 +65,9 @@ def plot_llama_triptych(
     isolate_names=None,
     m='strict',
     r=1.5, comb_llama=False, 
-    which_compare = None, native_res=False, colours_list=None, markers_list = None, hist = True
+    which_compare = None, native_res=False, colours_list=None, markers_list = None, hist = True, comp = None, xlims=None,
+ylims=None,
+max_major_ticks=5
 ):
 
     if xerr_cols is None:
@@ -315,18 +318,18 @@ def plot_llama_triptych(
 
 
         default_label_styles = {
-            "LLAMA AGN": ("s", 'magenta',8),
-            "LLAMA inactive": ("D", 'slategrey',8),
-            "Comparison-control": ("*", "dodgerblue",6),
-            "WISDOM": ("H", "darkseagreen",8),
-            "PHANGS": ("D", "cadetblue",6)
+            "LLAMA AGN": ("s", 'magenta',8, 0.95),
+            "LLAMA inactive": ("D", 'slategrey',8, 0.95),
+            "Comparison-control": ("*", "dodgerblue",6, 0.95),
+            "WISDOM": ("H", "darkseagreen",8, 0.5),
+            "PHANGS": ("D", "cadetblue",6,0.5)
         }
 
         # Build label_styles
         label_styles = {}
 
         if comb_llama:
-            label_styles['LLAMA'] = ('*', 'red',14)  # Combined AGN+inactive
+            label_styles['LLAMA'] = ('*', 'red',14, 0.95)  # Combined AGN+inactive
         else:
             if 'LLAMA AGN' in datasets_for_plotting:
                 label_styles['LLAMA AGN'] = default_label_styles['LLAMA AGN']
@@ -353,14 +356,14 @@ def plot_llama_triptych(
         for key in panels:
             ax = axes[key]
             pdata = panels[key]
-            for label, (marker, color, size) in label_styles.items():
+            for label, (marker, color, size, opac) in label_styles.items():
                 x, y, xerr, yerr, names = pdata[label]
                 ax.errorbar(
                     x, y,
                     xerr=xerr, yerr=yerr,
                     fmt=marker, markersize=size,
                     capsize=2, elinewidth=1,
-                    alpha=0.85, color=color,
+                    alpha=opac, color=color,
                     zorder=10 if label == "LLAMA" else 5,
                     label=label if key == "left" else None
                 )
@@ -467,6 +470,30 @@ def plot_llama_triptych(
             panels["bottom"][label][1] for label in label_styles
         ]))
 
+
+        # --------------------------------------------------
+        # Manual axis limits (optional)
+        # --------------------------------------------------
+
+        if xlims is not None:
+            if "left" in xlims:
+                ax_left.set_xlim(xlims["left"])
+            if "top" in xlims:
+                ax_top.set_xlim(xlims["top"])
+                ax_bottom.set_xlim(xlims["top"])   # shared x-axis
+
+        if ylims is not None:
+            if "left" in ylims:
+                ax_left.set_ylim(ylims["left"])
+                ax_top.set_ylim(ylims["left"])     # shared y-axis
+            if "bottom" in ylims:
+                ax_bottom.set_ylim(ylims["bottom"])
+
+
+        for ax in [ax_left, ax_top, ax_bottom]:
+            ax.xaxis.set_major_locator(MaxNLocator(max_major_ticks))
+            ax.yaxis.set_major_locator(MaxNLocator(max_major_ticks))
+
         # --------------------------------------------------
         # Log scaling
         # --------------------------------------------------
@@ -480,20 +507,29 @@ def plot_llama_triptych(
             if log_axes.get(ycol, False):
                 ax.set_yscale("log")
 
+        # Remove overlapping edge ticks
+        yticks = ax_bottom.get_yticks()
+        if len(yticks) > 1:
+            ax_bottom.set_yticks(yticks[:-2])
+
+        xticks = ax_left.get_xticks()
+        if len(xticks) > 1:
+            ax_left.set_xticks(xticks[:-1])
+
         # --------------------------------------------------
         # Excluded tick marks
         # --------------------------------------------------
-        if exclude_names is not None:
-            for panel_key, ax in [("left", ax_left), ("bottom", ax_bottom)]:
-                xlower, xupper = ax.get_xlim()
-                ylower, yupper = ax.get_ylim()
+        # if exclude_names is not None:
+        #     for panel_key, ax in [("left", ax_left), ("bottom", ax_bottom)]:
+        #         xlower, xupper = ax.get_xlim()
+        #         ylower, yupper = ax.get_ylim()
 
-                for x_val in excluded[panel_key]["x"]:
-                    ax.plot([x_val], [ylower], marker='|', color='gray', markersize=10,
-                            linestyle='None', alpha=0.7, clip_on=False)
-                for y_val in excluded[panel_key]["y"]:
-                    ax.plot([xlower], [y_val], marker='_', color='gray', markersize=10,
-                            linestyle='None', alpha=0.7, clip_on=False)
+        #         for x_val in excluded[panel_key]["x"]:
+        #             ax.plot([x_val], [ylower], marker='|', color='gray', markersize=10,
+        #                     linestyle='None', alpha=0.7, clip_on=False)
+        #         for y_val in excluded[panel_key]["y"]:
+        #             ax.plot([xlower], [y_val], marker='_', color='gray', markersize=10,
+        #                     linestyle='None', alpha=0.7, clip_on=False)
 
         # --------------------------------------------------
         # Histograms
@@ -539,7 +575,7 @@ def plot_llama_triptych(
         # --------------------------------------------------
         # Labels + legend
         # --------------------------------------------------
-        fs = 14  # adjust as needed
+        fs = 25  # adjust as needed
 
         ax_left.set_xlabel(axis_label_lookup.get(x_column1, x_column1), fontsize=fs)
         ax_left.set_ylabel(axis_label_lookup.get(y_column1, y_column1), fontsize=fs)
@@ -547,10 +583,12 @@ def plot_llama_triptych(
         ax_bottom.set_xlabel(axis_label_lookup.get(x_column3, x_column3), fontsize=fs)
         ax_bottom.set_ylabel(axis_label_lookup.get(y_column3, y_column3), fontsize=fs)
 
+        for ax in (ax_left, ax_top, ax_bottom):
+            ax.tick_params(axis='both', which='major', labelsize=18)
 
         ax_top.set_xlabel("")
         ax_top.set_ylabel("")
-        ax_top.tick_params(labelleft=False, labelbottom=False)
+        ax_top.tick_params(labelleft=False, labelbottom=False, labelsize=18)
 
         ax_empty = fig.add_subplot(gs[1, 0])
         ax_empty.axis("off")
@@ -568,14 +606,14 @@ def plot_llama_triptych(
     }
         
         legend_handles = []
-        for label, (marker, color,size) in label_styles.items():
+        for label, (marker, color,size, opac) in label_styles.items():
             msize = legend_marker_sizes.get(label, 8)
             legend_handles.append(
                 Line2D([0], [0], marker=marker, color='w', label=label,
                     markerfacecolor=color, markersize=msize)
             )
 
-        ax_empty.legend(handles=legend_handles, loc="center", fontsize=16, frameon=False)
+        ax_empty.legend(handles=legend_handles, loc="center", bbox_to_anchor=(0.4, 0.5), fontsize=22, frameon=False)
 
 
         #plt.tight_layout()
@@ -729,7 +767,13 @@ def plot_llama_triptych(
             
 
             combined_df = pd.concat([dfA, dfI], ignore_index=True)
-            label = f"\'{m_i}\' mask and {float(2*r_i)}x{float(2*r_i)}kpc aperture"
+
+            if comp == 'aperture' and m_i != 'flux90_strict':
+                label = f"{float(2*r_i)} kpc square field"
+            elif comp == 'aperture' and m_i == 'flux90_strict':
+                label = f"90\% flux aperture"
+            elif comp == 'mask':
+                label = f"\'{m_i}\' mask"
 
 
             # ---------------------------
@@ -878,22 +922,56 @@ def plot_llama_triptych(
                     ax.set_xlim(all_x.min() - pad_x, all_x.max() + pad_x)
                     ax.set_ylim(all_y.min() - pad_y, all_y.max() + pad_y)
 
+        # -----------------------------
+        # Manual overrides
+        # -----------------------------
+        if xlims is not None:
+            if "left" in xlims:
+                ax_left.set_xlim(xlims["left"])
+            if "top" in xlims:
+                ax_top.set_xlim(xlims["top"])
+                ax_bottom.set_xlim(xlims["top"])
+
+        if ylims is not None:
+            if "left" in ylims:
+                ax_left.set_ylim(ylims["left"])
+                ax_top.set_ylim(ylims["left"])
+            if "bottom" in ylims:
+                ax_bottom.set_ylim(ylims["bottom"])
+
+        # -----------------------------
+        # Major tick count
+        # -----------------------------
+        for ax in (ax_left, ax_top, ax_bottom):
+            ax.xaxis.set_major_locator(MaxNLocator(max_major_ticks))
+            ax.yaxis.set_major_locator(MaxNLocator(max_major_ticks))
+
+
+        # Remove overlapping edge ticks
+        yticks = ax_bottom.get_yticks()
+        if len(yticks) > 1:
+            ax_bottom.set_yticks(yticks[:-2])
+
+        xticks = ax_left.get_xticks()
+        if len(xticks) > 1:
+            ax_left.set_xticks(xticks[:-1])
+
         # --------------------------------------------------
         # Excluded tick marks
         # --------------------------------------------------                    
                     
-                    for x_val in excluded[panel_key]["x"]:
-                        if x_val < ax.get_xlim()[0] or x_val > ax.get_xlim()[1]:
-                            continue
-                        ax.plot([x_val], [all_y.min()], marker='|', color='gray', markersize=10,
-                                linestyle='None', alpha=0.7, clip_on=False)
-                        
-                    
-                    for y_val in excluded[panel_key]["y"]:
-                        if y_val < ax.get_ylim()[0] or y_val > ax.get_ylim()[1]:
-                            continue
-                        ax.plot([all_x.min()], [y_val], marker='_', color='gray', markersize=10,
-                                linestyle='None', alpha=0.7, clip_on=False)
+        # for x_val in excluded[panel_key]["x"]:
+        #     if x_val < ax.get_xlim()[0] or x_val > ax.get_xlim()[1]:
+        #         continue
+        #     ax.plot([x_val], [all_y.min()], marker='|', color='gray', markersize=10,
+        #             linestyle='None', alpha=0.7, clip_on=False)
+            
+        
+        # for y_val in excluded[panel_key]["y"]:
+        #     if y_val < ax.get_ylim()[0] or y_val > ax.get_ylim()[1]:
+        #         continue
+        #     ax.plot([all_x.min()], [y_val], marker='_', color='gray', markersize=10,
+        #             linestyle='None', alpha=0.7, clip_on=False)
 
 
         # --------------------------------------------------
@@ -933,7 +1011,7 @@ def plot_llama_triptych(
         # --------------------------------------------------
         # Labels + legend
         # --------------------------------------------------
-        fs = 14  # adjust as needed
+        fs = 25  # adjust as needed
 
         ax_left.set_xlabel(axis_label_lookup.get(x_column1, x_column1), fontsize=fs)
         ax_left.set_ylabel(axis_label_lookup.get(y_column1, y_column1), fontsize=fs)
@@ -941,10 +1019,13 @@ def plot_llama_triptych(
         ax_bottom.set_xlabel(axis_label_lookup.get(x_column3, x_column3), fontsize=fs)
         ax_bottom.set_ylabel(axis_label_lookup.get(y_column3, y_column3), fontsize=fs)
 
+        for ax in (ax_left, ax_top, ax_bottom):
+            ax.tick_params(axis='both', which='major', labelsize=18)
+
 
         ax_top.set_xlabel("")
         ax_top.set_ylabel("")
-        ax_top.tick_params(labelleft=False, labelbottom=False)
+        ax_top.tick_params(labelleft=False, labelbottom=False, labelsize=18)
 
         ax_empty = fig.add_subplot(gs[1, 0])
         ax_empty.axis("off")
@@ -972,7 +1053,7 @@ def plot_llama_triptych(
                     markerfacecolor=color, markersize=msize)
             )
 
-        ax_empty.legend(handles=legend_handles, loc="center", fontsize=16, frameon=False)
+        ax_empty.legend(handles=legend_handles, loc="center",bbox_to_anchor=(0.4, 0.5), fontsize=20, frameon=False)
 
 
         #plt.tight_layout()
@@ -1006,6 +1087,7 @@ phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/p
 
 exclude = ['NGC1375','NGC1315','NGC2775','MCG630']
 exclude1 = ['NGC1375','NGC1315','NGC2775']
+exclude2 = ['NGC1375','NGC1315','NGC2775','NGC4260']
 excludewisphagns= ['NGC1375','NGC1315','NGC2775','NGC5064_WIS','NGC1387_WIS']
 
 ################################################################### AGN vs inactive CAS triptych ###################################################################
@@ -1020,7 +1102,15 @@ plot_llama_triptych(
 base_AGN=base_AGN, base_inactive=base_inactive,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
-    figsize=9, m = m, r = r, native_res=True, hist=False, exclude_names=exclude1
+    figsize=9, m = m, r = r, native_res=True, hist=False, exclude_names=exclude1,     xlims={
+        "left": (0, 1.1),
+        "top": (-0.1, 2.1)
+    },
+    ylims={
+        "left": (0, 1.1),
+        "bottom": (0, 1.1)
+    },
+    max_major_ticks=5
 )
 
 # ################################################################ AGN vs inactive CAS triptych wis phangs comparison ###################################################################
@@ -1039,7 +1129,15 @@ base_AGN=base_AGN, base_inactive=base_inactive, base_aux=None,
     phangs_df=phangs_df,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
-    figsize=9, m = m, r = r, comb_llama=True, native_res=True, hist=False, exclude_names=excludewisphagns
+    figsize=9, m = m, r = r, comb_llama=True, native_res=True, hist=False, exclude_names=excludewisphagns,    xlims={
+        "left": (0, 1.1),
+        "top": (-0.1, 2.1)
+    },
+    ylims={
+        "left": (0, 1.1),
+        "bottom": (0, 1.1)
+    },
+    max_major_ticks=5
 )
 
 ################################################################ comparison of mask and apertures ###################################################################
@@ -1052,16 +1150,25 @@ base_AGN=base_AGN, base_inactive=base_inactive,
     log_axes={'x_shared': False, 'y_shared': False},
     bins=10,
     figsize=9, comb_llama=True, which_compare=[['strict','flux90_strict'],[0.3,1,1.5]], native_res=True, colours_list={
-  "\'strict\' mask and 0.6x0.6kpc aperture": "#0F2FFF",
-  "\'strict\' mask and 2.0x2.0kpc aperture": "#AF0FFF",
-  "\'strict\' mask and 3.0x3.0kpc aperture": "#FF0F9B",
-  "\'flux90_strict\' mask and 3.0x3.0kpc aperture": "#00EDED"
+  "0.6 kpc square field": "#0F2FFF",
+"2.0 kpc square field": "#AF0FFF",
+"3.0 kpc square field": "#FF0F9B",
+  "90\% flux aperture": "#00EDED"
 }, markers_list={
-  "\'strict\' mask and 0.6x0.6kpc aperture": "D",
-  "\'strict\' mask and 2.0x2.0kpc aperture": "s",
-  "\'strict\' mask and 3.0x3.0kpc aperture": "o",
-"\'flux90_strict\' mask and 3.0x3.0kpc aperture": "P"
-}, exclude_names=exclude1,hist=False)
+  "0.6 kpc square field": "D",
+  "2.0 kpc square field": "s",
+  "3.0 kpc square field": "o",
+  "90\% flux aperture": "P"
+}, exclude_names=exclude2,hist=False,comp = 'aperture',    xlims={
+        "left": (0, 1.1),
+        "top": (-0.1, 2.1)
+    },
+    ylims={
+        "left": (0, 1.1),
+        "bottom": (0, 1.1)
+    },
+    max_major_ticks=5
+    )
 
 
 plot_llama_triptych(
@@ -1073,12 +1180,21 @@ base_AGN=base_AGN, base_inactive=base_inactive,
     bins=10,
     figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, 
     colours_list=  
-    {"\'strict\' mask and 3.0x3.0kpc aperture": "#008891",
-  "\'broad\' mask and 3.0x3.0kpc aperture": "#CC6900"
+    {"\'strict\' mask": "#008891",
+  "\'broad\' mask": "#CC6900"
 }, markers_list={
-  "\'strict\' mask and 3.0x3.0kpc aperture": "D",
-  "\'broad\' mask and 3.0x3.0kpc aperture": "s",
-}, exclude_names=exclude1,hist=False)
+  "\'strict\' mask": "D",
+  "\'broad\' mask": "s",
+}, exclude_names=exclude1,hist=False,comp='mask',     xlims={
+        "left": (0, 1.1),
+        "top": (-0.1, 2.1)
+    },
+    ylims={
+        "left": (0, 1.1),
+        "bottom": (0, 1.1)
+    },
+    max_major_ticks=5
+    )
 
 
 # plot_llama_triptych(

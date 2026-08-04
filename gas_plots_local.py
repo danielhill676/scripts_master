@@ -44,7 +44,9 @@ def get_errorbars(df, colname):
     """
     # Try exact match
     err_col = f"{colname}_err"
+    print(err_col)
     if err_col in df.columns:
+        print('found errcol')
         err = pd.to_numeric(df[err_col], errors="coerce")
         return err.values
 
@@ -95,19 +97,56 @@ def clean_df(df, cols):
     )
 
 def align_xy(df_x, df_y, x_col, y_col):
+
     try:
-        merged = df_x[["Name_clean", x_col]].merge(
-            df_y[["Name_clean", y_col]],
-            on="Name_clean",
-            how="inner"
+        key = "Name_clean"
+
+        x_cols = [key, x_col]
+        y_cols = [key, y_col]
+
+        x_err = f"{x_col}_err"
+        y_err = f"{y_col}_err"
+
+        if x_err in df_x.columns:
+            x_cols.append(x_err)
+
+        if y_err in df_y.columns:
+            y_cols.append(y_err)
+
+        merged = (
+            df_x[x_cols]
+            .merge(
+                df_y[y_cols],
+                on=key,
+                how="inner"
+            )
         )
-    except:
-        merged = df_x[["Galaxy_clean", x_col]].merge(
-            df_y[["Galaxy_clean", y_col]],
-            left_on="Galaxy_clean",
-            right_on="Galaxy_clean",
-            how="inner"
+
+    except KeyError:
+
+        key = "Galaxy_clean"
+
+        x_cols = [key, x_col]
+        y_cols = [key, y_col]
+
+        x_err = f"{x_col}_err"
+        y_err = f"{y_col}_err"
+
+        if x_err in df_x.columns:
+            x_cols.append(x_err)
+
+        if y_err in df_y.columns:
+            y_cols.append(y_err)
+
+        merged = (
+            df_x[x_cols]
+            .merge(
+                df_y[y_cols],
+                on=key,
+                how="inner"
+            )
         )
+
     return merged
 
 
@@ -119,32 +158,57 @@ def select_resolution_df(base, minres, maxres, native_flag, res_comp_flag):
     else:
         return maxres.copy()
 
+def lookup_c_err(r, errors):
+    if r <= 50:
+        return 0
+    
+    candidates = errors[errors['Resolution_pc'] > r]
+
+    if candidates.empty:
+        return 0  # or np.nan
+
+    return candidates.sort_values('Resolution_pc').iloc[0]['C_err_max']  # or whichever column
+
 def fit_concentration_50pc(df,
+                        errors,
                            R_col='Resolution (pc)',
                            C_col='Concentration',
                            R_sat=400,
                            C_sat=0.0426,
                            #C_sat=0.081,
                            R_target=50,
-                           extrapolate_hires=False):
+                          
+                           extrapolate_hires=False
+                           ):
 
     R = df[R_col]
     C = df[C_col]
     
     C_fit = C + ((C_sat - C) / (R_sat - R)) * (R_target - R)
-    # print('initial conc=',C,'fitted conc',C_fit)
+    C_err = (
+    lookup_c_err(R, errors)
+    if np.isscalar(R)
+    else R.apply(lambda r: lookup_c_err(r, errors))
+)
 
     if extrapolate_hires:
-        return C_fit
+        return C_fit, C_err
     else:
         if np.isscalar(C):
-            return C if R < R_target else C_fit
+            return (C if R < R_target else C_fit) , C_err
         else:
-            return C.where(R < R_target, C_fit)
+            return (C.where(R < R_target, C_fit)), C_err
 
-def apply_native_concentration(df, column,fitc):
+def apply_native_concentration(df, column,fitc, errors):
+    df = df.copy()
+
     if column == "Concentration" and fitc:
-        df[column] = fit_concentration_50pc(df, extrapolate_hires=False)
+        df[column], df[f"{column}_err"] = fit_concentration_50pc(
+            df,
+            errors,
+            extrapolate_hires=False
+        )
+
     return df
 
 
@@ -235,6 +299,9 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
     default_AGN = f"{base_AGN}/gas_analysis_summary.csv"
     default_inactive = f"{base_inactive}/gas_analysis_summary.csv"
     default_aux = f"{base_aux}/gas_analysis_summary.csv"
+
+    c_errs_path = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Cfit_error.csv"
+    c_errs = pd.read_csv(c_errs_path)
 
     ################## comparing different masks/radii ########################
 
@@ -1011,10 +1078,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         )
 
         if not res_comp:
-            df_x_agn = apply_native_concentration(df_x_agn, x_column,fitc)
-            df_x_inactive = apply_native_concentration(df_x_inactive, x_column,fitc)
+            df_x_agn = apply_native_concentration(df_x_agn, x_column,fitc,c_errs)
+            df_x_inactive = apply_native_concentration(df_x_inactive, x_column,fitc,c_errs)
             if use_aux:
-                df_x_aux = apply_native_concentration(df_x_aux, x_column,fitc)
+                df_x_aux = apply_native_concentration(df_x_aux, x_column,fitc,c_errs)
 
 
         # Y side
@@ -1041,10 +1108,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if use_aux else None
         )
         if not res_comp:
-            df_y_agn = apply_native_concentration(df_y_agn, y_column,fitc)
-            df_y_inactive = apply_native_concentration(df_y_inactive, y_column,fitc)
+            df_y_agn  = apply_native_concentration(df_y_agn, y_column,fitc,c_errs   )
+            df_y_inactive= apply_native_concentration(df_y_inactive, y_column,fitc,c_errs)
             if use_aux:
-                df_y_aux = apply_native_concentration(df_y_aux, y_column,fitc)
+                df_y_aux  = apply_native_concentration(df_y_aux, y_column,fitc,c_errs)
 
                 # C side
         if c_column is not None:
@@ -1081,11 +1148,11 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             )
 
             if not res_comp:
-                df_c_agn = apply_native_concentration(df_c_agn, c_column,fitc)
-                df_c_inactive = apply_native_concentration(df_c_inactive, c_column,fitc)
+                df_c_agn= apply_native_concentration(df_c_agn, c_column,fitc,c_errs)
+                df_c_inactive = apply_native_concentration(df_c_inactive, c_column,fitc,c_errs)
 
                 if use_aux:
-                    df_c_aux = apply_native_concentration(df_c_aux, c_column,fitc)
+                    df_c_aux = apply_native_concentration(df_c_aux, c_column,fitc,c_errs)
 
 
 
@@ -1171,9 +1238,12 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             c_agn = agn_plot[c_column]
         else:
             c_agn = None
-
+        print('agn')
+        print('x')
         xerr_agn = get_errorbars(agn_plot, x_column)
+        print('y')
         yerr_agn = get_errorbars(agn_plot, y_column)
+        print('yerr_agn\n',yerr_agn)
         names_agn = agn_plot["Name_clean"].str.replace(" ", "", regex=False).values
 
         inactive_plot = clean_df(inactive_plot, clean_cols)
@@ -1184,7 +1254,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             c_inactive = inactive_plot[c_column]
         else:
             c_inactive = None
+        print('control')
+        print('x')
         xerr_inactive = get_errorbars(inactive_plot, x_column)
+        print('y')
         yerr_inactive = get_errorbars(inactive_plot, y_column)
         names_inactive = inactive_plot["Name_clean"].str.replace(" ", "", regex=False).values
 
@@ -1486,8 +1559,11 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         # if x_column == 'log LX': xerr_agn = xerr_inactive = 0.2
         # if y_column == 'Concentration': yerr_agn = yerr_inactive = 0.15
 
-        if x_column == 'log LX': xerr_agn = xerr_inactive = xerr_gb21 = 0
-        if y_column == 'Concentration': yerr_agn = yerr_inactive = yerr_gb21 = 0
+        # if x_column == 'log LX': xerr_agn = xerr_inactive = xerr_gb21 = 0
+        # if y_column == 'Concentration': yerr_agn = yerr_inactive = yerr_gb21 = 0
+
+        yerr_gb21 = 0
+        xerr_gb21 = 0
 
 
         if soloplot == 'AGN':
@@ -2150,8 +2226,9 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                             # print('gb24=',x_start,'llama=',x_end,'ratio=',x_end-x_start)
                             # ratios_x.append(x_end-x_start)
                             # print('y axis')
+                            # print(name, y_end)
                             # print('gb24=',y_start,'llama=',y_end,'ratio=',y_end-y_start)
-                            ratios_y.append(y_end-y_start)
+                            # ratios_y.append(y_end-y_start)
                 # print('median xratio',np.median(ratios_x))
                 # print('mean xratio',np.mean(ratios_x))
                 print('\nConcentation differences with GB24\n')
@@ -2217,6 +2294,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             # AGN sample
             # =========================================================
 
+            print('yerr_agn\n',yerr_agn)
+
             if soloplot in (None, 'AGN'):
                 if not res_comp:
                     if c_column is None:
@@ -2233,6 +2312,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                             elinewidth=1,
                             alpha=0.8
                         )
+                        print(pd.Series(y_agn.values, index=names_agn))
 
                     else:
 
@@ -2408,6 +2488,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                                     y,
                                     color=colour_inactive
                                 )
+                            print(pd.Series(y_inactive.values, index=names_inactive))
 
                         else:
 
@@ -2424,7 +2505,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                                 elinewidth=1,
                                 alpha=0.8
                             )
-
+                            print(pd.Series(y_inactive.values, index=names_inactive))
                     else:
 
                         sc_inactive = ax_scatter.scatter(
@@ -2667,6 +2748,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
             ax_scatter.grid(False)
 
+            ax_scatter.tick_params(axis='both', which='major', labelsize=20)
+
             handles, labels = ax_scatter.get_legend_handles_labels()
 
             if x_column == 'log LX' and soloplot in (None, 'inactive'):
@@ -2765,7 +2848,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if use_phangs:
                 ax_hist_only.hist(
                     y_phangs, bins=bin_edges,
-                    color='cadetblue', histtype='step', linewidth=4, label='PHANGS'
+                    color='cadetblue', histtype='step', linewidth=4, label='PHANGS', linestyle='--'
                 )
                 # median_phangs = np.median(y_phangs)
                 # ax_hist_only.axvline(median_phangs, color='cadetblue', linestyle='--')
@@ -2931,7 +3014,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ax_hist_x.axvline(median_agn-(bin_edges_x[1]-bin_edges_x[0])/2, color='red', linestyle='--')
                 ax_hist_x.text(
                     median_agn, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_agn:.2f}", color='dark'+colour_AGN, fontsize=14, ha='center'
+                    f"{median_agn:.1f}", color='dark'+colour_AGN, fontsize=14, ha='center'
                 )
 
             # --- Inactive ---
@@ -2944,7 +3027,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ax_hist_x.axvline(median_inactive-(bin_edges_x[1]-bin_edges_x[0])/2, color='blue', linestyle='--')
                 ax_hist_x.text(
                     median_inactive, ax_hist_x.get_ylim()[1]*0.9,
-                    f"{median_inactive:.2f}", color='dark'+colour_inactive, fontsize=14, ha='center'
+                    f"{median_inactive:.1f}", color='dark'+colour_inactive, fontsize=14, ha='center'
                 )
 
             # --- Combined LLAMA ---
@@ -2990,7 +3073,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if use_phangs:
                 ax_hist_x.hist(
                     x_phangs, bins=bin_edges_x,
-                    color='cadetblue', histtype='step', linewidth=4, label='PHANGS'
+                    color='cadetblue', histtype='step', linewidth=4, label='PHANGS',linestyle='--'
                 )
                 # median_phangs = np.median(x_phangs)
                 # ax_hist_x.axvline(median_phangs, color='cadetblue', linestyle='--')
@@ -3132,7 +3215,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     median_agn = np.median(y_agn)
                     ax_hist.axhline(median_agn, color='red', linestyle='--')
                     ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_agn-(bin_edges[1]-bin_edges[0])/3,
-                                f"{median_agn:.2f}", color='darkred', fontsize=14, va='center')
+                                f"{median_agn:.1f}", color='darkred', fontsize=14, va='center')
 
                 if soloplot in (None, 'inactive') and not comb_llama:
                     ax_hist.hist(y_inactive, bins=bin_edges, orientation='horizontal',
@@ -3140,7 +3223,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     median_inactive = np.median(y_inactive)
                     ax_hist.axhline(median_inactive, color='blue', linestyle='--')
                     ax_hist.text(ax_hist.get_xlim()[1]*0.7, median_inactive-(bin_edges[1]-bin_edges[0])/3,
-                                f"{median_inactive:.2f}", color='navy', fontsize=14, va='center')
+                                f"{median_inactive:.1f}", color='navy', fontsize=14, va='center')
 
                 if comb_llama:
                     combined_y = pd.concat([y_agn, y_inactive])
@@ -3286,8 +3369,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                         )
 
                         if y_column == 'Concentration':
-                            agn_row[y_column] = fit_concentration_50pc(agn_row,extrapolate_hires=False)
-                            inactive_row[y_column] = fit_concentration_50pc(inactive_row,extrapolate_hires=False)
+                            agn_row[y_column],_ = fit_concentration_50pc(agn_row,c_errs,extrapolate_hires=False)
+                            inactive_row[y_column],_ = fit_concentration_50pc(inactive_row,c_errs,extrapolate_hires=False)
                         if logy:
                             val_agn = np.log10(agn_row[y_column]) if agn_row[y_column] > 0 else 0
                             val_inactive = np.log10(inactive_row[y_column]) if inactive_row[y_column] > 0 else 0
@@ -3361,7 +3444,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                                 continue
 
                             diff = float(val_agn) - float(val_inactive)
-                            print(agn_row['Name_clean'],val_agn,inactive_row['Name_clean'],val_inactive,diff)
+                            # print(agn_row['Name_clean'],val_agn,inactive_row['Name_clean'],val_inactive,diff)
                             
                             # denom = abs(val_agn) + abs(val_inactive)
                             # if denom == 0:
@@ -3478,18 +3561,19 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
                 ax.set_ylabel("Number of pairs", fontsize=font)
 
-                ax.set_title(f"One-sample t-test p-value: {p_value_t:.5f}", fontsize=font)
+                ax.set_title(f"p = {(p_value_t*100):.3f}\% \qquad N = {n}", fontsize=font)
                 # else:
                 #     ax.set_title(f"Wilcoxon test p-value: {p_value_w:.3f}")
                 ax.legend(fontsize=font_leg)
                 outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{masky}_{R_kpcy}kpc/'
                 os.makedirs(outputdir, exist_ok=True)
-                output_path = outputdir+f'{y_column}_pair_differences.pdf'
+                output_path = outputdir+f'{y_column}_pair_differences'
 
                 if co21only:
-                    output_path = outputdir+f'{y_column}_pair_differences_co21only.pdf'
+                    output_path += '_co21only'
                 if nativey:
-                    output_path = outputdir+f'{y_column}_native_pair_differences.pdf'
+                    output_path += '_native'
+                output_path += '.pdf'         
 
 
                 if y_column =="flux (Jy km/s)":
@@ -3518,7 +3602,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
                 ax.set_ylabel("Number of pairs", fontsize=font)
 
-                ax.set_title(f"One-sample t-test p-value: {p_value_t_frac:.4f}", fontsize=font)
+                ax.set_title(f"p = {(p_value_t_frac*100):.3f}\% \qquad N = {n_frac}", fontsize=font)
                 # else:
                 #     ax.set_title(f"Wilcoxon test p-value: {p_value_w:.3f}")
                 ax.legend( fontsize=font_leg)
@@ -3598,10 +3682,11 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
                 title = "\n".join(
                     [
-                        f"{labels[o]}: p={stats_by_class[o]['p_value']:.3g}"
+                        f"{labels[o]}: p = {(float(stats_by_class[o]['p_value'])*100):.3g}\%"
                         for o in ["o", "u"]
                     ]
                 )
+
 
                 ax.set_title(title, fontsize=font-2)
 
@@ -4535,16 +4620,19 @@ obsclass_labels = {
 axis_label_lookup = {
     "Resolution (pc)": "Resolution (pc)",
     "log LH (L⊙)": "$\log{L_H}$ (L$_\odot$)",
-    "Smoothness": "Clumpiness",
+    "Smoothness": "S",
     "clumping_factor": "Clumping Factor",
-    "Smoothness_davis": "Clumpiness",
+    "Smoothness_davis": "S",
+    "Concentration": "C",
+    "Asymmetry": "A",
+    "Gini": "G",
     "log LX": "$\log{L_{2-10}}$ (erg s$^{-1}$)",
     "total_mass (M_sun)": "Total Molecular Gas Mass ($M_\odot$)",
     "avg_mass_dens": "H$_2$ Mass Surface Density ($M_\odot$kpc$^{-2}$)",
     "L'CO_JCMT (K km s pc2)": "ALMA L$'$ CO (K km s pc$^2$)",
     "L'CO_APEX (K km s pc2)": "ALMA L$'$ CO (K km s pc$^2$)",
     'log L′ CO': "Single-dish L$'$ CO (K km s pc$^2$)",
-    "smoothness_espocito50_sig100": r"Clumpiness $_{50\,\mathrm{pc}}^{\sigma=100}$"
+    "smoothness_espocito50_sig100": r"S$_{50\,\mathrm{pc}}$"
 }
 
 
@@ -4557,19 +4645,22 @@ axis_label_lookup = {
 
 
 
-masks = ['broad','strict','flux90_strict']
+masks = ['broad','strict']
 radii = [0.3,1.5]
 
-masks = ['strict']
-radii = [0.3]
+masks = ['flux90_strict']
+radii = [1.5]
 
 for mask in masks:
     for R_kpc in radii:
         print(f"Running plots for mask={mask}, R_kpc={R_kpc}")
 
         exclude = ['NGC 1375','NGC 1315','NGC 2775']
+        exclude_co21only = ['NGC 1375','NGC 1315','NGC 2775','NGC 4388','NGC 5728','NGC 6814']
         if R_kpc == 0.3:
             exclude= ['NGC 1375','NGC 1315','NGC 2775','NGC 4260']
+            exclude_co21only = ['NGC 1375','NGC 1315','NGC 2775','NGC 4260','NGC 4388','NGC 5728','NGC 6814']
+        
 
 
 # #         # using GB24 for concentration
@@ -4637,16 +4728,16 @@ for mask in masks:
         # plot_llama_property('log LX', 'smoothness_espocito50_sig25', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude)
         # plot_llama_property('log LX', 'smoothness_espocito200_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude,plotshared=False)
         # plot_llama_property('log LX', 'smoothness_espocito200_sig25', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude)
-        # plot_llama_property('Resolution (pc)', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude,plotshared=False,manual_limits=[0,170,0,0.4])
+        # plot_llama_property('Resolution (pc)', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude,plotshared=False, yhist=False)
 
 
 #### safe for pairdiffs
 
-        # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
-        # plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
-        # plot_llama_property('emission_pixels', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
+        plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False,rebin=120)
+        plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False,rebin=120)
+        plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False,rebin=120)
+        plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False,rebin=120)
+        plot_llama_property('emission_pixels', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False,rebin=120)
 
 
         # plot_llama_property('emission_pixels', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
@@ -4659,11 +4750,13 @@ for mask in masks:
 
         # plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
 
+        # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude_co21only,nativey=True,co21only=True)
+
 
         # plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
         # plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
         # plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
-        # plot_llama_property('Hubble Stage', 'Distance (Mpc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+        # plot_llama_property('Hubble Stage', 'Distance (Mpc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True,logy=True)
 
 
  #   """posible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'

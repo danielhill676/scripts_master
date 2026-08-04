@@ -12,6 +12,58 @@ from pdf2image import convert_from_path
 import numpy as np
 import fitz
 
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Computer Modern"],
+})
+
+
+inactive_by_num = {
+    1: "NGC 3351",
+    2: "NGC 3175",
+    3: "NGC 4254",
+    4: "ESO 208-G021",
+    5: "NGC 1079",
+    6: "NGC 1947",
+    7: "NGC 5921",
+    8: "NGC 2775",
+    9: "ESO 093-G003",
+    10: "NGC 718",
+    11: "NGC 3717",
+    12: "NGC 5845",
+    13: "NGC 7727",
+    14: "IC 4653",
+    15: "NGC 4260",
+    16: "NGC 5037",
+    17: "NGC 4224",
+    18: "NGC 3749",
+    19: "NGC 1375",
+    20: "NGC 1315",
+}
+
+# Active galaxies with the exact numbers shown in their corners (from the image; left panel)
+active_to_nums = {
+    "NGC 1365": [7],
+    "NGC 7582": [11, 17],
+    "NGC 6814": [3],
+    "NGC 4388": [11],
+    "NGC 7213": [8],
+    "MCG-06-30-015": [12],
+    "NGC 5506": [2, 15, 16, 17, 18],
+    "NGC 2110": [4, 6],
+    "NGC 3081": [5, 9, 10],
+    "MCG-05-23-016": [5, 19],
+    "ESO 137-G034": [13],
+    "NGC 2992": [2, 15, 16, 17, 18],
+    "NGC 4235": [2, 16, 17, 18],
+    "NGC 4593": [1, 8],
+    "NGC 7172": [15, 16, 17],
+    "NGC 3783": [10],
+    "ESO 021-G004": [17],
+    "NGC 5728": [13, 17],
+    "MCG-05-14-012": [20],
+}
 
 llamatab = Table.read('/Users/administrator/Astro/LLAMA/llama_main_properties.fits', format='fits')
 llamatab.sort('D [Mpc]')
@@ -123,6 +175,25 @@ def figure_maker(
             pdf,
             0
         )
+
+        # Bottom-left numbering
+        if type == "inactive":
+            label = None
+            for num, galaxy in inactive_by_num.items():
+                if galaxy == table["name"][i]:
+                    label = str(num)
+                    break
+        else:
+            nums = active_to_nums.get(table["name"][i], [])
+            label = ",".join(map(str, nums)) if nums else None
+
+        if label is not None:
+            page.insert_text(
+                (x0 + 6, y0 + plot_height - 6),  # 6 pt padding from bottom-left
+                label,
+                fontsize=15,
+                color=(0, 1, 0),  # lime
+            )
 
         text = table['name'][i]
 

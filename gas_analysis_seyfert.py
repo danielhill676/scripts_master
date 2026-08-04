@@ -39,6 +39,12 @@ from astropy.convolution import convolve_fft
 from radio_beam import Beam
 from radio_beam.utils import BeamError
 
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Computer Modern"],
+})
+
 np.seterr(all='ignore')
 co32 = False
 LLAMATAB = None
@@ -641,7 +647,7 @@ def conver_emap(emap, pixel_per_beam):
 # ----------------- Moment map plotting ------------------
 
 def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask, flux_mask, aperture=None, norm_type='sqrt', res_src='native',normalise_norm=False,
-                    noise = None):
+                    noise = None, mom = 0 ):
     global colourbar_list
     # Initialise plot
     fontsize = 35 * R_kpc
@@ -652,37 +658,49 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     ax.margins(x=0,y=0)
     ax.set_axis_off()
 
-    add_scalebar(ax,1/3600,label="1''",corner='top left',color='lime',borderpad=2,size_vertical=0.5)
-    linewith = 2 * R_kpc
-    add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='lime',borderpad=2,fill=True,linewidth=linewith)
-    # print('noise:', noise)
-    vmin = 2 * noise if noise is not None and np.isfinite(noise) else 0
-    vmax = np.nanpercentile(image.data[np.isfinite(image.data)], 99.5)
+    if mom == 0: 
 
-    if not normalise_norm and res_src in ['native','rebin']:
-        colourbar_list.append(vmin)
-        colourbar_list.append(vmax)
-    if normalise_norm and res_src in ['native','rebin']:
-        vmin = np.nanmin(colourbar_list)
-        vmax = np.nanmax(colourbar_list)
-    # print('vmin:', vmin, 'vmax:', vmax)
-    if vmin >= vmax:
-        vmin = 0
-    if not normalise_norm:
-        vmin = 0
-        vmax = np.nanmax(image.data[np.isfinite(image.data)])
-    if np.isfinite(image.data).any():
-        if norm_type == 'sqrt':
-            norm = simple_norm(image.data, 'sqrt', vmin=vmin, vmax=vmax)
-        elif norm_type == 'linear':
-            norm = simple_norm(image.data, 'linear', vmin=vmin, vmax=vmax)
+        add_scalebar(ax,1/3600,label="1''",corner='top left',color='lime',borderpad=2,size_vertical=0.5)
+        linewith = 2 * R_kpc
+        add_beam(ax,major=BMAJ,minor=BMIN,angle=0,corner='bottom right',color='lime',borderpad=2,fill=True,linewidth=linewith)
+        # print('noise:', noise)
+        vmin = 2 * noise if noise is not None and np.isfinite(noise) else 0
+        vmax = np.nanpercentile(image.data[np.isfinite(image.data)], 99.5)
+
+        if not normalise_norm and res_src in ['native','rebin']:
+            colourbar_list.append(vmin)
+            colourbar_list.append(vmax)
+        if normalise_norm and res_src in ['native','rebin']:
+            vmin = np.nanmin(colourbar_list)
+            vmax = np.nanmax(colourbar_list)
+        # print('vmin:', vmin, 'vmax:', vmax)
+        if vmin >= vmax:
+            vmin = 0
+        if not normalise_norm:
+            vmin = 0
+            vmax = np.nanmax(image.data[np.isfinite(image.data)])
+        if np.isfinite(image.data).any():
+            if norm_type == 'sqrt':
+                norm = simple_norm(image.data, 'sqrt', vmin=vmin, vmax=vmax)
+            elif norm_type == 'linear':
+                norm = simple_norm(image.data, 'linear', vmin=vmin, vmax=vmax)
+            else:
+                raise ValueError(f"Unknown norm_type: {norm_type}")
         else:
-            raise ValueError(f"Unknown norm_type: {norm_type}")
-    else:
-        print("Moment data empty or all NaNs — skipping normalization.")
-        norm = None
-    #plt.title(f'{name_short}',fontsize=75)
-    im=plt.imshow(image.data,origin='lower',norm=norm,cmap='RdBu_r')
+            print("Moment data empty or all NaNs — skipping normalization.")
+            norm = None
+        #plt.title(f'{name_short}',fontsize=75)
+        im=plt.imshow(image.data,origin='lower',norm=norm,cmap='RdBu_r')
+
+    elif mom == 1 or mom == 2:
+        vmax = np.nanpercentile(image.data[np.isfinite(image.data)], 97.5)
+        vmin = np.nanpercentile(image.data[np.isfinite(image.data)], 2.5)
+        norm = simple_norm(image.data, 'linear', vmin=vmin, vmax=vmax)
+        if mom == 1:
+            im=plt.imshow(image.data,origin='lower',norm=norm,cmap='RdBu_r')       
+        if mom == 2:
+            im=plt.imshow(image.data,origin='lower',norm=norm,cmap='jet')  
+
     im.axes.get_xaxis().set_visible(False)
     im.axes.get_yaxis().set_visible(False)
 
@@ -711,43 +729,51 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
                 linewidth=3,
             )
             ax.add_patch(ellipse_patch)
+    if mom == 0:
+        if rebin is not None and not normalise_norm:
+            if not flux_mask and not normalise_norm:
+                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.pdf'
+            elif flux_mask and not normalise_norm:
+                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}.pdf'
+            elif not flux_mask and normalise_norm:
+                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_{res_src}_norm.pdf'
+            elif flux_mask and normalise_norm:
+                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_{res_src}_norm.pdf'
+        elif rebin is None and not normalise_norm:
+            path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}.pdf'
+        elif rebin is None and normalise_norm:
+            path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_norm.pdf'
+        else:
+            raise ValueError("Invalid combination of rebin and normalise_norm parameters.")
+        
+        if not os.path.exists(outfolder+'/m0_plots'):
+            os.makedirs(outfolder+'/m0_plots')
+        plt.savefig(path,bbox_inches='tight',pad_inches=0.0)
+        plt.close(fig)
 
-    if rebin is not None and not normalise_norm:
-        if not flux_mask and not normalise_norm:
-            path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.pdf'
-        elif flux_mask and not normalise_norm:
-            path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}.pdf'
-        elif not flux_mask and normalise_norm:
-            path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_{res_src}_norm.pdf'
-        elif flux_mask and normalise_norm:
-            path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_{res_src}_norm.pdf'
-    elif rebin is None and not normalise_norm:
-        path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}.pdf'
-    elif rebin is None and normalise_norm:
-        path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_norm.pdf'
-    else:
-        raise ValueError("Invalid combination of rebin and normalise_norm parameters.")
-    
-    if not os.path.exists(outfolder+'/m0_plots'):
-        os.makedirs(outfolder+'/m0_plots')
-    plt.savefig(path,bbox_inches='tight',pad_inches=0.0)
-    plt.close(fig)
-
-    if normalise_norm:
-        cbar_fig, cbar_ax = plt.subplots(figsize=(4, figsize*4.5))  # narrow vertical bar
-        norm_for_cbar = simple_norm(image.data, norm_type, vmin=vmin, vmax=vmax)
-        cb = plt.colorbar(plt.cm.ScalarMappable(norm=norm_for_cbar, cmap='RdBu_r'),
-                          cax=cbar_ax, orientation='vertical')
-        if np.isfinite(vmin) and np.isfinite(vmax) and vmax > vmin:
-            import matplotlib.ticker as mticker
-            cb.set_ticks(np.linspace(vmin, vmax, 5))
-            cb.ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
-            cb.ax.tick_params(labelsize=fontsize*5)   
-            cb.locator = mticker.MaxNLocator(nbins=5)
-            cb.update_ticks()
-        cb.set_label('Surface density (M☉pc⁻²)', fontsize=fontsize*5)
-        plt.savefig('/data/c3040163/llama/alma/gas_analysis_results'+ f'/colourbar_{R_kpc}_{rebin}_{flux_mask}.pdf', bbox_inches='tight', pad_inches=0)
-        plt.close(cbar_fig)
+        if normalise_norm:
+            cbar_fig, cbar_ax = plt.subplots(figsize=(4, figsize*7.5))  # narrow vertical bar
+            norm_for_cbar = simple_norm(image.data, norm_type, vmin=vmin, vmax=vmax)
+            cb = plt.colorbar(plt.cm.ScalarMappable(norm=norm_for_cbar, cmap='magma'),
+                            cax=cbar_ax, orientation='vertical')
+            if np.isfinite(vmin) and np.isfinite(vmax) and vmax > vmin:
+                import matplotlib.ticker as mticker
+                cb.set_ticks(np.linspace(vmin, vmax, 5))
+                cb.ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
+                cb.ax.tick_params(labelsize=fontsize*5)   
+                cb.locator = mticker.MaxNLocator(nbins=5)
+                cb.update_ticks()
+            cb.set_label('Surface density ($M_{\odot}\,\mathrm{pc}^{-2}$)', fontsize=fontsize*5)
+            plt.savefig('/data/c3040163/llama/alma/gas_analysis_results'+ f'/colourbar_{R_kpc}_{rebin}_{flux_mask}.pdf', bbox_inches='tight', pad_inches=0)
+            plt.close(cbar_fig)
+    if mom == 1:
+        path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_mom1.pdf'
+        plt.savefig(path,bbox_inches='tight',pad_inches=0.0)
+        plt.close(fig)
+    if mom == 2:
+        path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_mom2.pdf'
+        plt.savefig(path,bbox_inches='tight',pad_inches=0.0)
+        plt.close(fig)
         
 # ------------------ Processing ------------------
 
@@ -1102,6 +1128,9 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     name = base.split("_12m")[0]
 
+    file1 = file.split("_mom0.fits")[0]+"_mom1.fits"
+    file2 = file.split("_mom0.fits")[0]+"_mom2.fits"
+
 
 ########## uncomment for flux conservation debugging #######################
 
@@ -1129,8 +1158,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     # if name in ['NGC3783','NGC1315','NGC3717','NGC1375','NGC5037','MCG514','ESO021']: this is a set of ones that crashed on the ned search for some reason
     #     return
 
-    # if name not in ['NGC5845','MCG630']:
-    #     return
+    if name not in ['NGC2992']:
+        return
     
 ##############################################################################
 
@@ -1173,6 +1202,11 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
     # Load FITS
     image_untrimmed = fits.getdata(file, memmap=True)
+    if os.path.exists(file1):
+        mom1_untrimmed = fits.getdata(file1, memmap=True)
+        mom2_untrimmed = fits.getdata(file2, memmap=True)
+    else:
+        mom1_untrimmed = mom2_untrimmed = None
     if error_map_file is not np.nan and name not in ['NGC5845']:
         error_map_untrimmed = fits.getdata(error_map_file, memmap=True)
     elif error_map_file is not np.nan and name == 'NGC5845':
@@ -1189,6 +1223,9 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             image_untrimmed = image_untrimmed[:, :1600]
             error_map_untrimmed = error_map_untrimmed[:, :1600]
             mask_untrimmed = mask_untrimmed[:, :1600]
+            if mom1_untrimmed != None:
+                mom1_untrimmed=mom1_untrimmed[:, :1600]
+                mom2_untrimmed=mom2_untrimmed[:, :1600]
     try:
         main_meta = resolve_galaxy_beam_scale(
         name=name,
@@ -1248,6 +1285,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     y1, y2 = cy - R_pixel, cy + R_pixel
 
     image = np.full((target_size, target_size), np.nan)
+    mom1 = np.full((target_size, target_size), np.nan)
+    mom2 = np.full((target_size, target_size), np.nan)
     error_map = np.full_like(image, np.nan)
     mask = np.ones_like(image, dtype=bool)
 
@@ -1260,7 +1299,10 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     image[yp1:yp2, xp1:xp2] = image_untrimmed[y1i:y2i, x1i:x2i]
     error_map[yp1:yp2, xp1:xp2] = error_map_untrimmed[y1i:y2i, x1i:x2i]
     mask[yp1:yp2, xp1:xp2] = mask_untrimmed[y1i:y2i, x1i:x2i]
-
+    if mom1_untrimmed != None:
+        mom1[yp1:yp2, xp1:xp2] = mom1_untrimmed[y1i:y2i, x1i:x2i]
+        mom2[yp1:yp2, xp1:xp2] = mom2_untrimmed[y1i:y2i, x1i:x2i]
+    
 
     # ------------------ Signal to noise mask ------------------
     if error_map is not None:
@@ -1303,6 +1345,27 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         image[mask] = 0.0
         mask[nan_pixels] = False
         error_map[nan_pixels] = np.nanmean(error_map)
+        mom1[mask] = np.nan
+        mom2[mask] = np.nan
+
+# ---------- plot mom1 and mom2 ----------
+
+    plot_moment_map(
+        mom1, output_dir, name,
+        BMAJ, BMIN, R_kpc, None,
+        PHANGS_mask, None,
+        aperture=None, norm_type='linear', mom = 1
+    )
+    plot_moment_map(
+        mom2, output_dir, name,
+        BMAJ, BMIN, R_kpc, None,
+        PHANGS_mask, None,
+        aperture=None, norm_type='linear', mom = 2
+    )
+
+
+#---------- matched pair handling----------
+
 
     if rebin is None and not res_comp:
 
