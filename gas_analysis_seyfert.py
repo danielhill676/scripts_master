@@ -752,17 +752,42 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
         plt.close(fig)
 
         if normalise_norm:
-            cbar_fig, cbar_ax = plt.subplots(figsize=(4, figsize*7.5))  # narrow vertical bar
+            cbar_fig, cbar_ax = plt.subplots(figsize=(4, figsize*7.5))
+
             norm_for_cbar = simple_norm(image.data, norm_type, vmin=vmin, vmax=vmax)
-            cb = plt.colorbar(plt.cm.ScalarMappable(norm=norm_for_cbar, cmap='magma'),
-                            cax=cbar_ax, orientation='vertical')
+
+            cb = plt.colorbar(
+                plt.cm.ScalarMappable(norm=norm_for_cbar, cmap='RdBu_r'),
+                cax=cbar_ax,
+                orientation='vertical'
+            )
+
             if np.isfinite(vmin) and np.isfinite(vmax) and vmax > vmin:
                 import matplotlib.ticker as mticker
+
                 cb.set_ticks(np.linspace(vmin, vmax, 5))
+
                 cb.ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
-                cb.ax.tick_params(labelsize=fontsize*5)   
+
+                # Tick marks and labels
+                cb.ax.tick_params(
+                    axis='y',
+                    which='major',
+                    labelsize=fontsize*3.5,  # smaller labels
+                    length=8,                # visible ticks
+                    width=1.5,
+                    direction='out'
+                )
+
                 cb.locator = mticker.MaxNLocator(nbins=5)
                 cb.update_ticks()
+
+            # If you have a colourbar label:
+            cb.set_label(
+                "Your caption",
+                fontsize=fontsize*4,
+                labelpad=20   # increase separation from tick labels
+            )
             cb.set_label('Surface density ($M_{\odot}\,\mathrm{pc}^{-2}$)', fontsize=fontsize*5)
             plt.savefig('/data/c3040163/llama/alma/gas_analysis_results'+ f'/colourbar_{R_kpc}_{rebin}_{flux_mask}.pdf', bbox_inches='tight', pad_inches=0)
             plt.close(cbar_fig)
@@ -1158,8 +1183,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     # if name in ['NGC3783','NGC1315','NGC3717','NGC1375','NGC5037','MCG514','ESO021']: this is a set of ones that crashed on the ned search for some reason
     #     return
 
-    if name not in ['NGC2992']:
-        return
+    # if name not in ['NGC2992']:
+    #     return
     
 ##############################################################################
 
@@ -1223,7 +1248,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
             image_untrimmed = image_untrimmed[:, :1600]
             error_map_untrimmed = error_map_untrimmed[:, :1600]
             mask_untrimmed = mask_untrimmed[:, :1600]
-            if mom1_untrimmed != None:
+            if mom1_untrimmed is not None:
                 mom1_untrimmed=mom1_untrimmed[:, :1600]
                 mom2_untrimmed=mom2_untrimmed[:, :1600]
     try:
@@ -1299,7 +1324,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     image[yp1:yp2, xp1:xp2] = image_untrimmed[y1i:y2i, x1i:x2i]
     error_map[yp1:yp2, xp1:xp2] = error_map_untrimmed[y1i:y2i, x1i:x2i]
     mask[yp1:yp2, xp1:xp2] = mask_untrimmed[y1i:y2i, x1i:x2i]
-    if mom1_untrimmed != None:
+    if mom1_untrimmed is not None:
         mom1[yp1:yp2, xp1:xp2] = mom1_untrimmed[y1i:y2i, x1i:x2i]
         mom2[yp1:yp2, xp1:xp2] = mom2_untrimmed[y1i:y2i, x1i:x2i]
     
@@ -1348,16 +1373,24 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         mom1[mask] = np.nan
         mom2[mask] = np.nan
 
+        # ---------- Update WCS ----------
+    wcs_trimmed = wcs_full.deepcopy()
+    wcs_trimmed.wcs.crpix[0] -= x1
+    wcs_trimmed.wcs.crpix[1] -= y1
+
 # ---------- plot mom1 and mom2 ----------
 
+    mom1_nd = NDData(mom1,wcs=wcs_trimmed)
+    mom2_nd = NDData(mom2,wcs=wcs_trimmed)
+
     plot_moment_map(
-        mom1, output_dir, name,
+        mom1_nd, output_dir, name,
         BMAJ, BMIN, R_kpc, None,
         PHANGS_mask, None,
         aperture=None, norm_type='linear', mom = 1
     )
     plot_moment_map(
-        mom2, output_dir, name,
+        mom2_nd, output_dir, name,
         BMAJ, BMIN, R_kpc, None,
         PHANGS_mask, None,
         aperture=None, norm_type='linear', mom = 2
@@ -1440,12 +1473,14 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     native_res = float(beam_scale_pc)
     res_list.append(("native", native_res))
 
-    if rebin is None:
-        for src, bs_pc in zip(beam_scale_labels, beam_scales_pc):
-            if np.isnan(bs_pc):
-                continue
-            if bs_pc > native_res:
-                res_list.append((src, float(bs_pc)))
+    if not 'native' in isolate:
+
+        if rebin is None:
+            for src, bs_pc in zip(beam_scale_labels, beam_scales_pc):
+                if np.isnan(bs_pc):
+                    continue
+                if bs_pc > native_res:
+                    res_list.append((src, float(bs_pc)))
 
     # preserve order, unique
     res_list = list(dict.fromkeys(res_list))
@@ -1524,7 +1559,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     ######################## carry out manual rebin if missing ########################
-    if manual_rebin and rebin is not None:
+    if manual_rebin and rebin is not None and 'native' not in isolate:
         smooth_factor = rebin / native_res
     #     if rebin is not None and smooth_factor > 1:
     #         pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
@@ -1627,10 +1662,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         emission_pixels = np.count_nonzero(image > 1e-10)
         emission_fraction = emission_pixels / image.size
 
-        # ---------- Update WCS ----------
-        wcs_trimmed = wcs_full.deepcopy()
-        wcs_trimmed.wcs.crpix[0] -= x1
-        wcs_trimmed.wcs.crpix[1] -= y1
+
         image_nd = NDData(data=image, wcs=wcs_trimmed)  
 
         # ---------- Flux mask ----------
@@ -1710,47 +1742,50 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 PHANGS_mask, flux_mask,
                 aperture=aperture_to_plot, res_src=res_src, norm_type=norm_type, normalise_norm=normalise_norm, noise = mass_surface_density_rms_noise
             )
-        
-        LCO_10 , mass_tot = total_mass_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32)
-        image_struc = image.copy()
 
-        A = round(asymmetry_single(image_struc, mask), 3)
-        print('A=',A)
-        G = round(gini_single(image_struc, mask), 3)
-        print('G=',G)
-        S = round(smoothness_single_davis(image_struc, mask, pixel_scale_arcsec, pc_per_arcsec), 3)
-        print('S=',S)
-        # ---------- assemble row ----------
-        rows.append({
-            "Galaxy": name,
-            "Resolution (pc)": round(res_pc, 2),
-            "resolution_source": res_src,
-            "pc_per_arcsec": round(pc_per_arcsec, 1),
-            "RA (deg)": RA,
-            "DEC (deg)": DEC,
-            "PA (deg)": PA,
-            "Inclination (deg)": I,
-            "D_Mpc": D_Mpc,
-            # "Smoothness": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=500), 3), "Smoothness_err": 0.0,
-            "smoothness_espocito50_sig100": round(smoothness_single_espocito(image_struc, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=100,aperture=aperture_clump_espocito50), 3),
-            "Smoothness_davis": S, 
-            "Concentration": round(concentration_single(image_struc, mask, aperturesmall=aperture_clump_espocito50,aperturebig=aperture_clump_espocito200),3),
-            "Gini": G,
-            "Asymmetry": A,
-            # "clumping_factor": round(clumping_factor_single(mass_surface_density_map,combmask,pixel_scale_arcsec, pc_per_arcsec, res_pc, R_kpc), 3),      
-            "L'CO (K km_s pc2)": round(LCO_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),
-            "L'CO_JCMT (K km s pc2)": round(LCO_single_JCMT(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),
-            "L'CO_APEX (K km s pc2)": round(LCO_single_APEX(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),
-            "L'CO(1-0) (K km_s pc2)": round(LCO_10, 2),
-            "flux (Jy km/s)": round(SCOdv_single(image,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2), 3),
-            "flux (Jy km/s) 1as": round(SCOdv_single(image_nd,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2,aperture1as), 3),
-            "total_mass (M_sun)": round(mass_tot, 2),
-            "avg_mass_dens_lim_per_kpc": round(mass_dens_lim,2),
-            "emission_pixels": emission_pixels,
-            "emission_fraction": emission_fraction
-        })
+        if not 'plot' in isolate:
+
         
-    return rows
+            LCO_10 , mass_tot = total_mass_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32)
+            image_struc = image.copy()
+
+            A = round(asymmetry_single(image_struc, mask), 3)
+            print('A=',A)
+            G = round(gini_single(image_struc, mask), 3)
+            print('G=',G)
+            S = round(smoothness_single_davis(image_struc, mask, pixel_scale_arcsec, pc_per_arcsec), 3)
+            print('S=',S)
+            # ---------- assemble row ----------
+            rows.append({
+                "Galaxy": name,
+                "Resolution (pc)": round(res_pc, 2),
+                "resolution_source": res_src,
+                "pc_per_arcsec": round(pc_per_arcsec, 1),
+                "RA (deg)": RA,
+                "DEC (deg)": DEC,
+                "PA (deg)": PA,
+                "Inclination (deg)": I,
+                "D_Mpc": D_Mpc,
+                # "Smoothness": round(smoothness_single(image, combmask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,sigma=500), 3), "Smoothness_err": 0.0,
+                "smoothness_espocito50_sig100": round(smoothness_single_espocito(image_struc, mask, pixel_scale_arcsec, pc_per_arcsec,flux_mask=flux_mask,FWHM=100,aperture=aperture_clump_espocito50), 3),
+                "Smoothness_davis": S, 
+                "Concentration": round(concentration_single(image_struc, mask, aperturesmall=aperture_clump_espocito50,aperturebig=aperture_clump_espocito200),3),
+                "Gini": G,
+                "Asymmetry": A,
+                # "clumping_factor": round(clumping_factor_single(mass_surface_density_map,combmask,pixel_scale_arcsec, pc_per_arcsec, res_pc, R_kpc), 3),      
+                "L'CO (K km_s pc2)": round(LCO_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),
+                "L'CO_JCMT (K km s pc2)": round(LCO_single_JCMT(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),
+                "L'CO_APEX (K km s pc2)": round(LCO_single_APEX(image,mask,pixel_scale_arcsec,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32), 3),
+                "L'CO(1-0) (K km_s pc2)": round(LCO_10, 2),
+                "flux (Jy km/s)": round(SCOdv_single(image,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2), 3),
+                "flux (Jy km/s) 1as": round(SCOdv_single(image_nd,mask, jy_per_K,beam_area_arcsec2, pixel_area_arcsec2,aperture1as), 3),
+                "total_mass (M_sun)": round(mass_tot, 2),
+                "avg_mass_dens_lim_per_kpc": round(mass_dens_lim,2),
+                "emission_pixels": emission_pixels,
+                "emission_fraction": emission_fraction
+            })
+            
+        return rows
 
 
 # ------------------ Parallel Directory Processing ------------------
@@ -2111,40 +2146,40 @@ if __name__ == '__main__':
                                                         # "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
                                                         # "plot":  []
     
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
 
     colourbar_list = [] 
-
+    isolate = ['plot', 'native']
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    isolate = 'plot'
+    isolate = ['plot', 'native']
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
-    isolate = None
-    colourbar_list = [] 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    # isolate = None
+    # colourbar_list = [] 
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate,res_comp=True)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate,res_comp=True)
-    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
-    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate,res_comp=True)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate,res_comp=True)
+    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
+    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,res_comp=True)
 
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=0.3,flux_mask=False,isolate=isolate)

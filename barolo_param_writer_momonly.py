@@ -134,6 +134,10 @@ for name in sorted(os.listdir(base_dir)):
     cube = cube[:, y1:y2, x1:x2]
     pb   = pb[:, y1:y2, x1:x2]
 
+    if name not in ['NGC3351','NGC4254']:
+
+        cube[pb < 0.7] = np.nan
+
     # ------------------------------------------------------
     # Update WCS
     # ------------------------------------------------------
@@ -156,6 +160,44 @@ for name in sorted(os.listdir(base_dir)):
     fits.writeto(trimmed_cube, cube, header, overwrite=True)
 
     # ------------------------------------------------------
+    # Estimate cube S/N
+    # ------------------------------------------------------
+
+    # Estimate RMS from all finite voxels (better: use emission-free channels)
+    finite = cube[np.isfinite(cube)]
+    median = np.nanmedian(finite)
+    rms = 1.4826 * np.nanmedian(np.abs(finite - median))
+    signal = np.nanpercentile(finite, 99.9)
+
+    peak_sn = signal / rms
+
+
+    # ------------------------------------------------------
+    # Adaptive masking
+    # ------------------------------------------------------
+
+
+    factor_min = 2.5
+    factor_max = 6.0
+
+    blank_min = 4.0
+    blank_max = 9.0
+
+    snr_min = 5.0
+    snr_max = 50.0
+
+    snr = np.clip(peak_sn, snr_min, snr_max)
+    t = (snr - snr_min) / (snr_max - snr_min)
+
+    factor = factor_min + t * (factor_max - factor_min)
+    blankcut = blank_min + t * (blank_max - blank_min)
+
+    factor = round(factor, 1)
+    blankcut = round(blankcut, 1)
+
+    print(f"Using FACTOR={factor}, BLANKCUT={blankcut}")
+
+    # ------------------------------------------------------
     # Parameter file
     # ------------------------------------------------------
 
@@ -172,7 +214,7 @@ FITSFILE      {trimmed_cube}
 OUTFOLDER     {outsubdir}
 
 THREADS       8
-
+3DFIT       true
 # ---------------------------------------------------
 # Products
 # ---------------------------------------------------
@@ -193,8 +235,27 @@ SNMAP         true
 NORM          LOCAL
 
 MASK          SMOOTH&SEARCH
-FACTOR        3
-BLANKCUT      5
+FACTOR        {factor}
+BLANKCUT      {blankcut}
+
+
+# fitting
+
+FLAGERRORS  false
+
+BADOUT      true
+
+NORMALCUBE  true
+
+TWOSTAGE    true
+
+REGTYPE     auto
+
+FREE        VROT VDISP PA INC
+
+VRAD        0
+
+
 
 # ---------------------------------------------------
 # End
