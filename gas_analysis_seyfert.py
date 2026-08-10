@@ -658,7 +658,7 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
     ax.margins(x=0,y=0)
     ax.set_axis_off()
 
-    if mom == 0: 
+    if mom == 0 or mom == 0.1: 
 
         add_scalebar(ax,1/3600,label="1''",corner='top left',color='lime',borderpad=2,size_vertical=0.5)
         linewith = 2 * R_kpc
@@ -690,7 +690,10 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
             print("Moment data empty or all NaNs — skipping normalization.")
             norm = None
         #plt.title(f'{name_short}',fontsize=75)
-        im=plt.imshow(image.data,origin='lower',norm=norm,cmap='RdBu_r')
+        if mom == 0:
+            im=plt.imshow(image.data,origin='lower',norm=norm,cmap='RdBu_r')
+        elif mom == 0.1:
+            im=plt.imshow(image.data,origin='lower',norm=norm,cmap='inferno')
 
     elif mom == 1 or mom == 2:
         vmax = np.nanpercentile(image.data[np.isfinite(image.data)], 97.5)
@@ -743,6 +746,22 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
             path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}.pdf'
         elif rebin is None and normalise_norm:
             path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_norm.pdf'
+        else:
+            raise ValueError("Invalid combination of rebin and normalise_norm parameters.")
+    if mom == 0.1:
+        if rebin is not None and not normalise_norm:
+            if not flux_mask and not normalise_norm:
+                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_inferno.pdf'
+            elif flux_mask and not normalise_norm:
+                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_inferno.pdf'
+            elif not flux_mask and normalise_norm:
+                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_{res_src}_norm_inferno.pdf'
+            elif flux_mask and normalise_norm:
+                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_{res_src}_norm_inferno.pdf'
+        elif rebin is None and not normalise_norm:
+            path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_inferno.pdf'
+        elif rebin is None and normalise_norm:
+            path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_norm_inferno.pdf'
         else:
             raise ValueError("Invalid combination of rebin and normalise_norm parameters.")
         

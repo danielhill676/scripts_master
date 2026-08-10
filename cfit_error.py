@@ -55,9 +55,9 @@ native_C = (
 fit_data['C_true'] = fit_data['Galaxy'].map(native_C)
 
 # Calculate error relative to native value
-fit_data['C_err'] = fit_data['C_fit'] - fit_data['C_true']
-fit_data['C_err_frac'] = fit_data['C_fit'] / fit_data['C_true']
-
+#fit_data['C_err'] = fit_data['C_fit'] - fit_data['C_true']
+#fit_data['C_err_frac'] = fit_data['C_fit'] / fit_data['C_true']
+fit_data['C_err'] = 1-(fit_data['C_fit'] / fit_data['C_true'])
 # # Save the result
 # output_path = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/gas_analysis_summary_with_Cfit.csv"
 # fit_data.to_csv(output_path, index=False)
@@ -96,7 +96,7 @@ plt.errorbar(
 )
 
 plt.xlabel('Resolution (pc)')
-plt.ylabel('Mean $C_{\\rm err}$')
+plt.ylabel('Mean $C_{\\rm err}/C$')
 plt.grid(True)
 
 output_path = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Cfit_error.csv"

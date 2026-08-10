@@ -167,7 +167,7 @@ def lookup_c_err(r, errors):
     if candidates.empty:
         return 0  # or np.nan
 
-    return candidates.sort_values('Resolution_pc').iloc[0]['C_err_max']  # or whichever column
+    return candidates.sort_values('Resolution_pc').iloc[0]['C_err_mean']  # or whichever column
 
 def fit_concentration_50pc(df,
                         errors,
@@ -185,11 +185,12 @@ def fit_concentration_50pc(df,
     C = df[C_col]
     
     C_fit = C + ((C_sat - C) / (R_sat - R)) * (R_target - R)
-    C_err = (
-    lookup_c_err(R, errors)
-    if np.isscalar(R)
-    else R.apply(lambda r: lookup_c_err(r, errors))
-)
+    rel_err = (
+        lookup_c_err(R, errors)
+        if np.isscalar(R)
+        else R.apply(lambda r: lookup_c_err(r, errors))
+    )
+    C_err = np.abs(C_fit * rel_err / (1 - rel_err))
 
     if extrapolate_hires:
         return C_fit, C_err
@@ -2157,15 +2158,20 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 )
 
                 # Horizontal bar "--"
-                ax.plot(
-                    [x, x], [y, y],
-                    transform=mtransforms.offset_copy(
-                        base, fig=fig, x=-bar_pts, y=0, units='points'
+                ax.annotate(
+                    "",
+                    xy=(x+0.02, y),
+                    xycoords="data",
+                    xytext=(-bar_pts, 0),
+                    textcoords="offset points",
+                    arrowprops=dict(
+                        arrowstyle="-",
+                        color=color,
+                        lw=lw,
+                        shrinkA=0,
+                        shrinkB=0,
                     ),
-                    color=color,
-                    lw=lw,
                     zorder=zorder,
-                    solid_capstyle='butt'
                 )
 
                 # Arrow head "<"
@@ -4648,8 +4654,8 @@ axis_label_lookup = {
 masks = ['broad','strict']
 radii = [0.3,1.5]
 
-masks = ['flux90_strict']
-radii = [1.5]
+masks = ['broad']
+radii = [0.3]
 
 for mask in masks:
     for R_kpc in radii:
@@ -4665,9 +4671,9 @@ for mask in masks:
 
 # #         # using GB24 for concentration
 
-        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
-        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False,fitc=False)
-        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=True)
+        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
+        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False,fitc=False)
+        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=True)
 
 # # # native res
 
@@ -4733,11 +4739,11 @@ for mask in masks:
 
 #### safe for pairdiffs
 
-        plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False,rebin=120)
-        plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False,rebin=120)
-        plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False,rebin=120)
-        plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False,rebin=120)
-        plot_llama_property('emission_pixels', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False,rebin=120)
+        # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False,rebin=120)
+        # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False,rebin=120)
+        # plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False,rebin=120)
+        # plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False,rebin=120)
+        # plot_llama_property('emission_pixels', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False,rebin=120)
 
 
         # plot_llama_property('emission_pixels', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
