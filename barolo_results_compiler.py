@@ -5,11 +5,22 @@ import numpy as np
 import pandas as pd
 
 
+# ==========================================================================================
+# RUN NAME
+# ==========================================================================================
+runname = 'phangsmask_cenfroz_axisfroz'
+# =========================================================================================
+# RUN NUMBER
+# ==========================================================================================
+runn = 1
+# =========================================================================================
+
+
 # Input directory containing {name} subdirectories
-outerdir = "/Users/administrator/Astro/LLAMA/ALMA/barolo/phangsmask"
+outerdir = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname}"
 
 # Output file
-output_csv = outerdir+"/phangsmask_fit1.csv"
+output_csv = outerdir+f"/{runname}_fit{runn}.csv"
 
 
 def process_rings_file(filepath):

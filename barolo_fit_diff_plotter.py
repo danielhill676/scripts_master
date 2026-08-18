@@ -4,7 +4,20 @@ import pandas as pd
 from IPython.display import display
 
 
-path_fit = "/Users/administrator/Astro/LLAMA/ALMA/barolo/phangsmask/phangsmask_fit1.csv"
+# ==========================================================================================
+# RUN NAME
+# ==========================================================================================
+runname = 'phangsmask_cenfroz_axisfroz'
+# =========================================================================================
+# RUN NUMBER
+# ==========================================================================================
+runn = 1
+# =========================================================================================
+
+
+
+
+path_fit = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname}/{runname}_fit{runn}.csv"
 path_used = "/Users/administrator/Astro/LLAMA/ALMA/LLAMA_coords.csv"
 
 fit = pd.read_csv(path_fit)

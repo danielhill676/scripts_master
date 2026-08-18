@@ -15,10 +15,26 @@ import math
 AGN_table_dir = "/data/c3040163/llama/alma/gas_analysis_results/AGN/gas_analysis_summary_broad_1.5kpc.csv"
 inactive_table_dir = "/data/c3040163/llama/alma/gas_analysis_results/inactive/gas_analysis_summary_broad_1.5kpc.csv"
 
+run1_data_cenfroz_dir = '/data/c3040163/llama/alma/barolo/phangsmask/phangsmask_fit1.csv'
+run1_data_cenfree_dir = '/data/c3040163/llama/alma/barolo/phangsmask_cenfree_axisfree/phangsmask_cenfree_axisfree_fit1.csv'
+
+
 fit_data_AGN = pd.read_csv(AGN_table_dir)
 fit_data_inactive = pd.read_csv(inactive_table_dir)
+run1_data_cenfroz = pd.read_csv(run1_data_cenfroz_dir)
+run1_data_cenfree = pd.read_csv(run1_data_cenfree_dir)
 
-outbase = "/data/c3040163/llama/alma/barolo/phangsmask"
+
+
+
+# ==========================================================================================
+# RUN NAME
+# ==========================================================================================
+runname = 'phangsmask_cenfroz_axisfroz'
+# ==========================================================================================
+
+
+outbase = f"/data/c3040163/llama/alma/barolo/{runname}"
 os.makedirs(outbase, exist_ok=True)
 
 def format_coord(value):
@@ -48,7 +64,7 @@ BBAROLO_EXE = "/data/c3040163/apps/BBarolo"   # absolute path
 # ----------------------------------------------------------
 
 
-def barolo_param_writer(co32=False):
+def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = True, z0_pc = 0, zfree = False, vradfree = False): # z0_def in pc scale height
 
     if not co32:
         base_dir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived"
@@ -61,9 +77,25 @@ def barolo_param_writer(co32=False):
         if not os.path.isdir(subdir):
             continue
 
-        if name in ['NGC5845','NGC3351','NGC4254']:
+# --------------------- Exclusions ------------------------------------------
+
+
+        # if name not in ['NGC4254','NGC3351']:
+        #     continue
+
+        # if name not in ['NGC4224']:
+        #     continue
+
+        # Current targets which are not working for cenfree_axisfree or cenfroz_axisfree
+        if name in ['NGC1079', 'NGC1947', 'NGC4235', 'NGC4260', 'NGC718', 'NGC3351', 'NGC4254']:
             continue
+
+        # too low snr, or irrelevant
+        if name in ['NGC2775','NGC1315','NGC1375','NGC5845','ngc1365_phangs','ngc2775_phangs','ngc3351_phangs','ngc4254_phangs','NGC5064_wis','NGC5128','NGC7172_wis','NGC1387_wis']:
+            continue
+
         print(f"Processing {name}")
+        froz_axis = froz_axis_def
 
         if not co32:
             file = os.path.join(
@@ -95,6 +127,8 @@ def barolo_param_writer(co32=False):
         if name in fit_data_AGN["Galaxy"].values:
             table = fit_data_AGN
 
+
+
         elif name in fit_data_inactive["Galaxy"].values:
             table = fit_data_inactive
 
@@ -111,7 +145,19 @@ def barolo_param_writer(co32=False):
             print("    Native-resolution row not found.")
             continue
 
+        if name in ['NGC1365','NGC3783','NGC4224','NGC4388','NGC7172']:
+            axis_table = run1_data_cenfree
+        else:
+            axis_table = run1_data_cenfroz
 
+        row_axis = axis_table[
+            (axis_table["name"] == name)
+        ]
+        if froz_axis and len(row_axis) == 0:
+            print(" No pre-fitted kinematic axis found")
+            froz_axis = False
+
+     
         from astropy.wcs import WCS
         from astropy.coordinates import SkyCoord
         from astropy import units as u
@@ -120,8 +166,8 @@ def barolo_param_writer(co32=False):
         cube, header = fits.getdata(file, header=True)
         mask = fits.getdata(mask_file)
 
-        print('cube',cube.shape)
-        print('mask',mask.shape)
+        # print('cube',cube.shape)
+        # print('mask',mask.shape)
 
 
 
@@ -132,6 +178,12 @@ def barolo_param_writer(co32=False):
         RA = row["RA (deg)"].iloc[0]
         DEC = row["DEC (deg)"].iloc[0]
         D_Mpc = row["D_Mpc"].iloc[0]
+
+        i = 'None'
+        PA = 'None'
+        if froz_axis == True:
+            i = row_axis['mean_INC_deg'].iloc[0]
+            PA = row_axis['mean_PA_deg'].iloc[0]
 
         R_kpc = 1.5          # radius you want
         pixel_scale_arcsec = abs(header["CDELT2"]) * 3600.
@@ -180,16 +232,23 @@ def barolo_param_writer(co32=False):
         header["CRPIX2"] -= y1
         header["NAXIS1"] = cube.shape[2]
         header["NAXIS2"] = cube.shape[1]
+
         BMAJ = header.get("BMAJ", 0) * 3600.0  # deg -> arcsec
 
 
-        nkpc = 1.5
-        R_kpc = nkpc * (206.265 / D_Mpc)
-        NRADII = math.floor(R_kpc / (2.5 * BMAJ)) if BMAJ > 0 else 1 # RADSEP changed from 1 to 1.5
+        nkpc = 8
+        R_arcsec = nkpc * (206.265 / D_Mpc)
+        NRADII = math.floor(R_arcsec / (2.5 * BMAJ)) if BMAJ > 0 else 1
         LINEAR = 0.425  # ALMA typical
 
-        RA_hex  = format_coord(float(RA))
-        DEC_hex = format_coord(float(DEC))
+        Z0 = (z0_pc / 1000) * (206.265 / D_Mpc)
+        zfree_write = 'Z0'  if zfree else ''
+        pafree_write = 'PA' if not froz_axis else ''
+        ifree_write = 'INC' if not froz_axis else ''
+        vradfree_write = 'VRAD' if vradfree else ''
+
+        RA_hex  = format_coord(float(RA)) if froz_centre else 'None'
+        DEC_hex = format_coord(float(DEC)) if froz_centre else 'None'
 
         # ------------------------------------------------------
         # Output folder
@@ -197,9 +256,11 @@ def barolo_param_writer(co32=False):
 
         outsubdir = os.path.join(outbase, name)
         os.makedirs(outsubdir, exist_ok=True)
-
+        # trimmed_cube_subdir = "/data/c3040163/llama/alma/barolo/phangsmask/"+name
+        # trimmed_cube = os.path.join(trimmed_cube_subdir, f"{name}_trimmed.fits")
+        # trimmed_mask = os.path.join(trimmed_cube_subdir, f"{name}_trimmed_mask.fits")
         trimmed_cube = os.path.join(outsubdir, f"{name}_trimmed.fits")
-        trimmed_mask = os.path.join(outsubdir, f"{name}_trimmed_mask.fits")
+        trimmed_mask = os.path.join(outsubdir, f"{name}_trimmed_mask.fits") 
         fits.writeto(trimmed_mask,cube,header, overwrite=True)
 
         # mask = mask.astype(bool)
@@ -234,6 +295,9 @@ def barolo_param_writer(co32=False):
     #VROT        200
     #VDISP       10
     VRAD        0
+    PA          {PA}
+    INC         {i}
+    Z0          {Z0}
 
     NORM        LOCAL
     MASK        {trimmed_mask}       
@@ -248,7 +312,7 @@ def barolo_param_writer(co32=False):
     SNMAP         true
 
 
-    FREE        VROT VDISP PA INC
+    FREE        VROT VDISP {pafree_write} {ifree_write} {zfree_write} {vradfree_write}
 
     TWOSTAGE    true
     REGTYPE     bezier
@@ -256,7 +320,7 @@ def barolo_param_writer(co32=False):
     #WFUNC       2
     LINEAR      {LINEAR}
     #SIDE        B
-    FLAGERRORS  false
+    FLAGERRORS  true
     BADOUT      true
     NORMALCUBE  true
     DISTANCE    {D_Mpc}
