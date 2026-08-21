@@ -30,7 +30,7 @@ run1_data_cenfree = pd.read_csv(run1_data_cenfree_dir)
 # ==========================================================================================
 # RUN NAME
 # ==========================================================================================
-runname = 'phangsmask_cenfroz_axisfroz'
+runname = 'phangsmask_cenfroz_axisfree_zfree'
 # ==========================================================================================
 
 
@@ -64,7 +64,7 @@ BBAROLO_EXE = "/data/c3040163/apps/BBarolo"   # absolute path
 # ----------------------------------------------------------
 
 
-def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = True, z0_pc = 0, zfree = False, vradfree = False): # z0_def in pc scale height
+def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = False, z0_pc = 10, zfree = True, vradfree = False, exclude_failed = False): # z0_def in pc scale height
 
     if not co32:
         base_dir = "/data/c3040163/llama/alma/phangs_imaging_scripts-master/full_run_newkeys_all_arrays/reduction/derived"
@@ -83,12 +83,13 @@ def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = True, z0
         # if name not in ['NGC4254','NGC3351']:
         #     continue
 
-        # if name not in ['NGC4224']:
+        # if name not in ['NGC5728']:
         #     continue
 
         # Current targets which are not working for cenfree_axisfree or cenfroz_axisfree
-        if name in ['NGC1079', 'NGC1947', 'NGC4235', 'NGC4260', 'NGC718', 'NGC3351', 'NGC4254']:
-            continue
+        if exclude_failed:
+            if name in ['NGC1079', 'NGC1947', 'NGC4235', 'NGC4260', 'NGC718', 'NGC3351', 'NGC4254']:
+                continue
 
         # too low snr, or irrelevant
         if name in ['NGC2775','NGC1315','NGC1375','NGC5845','ngc1365_phangs','ngc2775_phangs','ngc3351_phangs','ngc4254_phangs','NGC5064_wis','NGC5128','NGC7172_wis','NGC1387_wis']:
@@ -133,7 +134,7 @@ def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = True, z0
             table = fit_data_inactive
 
         else:
-            print("    Galaxy not found in tables.")
+            print("Galaxy not found in tables.")
             continue
 
         row = table[
@@ -181,9 +182,18 @@ def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = True, z0
 
         i = 'None'
         PA = 'None'
-        if froz_axis == True:
+
+        try:
             i = row_axis['mean_INC_deg'].iloc[0]
             PA = row_axis['mean_PA_deg'].iloc[0]
+        except:
+            try:
+                i = row['Inclination (deg)']
+                PA = row['PA (deg)']
+            except:
+                i = 'None'
+                PA = 'None'
+
 
         R_kpc = 1.5          # radius you want
         pixel_scale_arcsec = abs(header["CDELT2"]) * 3600.
@@ -261,7 +271,7 @@ def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = True, z0
         # trimmed_mask = os.path.join(trimmed_cube_subdir, f"{name}_trimmed_mask.fits")
         trimmed_cube = os.path.join(outsubdir, f"{name}_trimmed.fits")
         trimmed_mask = os.path.join(outsubdir, f"{name}_trimmed_mask.fits") 
-        fits.writeto(trimmed_mask,cube,header, overwrite=True)
+        fits.writeto(trimmed_mask,mask,header, overwrite=True)
 
         # mask = mask.astype(bool)
         # masked_cube = cube.copy()
@@ -297,10 +307,12 @@ def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = True, z0
     VRAD        0
     PA          {PA}
     INC         {i}
+    # PA          180
+    # INC         25
     Z0          {Z0}
 
     NORM        LOCAL
-    MASK        {trimmed_mask}       
+    MASK        file({trimmed_mask})       
 
     TOTALMAP      true
     VELOCITYMAP   true
@@ -320,7 +332,7 @@ def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = True, z0
     #WFUNC       2
     LINEAR      {LINEAR}
     #SIDE        B
-    FLAGERRORS  true
+    FLAGERRORS  false
     BADOUT      true
     NORMALCUBE  true
     DISTANCE    {D_Mpc}

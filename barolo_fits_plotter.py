@@ -13,23 +13,22 @@ import matplotlib.pyplot as plt
 from astropy.visualization import simple_norm
 
 
-
 # ==========================================================================================
 # RUN NAME
-# ==========================================================================================
-runname = 'phangsmask_cenfroz_axisfroz'
+runname = 'phangsmask_cenfroz_axisfree_zfree'
 # =========================================================================================
 # RUN NUMBER
+runn = 4
+# MACHINE
+seyfert = True
 # ==========================================================================================
-runn = 1
-# =========================================================================================
 
 # ================================================================
 # Configuration
 # ================================================================
 
-outerdir = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname}"
-outerdir_phangs = "/Users/administrator/Astro/LLAMA/ALMA/pipeline_m0"
+outerdir = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname}" if not seyfert else f"/data/c3040163/llama/alma/barolo/{runname}"
+outerdir_phangs = "/Users/administrator/Astro/LLAMA/ALMA/pipeline_m0" if not seyfert else "/data/c3040163/llama/alma/pipeline_m0"
 outputdir = outerdir
 
 R_kpc = 1.5
@@ -75,9 +74,9 @@ def read_barolo_parameters(outfolder):
             f"Missing BAROLO rings file: {rings_file}"
         )
 
-    rad, inc, pa, xpos, ypos, vsys = np.genfromtxt(
+    rad, inc, pa, xpos, ypos, vsys, vrot, disp, z, vrad = np.genfromtxt(
         rings_file,
-        usecols=(1, 4, 5, 9, 10, 11),
+        usecols=(1, 4, 5, 9, 10, 11, 3, 3, 6, 12),
         unpack=True
     )
 
@@ -86,13 +85,21 @@ def read_barolo_parameters(outfolder):
     pa_mean = np.nanmean(pa)
     inc_mean = np.nanmean(inc)
     vsys_mean = np.nanmean(vsys)
+    vrot_mean = np.nanmean(vrot)
+    disp_mean = np.nanmean(disp)
+    z_mean = np.nanmean(z)
+    vrad_mean = np.nanmean(vrad)
 
     return (
         xcen,
         ycen,
         pa_mean,
         inc_mean,
-        vsys_mean
+        vsys_mean,
+        vrot_mean,
+        disp_mean,
+        z_mean,
+        vrad_mean
     )
 
 
@@ -398,7 +405,7 @@ def plot_moment_map(
 
     if barolo_params is not None:
 
-        xcen, ycen, pa, inc, vsys = barolo_params
+        xcen, ycen, pa, inc, vsys, vrot, disp, z, vrad  = barolo_params
 
         # Annotation colour
         annotation_colour = (
@@ -728,7 +735,8 @@ for name in sorted(os.listdir(outerdir)):
             galaxy_outfolder
         )
 
-        xcen, ycen, pa, inc, vsys = barolo_params
+        xcen, ycen, pa, inc, vsys, vrot, disp, z, vrad = barolo_params
+
 
         print(
             f"BAROLO centre: ({xcen:.2f}, {ycen:.2f})"
@@ -837,90 +845,89 @@ for name in sorted(os.listdir(outerdir)):
     # ------------------------------------------------------------
     # Load PHANGS strict CO(2-1) moment-0 map
     #
-    # This is retained as your additional masking step.
     # ------------------------------------------------------------
 
-    co21_file = os.path.join(
-        outerdir_phangs,
-        name,
-        f"{name}_12m_co21_strict_mom0.fits"
-    ) if name not in ['NGC4388', 'NGC5728', 'NGC6814'] else os.path.join(
-        outerdir_phangs,
-        name,
-        f"{name}_12m_co32_strict_mom0.fits"
-    ) 
+    # co21_file = os.path.join(
+    #     outerdir_phangs,
+    #     name,
+    #     f"{name}_12m_co21_strict_mom0.fits"
+    # ) if name not in ['NGC4388', 'NGC5728', 'NGC6814'] else os.path.join(
+    #     outerdir_phangs,
+    #     name,
+    #     f"{name}_12m_co32_strict_mom0.fits"
+    # ) 
 
-    if not os.path.exists(co21_file):
+    # if not os.path.exists(co21_file):
 
-        print(
-            f"Missing CO(2-1) mask for {name}: "
-            f"{co21_file}"
-        )
+    #     print(
+    #         f"Missing CO(2-1) mask for {name}: "
+    #         f"{co21_file}"
+    #     )
 
-        continue
+    #     continue
 
-    with fits.open(co21_file) as hdul:
+    # with fits.open(co21_file) as hdul:
 
-        co21_data = hdul[0].data.copy()
-        co21_header = hdul[0].header.copy()
+    #     co21_data = hdul[0].data.copy()
+    #     co21_header = hdul[0].header.copy()
 
-        co21_wcs = WCS(
-            co21_header
-        )
+    #     co21_wcs = WCS(
+    #         co21_header
+    #     )
 
-        BMAJ = co21_header.get(
-            "BMAJ",
-            np.nan
-        )
+    #     BMAJ = co21_header.get(
+    #         "BMAJ",
+    #         np.nan
+    #     )
 
-        BMIN = co21_header.get(
-            "BMIN",
-            np.nan
-        )
+    #     BMIN = co21_header.get(
+    #         "BMIN",
+    #         np.nan
+    #     )
 
-    print(
-        f"Loaded CO(2-1) mask: {co21_file}"
-    )
+    # print(
+    #     f"Loaded CO(2-1) mask: {co21_file}"
+    # )
 
     # ------------------------------------------------------------
     # Apply CO(2-1) strict mask to every BAROLO map
     # ------------------------------------------------------------
 
-    for key, image in maps[name].items():
+    # for key, image in maps[name].items():
 
-        map_type, n = key
+    #     map_type, n = key
 
-        target_data = image.data
-        target_wcs = image.wcs
+    #     target_data = image.data
+    #     target_wcs = image.wcs
 
-        co21_reprojected, footprint = (
-            reproject_interp(
-                (co21_data, co21_wcs),
-                target_wcs,
-                shape_out=target_data.shape
-            )
-        )
+    #     co21_reprojected, footprint = (
+    #         reproject_interp(
+    #             (co21_data, co21_wcs),
+    #             target_wcs,
+    #             shape_out=target_data.shape
+    #         )
+    #     )
 
-        mask = (
-            ~np.isfinite(co21_reprojected)
-            | (co21_reprojected == 0)
-            | (footprint == 0)
-        )
+    #     mask = (
+    #         ~np.isfinite(co21_reprojected)
+    #         | (co21_reprojected == 0)
+    #         | (footprint == 0)
+    #     )
 
-        masked_data = target_data.copy()
+    #     masked_data = target_data.copy()
 
-        masked_data[mask] = np.nan
+    #     masked_data[mask] = np.nan
 
-        maps[name][key] = NDData(
-            data=masked_data,
-            wcs=target_wcs
-        )
+    #     maps[name][key] = NDData(
+    #         data=masked_data,
+    #         wcs=target_wcs
+    #     )
 
-        print(
-            f"Masked {name} {map_type} "
-            f"moment {n}: "
-            f"{np.sum(mask)} pixels masked"
-        )
+    #     print(
+    #         f"Masked {name} {map_type} "
+    #         f"moment {n}: "
+    #         f"{np.sum(mask)} pixels masked"
+    #     )
 
     # ------------------------------------------------------------
     # Retrieve masked maps

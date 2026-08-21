@@ -47,7 +47,7 @@ for name in sorted(os.listdir(base_dir)):
     if not os.path.isdir(subdir):
         continue
 
-    if name not in ['NGC5845']:
+    if name not in ['NGC7727']:
         continue
     print(f"Processing {name}")
 
@@ -58,7 +58,7 @@ for name in sorted(os.listdir(base_dir)):
 
     mask_file = os.path.join(
         subdir,
-        f"{name}_12m_co21_barolomask.fits"
+        f"{name}_12m_co21_strictmask.fits"
     )
 
     if not (os.path.exists(file) and os.path.exists(mask_file)):
@@ -212,10 +212,10 @@ YPOS        {DEC_hex}
 VRAD        0
 
 NORM        LOCAL
-#MASK        {trimmed_mask}
-MASK        None
-MINPIX        15
-SNRCUT        5      
+MASK        file({trimmed_mask})
+# MASK        None
+# MINPIX        15
+# SNRCUT        5      
 
 
 TOTALMAP      true
@@ -236,7 +236,7 @@ REGTYPE     bezier
 #WFUNC       2
 LINEAR      {LINEAR}
 #SIDE        B
-FLAGERRORS  false
+FLAGERRORS  true
 BADOUT      true
 NORMALCUBE  true
 DISTANCE    {D_Mpc}
