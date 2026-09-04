@@ -19,14 +19,17 @@ def label_mom0(name,type,r,rebin,mask,extra_text,rescomp):
     else:
         image_path = (
             f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/'
-            f'{type}/m0_plots/{r}_no_rebin_{mask}_{name}.pdf'
+            f'{type}/m0_plots/{r}_no_rebin_{mask}_{name}_native.pdf'
+        ) if not rescomp else (
+            f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/'
+            f'{type}/gas_analysis_summary_{mask}_{r}kpc_rescomp.csv'
         )
         table_path = (
             f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/'
             f'{type}/gas_analysis_summary_{mask}_{r}kpc.csv'
         ) if not rescomp else (
             f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/'
-            f'{type}/gas_analysis_summary`_{mask}_{r}kpc_rescomp.csv'
+            f'{type}/gas_analysis_summary_{mask}_{r}kpc_rescomp.csv'
         )
 
     image_outpath = image_path.replace(".pdf", "_labelled.pdf")
@@ -39,7 +42,12 @@ def label_mom0(name,type,r,rebin,mask,extra_text,rescomp):
     table = pd.read_csv(table_path)
     
     search_name = name.split('_')[0] if type != 'aux' else name
-    res_source = name.split('_')[1] if rebin == None else 'rebin'
+    if rescomp:
+        res_source = name.split('_')[1]
+    elif rebin is not None:
+        res_source = 'rebin'
+    else:
+        res_source = 'native'
     
     row = table.loc[
     (table["id"] == search_name) &
@@ -173,12 +181,12 @@ def label_mom0(name,type,r,rebin,mask,extra_text,rescomp):
 
 
 
-name = 'NGC4254_8'
-type = 'inactive'
+name = 'ngc3351_phangs'
+type = 'aux'
 r = 1.5
-rebin = None
+rebin = 120
 mask = 'strict'
-rescomp = True
+rescomp = False
 extra_text = """
 
 """

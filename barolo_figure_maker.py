@@ -6,14 +6,25 @@ import fitz
 # RUN NAME
 # ==========================================================================================
 runname = 'phangsmask_cenfroz_axisfree'
-# =========================================================================================
-# RUN NUMBER
-# ==========================================================================================
+# runname = 'phangsmask_cenfroz_axisfree_zfree'
+
+runname2 = 'phangsmask_cenfroz_axisfree_zfree'
+# runname2 = None
+
+
 runn = 3
+# runn = 4
+
+seyfert = True
 # =========================================================================================
 
-BASE_DIR = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname}/plots"
-COLOURBAR_DIR = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname}/colourbars"
+
+
+BASE_DIR = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname}/plots" if not seyfert else f"/data/c3040163/llama/alma/barolo/{runname}/plots"
+COLOURBAR_DIR = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname}/colourbars" if not seyfert else f"/data/c3040163/llama/alma//barolo/{runname}/colourbars"
+
+BASE_DIR2 = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname2}/plots" if not seyfert else f"/data/c3040163/llama/alma/barolo/{runname2}/plots"
+COLOURBAR_DIR = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname2}/colourbars" if not seyfert else f"/data/c3040163/llama/alma//barolo/{runname2}/colourbars"
 
 
 def figure_maker(
@@ -44,6 +55,7 @@ def figure_maker(
     for name in sorted(os.listdir(BASE_DIR)):
 
         galaxy_dir = os.path.join(BASE_DIR, name)
+        galaxy_dir2 = os.path.join(BASE_DIR2, name) 
 
         if not os.path.isdir(galaxy_dir):
             continue
@@ -61,7 +73,20 @@ def figure_maker(
                 galaxy_dir,
                 f"{name}_res_mom{n}{suffix}"
             ),
-        ]
+        ] if runname2 is None else [
+            os.path.join(
+                galaxy_dir,
+                f"{name}_fit_mom{n}{suffix}"
+            ),
+            os.path.join(
+                galaxy_dir2,
+                f"{name}_fit_mom{n}{suffix}"
+            ),
+            os.path.join(
+                galaxy_dir,
+                f"{name}_{runname2}_res_mom{n}{suffix}"
+            ),
+        ] 
 
         if all(os.path.isfile(f) for f in files):
 
@@ -192,7 +217,11 @@ def figure_maker(
         "True",
         "Fit",
         "Residual"
-    ]
+    ] if runname2 is None else [
+        f"{runname}",
+        f"{runname2}",
+        "Residual"
+    ] 
 
     for col, heading in enumerate(headings):
 
@@ -381,6 +410,9 @@ def figure_maker(
         output_file = os.path.join(
             BASE_DIR,
             f"all_mom{n}{norm_string}.pdf"
+        ) if runname2 is None else os.path.join(
+            BASE_DIR,
+            f"all_mom{n}{norm_string}_{runname2}_comp.pdf"
         )
 
     out.save(output_file)

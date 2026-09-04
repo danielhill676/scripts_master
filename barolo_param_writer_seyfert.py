@@ -83,8 +83,8 @@ def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = False, z
         # if name not in ['NGC4254','NGC3351']:
         #     continue
 
-        # if name not in ['NGC5728']:
-        #     continue
+        if name not in ['MCG523']:
+            continue
 
         # Current targets which are not working for cenfree_axisfree or cenfroz_axisfree
         if exclude_failed:
@@ -260,6 +260,8 @@ def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = False, z
         RA_hex  = format_coord(float(RA)) if froz_centre else 'None'
         DEC_hex = format_coord(float(DEC)) if froz_centre else 'None'
 
+        snrcut = 4 if name not in ['MCG523'] else 3
+
         # ------------------------------------------------------
         # Output folder
         # ------------------------------------------------------
@@ -312,7 +314,8 @@ def barolo_param_writer(co32=False, froz_centre = True, froz_axis_def = False, z
     Z0          {Z0}
 
     NORM        LOCAL
-    MASK        file({trimmed_mask})       
+    MASK        file({trimmed_mask})
+    SNRCUT      {snrcut}       
 
     TOTALMAP      true
     VELOCITYMAP   true

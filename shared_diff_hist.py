@@ -25,19 +25,62 @@ diffs_frac_clump = np.array([2.278,1.041,0.522,1.150])
 diffs_frac_gini = np.array([1.155,1.108,0.561,1.191])
 
 
-for diffs_frac, metric in zip(
-    [diffs_frac_conc, diffs_frac_asym, diffs_frac_clump, diffs_frac_gini],
-    ['Concentration', 'Asymmetry', 'Clumpiness', 'Gini']
+# for diffs_frac, metric in zip(
+#     [diffs_frac_conc, diffs_frac_asym, diffs_frac_clump, diffs_frac_gini],
+#     ['Concentration', 'Asymmetry', 'Clumpiness', 'Gini']
+# ):
+#     print(metric, diffs_frac)
+
+#     # -----------------------------
+#     # Summary statistics
+#     # -----------------------------
+#     n = len(diffs_frac)
+#     mean_frac = np.mean(diffs_frac)
+#     sigma_frac = np.std(diffs_frac, ddof=1)
+#     mean_err_frac = sigma_frac / np.sqrt(len(diffs_frac))
+
+#     # -----------------------------
+#     # Plot
+#     # -----------------------------
+#     fig, ax = plt.subplots(figsize=(8, 5))
+
+#     font = 20
+
+
+#     ax.hist(diffs_frac, bins=12, color="green", histtype='bar', linewidth=4,alpha=0.3)
+#     ax.axvline(mean_frac, color="red", linestyle="-", label=f"Mean = {mean_frac:.2g} ± {mean_err_frac:.2g}",linewidth=3)
+#     ax.axvline(mean_frac - sigma_frac, color="blue", linestyle="--")
+#     ax.axvline(mean_frac + sigma_frac, color="blue", linestyle="--",label=f"$1\sigma = {(sigma_frac):.2g}$" if sigma_frac > 0 else r"$1\sigma = \infty$")
+#     ax.axvline(1, color="black", linestyle="solid")  # reference line
+
+
+#     ax.set_xlabel(rf"{metric} fractional difference equiv",fontsize=font)
+#     ax.set_ylabel("Number of measurements",fontsize=font)
+#     t_stat, p_value_t = ttest_1samp(diffs_frac, 1)
+#     ax.set_title(f"p = {(p_value_t*100):.3f}\% \qquad N = {n}", fontsize=font)
+
+
+
+#     ax.legend()
+#     plt.tight_layout()
+#     path = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/Shared_systematics/{metric}.pdf'
+#     plt.savefig(path)
+
+
+
+for diffs, metric in zip(
+    [dlog_y],
+    [r"C"]
 ):
-    print(metric, diffs_frac)
+    print(metric, diffs)
 
     # -----------------------------
     # Summary statistics
     # -----------------------------
-    n = len(diffs_frac)
-    mean_frac = np.mean(diffs_frac)
-    sigma_frac = np.std(diffs_frac, ddof=1)
-    mean_err_frac = sigma_frac / np.sqrt(len(diffs_frac))
+    n = len(diffs)
+    mean = np.mean(diffs)
+    sigma = np.std(diffs, ddof=1)
+    mean_err = sigma / np.sqrt(len(diffs))
 
     # -----------------------------
     # Plot
@@ -47,16 +90,16 @@ for diffs_frac, metric in zip(
     font = 20
 
 
-    ax.hist(diffs_frac, bins=12, color="green", histtype='bar', linewidth=4,alpha=0.3)
-    ax.axvline(mean_frac, color="red", linestyle="-", label=f"Mean = {mean_frac:.2g} ± {mean_err_frac:.2g}",linewidth=3)
-    ax.axvline(mean_frac - sigma_frac, color="blue", linestyle="--")
-    ax.axvline(mean_frac + sigma_frac, color="blue", linestyle="--",label=f"$1\sigma = {(sigma_frac):.2g}$" if sigma_frac > 0 else r"$1\sigma = \infty$")
-    ax.axvline(1, color="black", linestyle="solid")  # reference line
+    ax.hist(diffs, bins=12, color="green", histtype='bar', linewidth=4,alpha=0.3)
+    ax.axvline(mean, color="red", linestyle="-", label=f"Mean = {mean:.2g} ± {mean_err:.2g}",linewidth=3)
+    ax.axvline(mean - sigma, color="blue", linestyle="--")
+    ax.axvline(mean + sigma, color="blue", linestyle="--",label=f"$1\sigma = {(sigma):.2g}$" if sigma > 0 else r"$1\sigma = \infty$")
+    ax.axvline(0, color="black", linestyle="solid")  # reference line
 
 
-    ax.set_xlabel(rf"{metric} fractional difference equiv",fontsize=font)
+    ax.set_xlabel(rf"$\Delta {metric}$ (LLAMA - Garcia-Burillo+24)",fontsize=font)
     ax.set_ylabel("Number of measurements",fontsize=font)
-    t_stat, p_value_t = ttest_1samp(diffs_frac, 1)
+    t_stat, p_value_t = ttest_1samp(diffs, 0)
     ax.set_title(f"p = {(p_value_t*100):.3f}\% \qquad N = {n}", fontsize=font)
 
 

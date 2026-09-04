@@ -426,21 +426,25 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 # Clean AGN data
             merged_AGN[x_column] = pd.to_numeric(merged_AGN[x_column], errors='coerce')
             merged_AGN[y_column] = pd.to_numeric(merged_AGN[y_column], errors='coerce')
-            merged_AGN[c_column] = pd.to_numeric(merged_AGN[c_column], errors='coerce')
+            if c_column is not None:
+                merged_AGN[c_column] = pd.to_numeric(merged_AGN[c_column], errors='coerce')
             merged_AGN_clean = merged_AGN.dropna(subset=[x_column, y_column])
 
             # Clean inactive data
             merged_inactive[x_column] = pd.to_numeric(merged_inactive[x_column], errors='coerce')
             merged_inactive[y_column] = pd.to_numeric(merged_inactive[y_column], errors='coerce')
-            merged_inactive[c_column] = pd.to_numeric(merged_inactive[c_column], errors='coerce')
+            if c_column is not None:
+                merged_inactive[c_column] = pd.to_numeric(merged_inactive[c_column], errors='coerce')
             merged_inactive_clean = merged_inactive.dropna(subset=[x_column, y_column])
 
             x_agn = merged_AGN_clean[x_column]
             y_agn = merged_AGN_clean[y_column]
-            c_agn = merged_AGN_clean[c_column]
+            if c_column is not None:
+                c_agn = merged_AGN_clean[c_column]
             x_inactive = merged_inactive_clean[x_column]
             y_inactive = merged_inactive_clean[y_column]
-            c_inactive = merged_inactive_clean[c_column]
+            if c_column is not None:
+                c_inactive = merged_inactive_clean[c_column]
 
             # --- Exclude names here ---
             if exclude_names is not None and isolate_names is None:
@@ -518,7 +522,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 excluded_rows = merged_inactive_clean[~mask_keep_inactive]
                 excluded_x.extend(excluded_rows[x_column].dropna().tolist())
                 excluded_y.extend(excluded_rows[y_column].dropna().tolist())
-                excluded_c.extend(excluded_rows[c_column].dropna().tolist())
+                if c_column is not None:
+                    excluded_c.extend(excluded_rows[c_column].dropna().tolist())
 
                 # =======================
                 # Apply filtering (keep only isolate list)
@@ -4671,9 +4676,9 @@ for mask in masks:
 
 # #         # using GB24 for concentration
 
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False,fitc=False)
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=True)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False,fitc=False)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=True)
 
 # # # native res
 
@@ -4737,6 +4742,8 @@ for mask in masks:
         # plot_llama_property('Resolution (pc)', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False,soloplot=None,mask=mask,nativey=True,R_kpc=R_kpc,exclude_names=exclude,plotshared=False, yhist=False)
 
 
+
+
 #### safe for pairdiffs
 
         # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False,rebin=120)
@@ -4769,7 +4776,7 @@ for mask in masks:
  #      posible y_column: 'Smoothness_davis', 'Asymmetry', 'Gini', 'Sigma0', 'rs'"""
 
 
-
+plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,nativey=True,res_comp=False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'], yhist=False,plotshared=False,comb_llama=True,compare=True,which_compare=[['strict','broad'],[0.3]])
 
 stats_table = pd.DataFrame(stats_rows)
 stats_table.to_csv(

@@ -15,21 +15,46 @@ from astropy.visualization import simple_norm
 
 # ==========================================================================================
 # RUN NAME
-runname = 'phangsmask_cenfroz_axisfree_zfree'
+runname = 'phangsmask_cenfroz_axisfree'
+# runname = 'phangsmask_cenfroz_axisfree_zfree'
 # =========================================================================================
 # RUN NUMBER
-runn = 4
+runn = 3
+# runn = 4
+
 # MACHINE
 seyfert = True
+
+
 # ==========================================================================================
+# COMPARISON RUN
+# Set runname2 = None to use the standard true/fit/res workflow.
+# Set runname2 to another BAROLO run to compare the two fits.
+# ==========================================================================================
+runname2 = 'phangsmask_cenfroz_axisfree_zfree'
+# runname2 = None
+runn2 = 4
+
 
 # ================================================================
 # Configuration
 # ================================================================
 
 outerdir = f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname}" if not seyfert else f"/data/c3040163/llama/alma/barolo/{runname}"
-outerdir_phangs = "/Users/administrator/Astro/LLAMA/ALMA/pipeline_m0" if not seyfert else "/data/c3040163/llama/alma/pipeline_m0"
+
+outerdir2 = (
+    None
+    if runname2 is None
+    else (
+        f"/Users/administrator/Astro/LLAMA/ALMA/barolo/{runname2}"
+        if not seyfert
+        else
+        f"/data/c3040163/llama/alma/barolo/{runname2}"
+    )
+)
+
 outputdir = outerdir
+
 
 R_kpc = 1.5
 PHANGS_mask = "strict"
@@ -118,7 +143,7 @@ def plot_moment_map(
     normalise_norm=False,
     noise=None,
     mom=0,
-    barolo_params=None,
+    barolo_params=None, cbar = False
 ):
     """
     Plot one BAROLO moment map.
@@ -220,62 +245,40 @@ def plot_moment_map(
         return
 
     # ------------------------------------------------------------
-    # Moment 0
+    # Default limits
     # ------------------------------------------------------------
-
     if mom == 0:
+        vmin = 0
+        vmax = np.nanpercentile(finite_data,99.5)
+    else:
+        vmin = np.nanpercentile(finite_data,2.5)
+        vmax = np.nanpercentile(finite_data,97.5)
 
-        vmin = (
-            2 * noise
-            if noise is not None
-            and np.isfinite(noise)
-            else 0
-        )
+    # --------------------------------------------------------
+    # Store limits for common normalisation
+    # --------------------------------------------------------
 
-        vmax = np.nanpercentile(
-            finite_data,
-            99.5
-        )
+    if not normalise_norm:
 
-        # --------------------------------------------------------
-        # Store limits for common normalisation
-        # --------------------------------------------------------
+        colourbar_list.append(vmin)
+        colourbar_list.append(vmax)
 
-        if (
-            not normalise_norm
-            and res_src in ["native", "rebin"]
-        ):
+    # --------------------------------------------------------
+    # Use common limits when normalising
+    # --------------------------------------------------------
 
-            colourbar_list.append(vmin)
-            colourbar_list.append(vmax)
+    if normalise_norm:
 
-        # --------------------------------------------------------
-        # Use common limits when normalising
-        # --------------------------------------------------------
+        vmin = np.nanmin(colourbar_list)
+        vmax = np.nanmax(colourbar_list)
 
-        if (
-            normalise_norm
-            and res_src in ["native", "rebin"]
-        ):
 
-            vmin = np.nanmin(colourbar_list)
-            vmax = np.nanmax(colourbar_list)
-
-        if vmin >= vmax:
-            vmin = 0
-
-        # --------------------------------------------------------
-        # Original behaviour when not normalising
-        # --------------------------------------------------------
-
-        if not normalise_norm:
-
-            vmin = 0
-            vmax = np.nanmax(finite_data)
+    if runname2 is None or normalise_norm or type == f"{runname2}_res":
 
         # --------------------------------------------------------
         # Normalisation
         # --------------------------------------------------------
+
 
         if norm_type == "sqrt":
 
@@ -301,289 +304,254 @@ def plot_moment_map(
                 f"Unknown norm_type: {norm_type}"
             )
 
-        cmap = plt.cm.inferno.copy()
-
-        cmap.set_bad(
-            "black",
-            alpha=1
-        )
-
-    # ------------------------------------------------------------
-    # Moment 1
-    # ------------------------------------------------------------
-
-    elif mom == 1:
-
-        vmax = np.nanpercentile(
-            finite_data,
-            97.5
-        )
-
-        vmin = np.nanpercentile(
-            finite_data,
-            2.5
-        )
-
-        norm = simple_norm(
-            data,
-            "linear",
-            vmin=vmin,
-            vmax=vmax
-        )
-
-        cmap = plt.cm.RdBu_r.copy()
-
-        cmap.set_bad(
-            "black",
-            alpha=1
-        )
-
-    # ------------------------------------------------------------
-    # Moment 2
-    # ------------------------------------------------------------
-
-    elif mom == 2:
-
-        vmax = np.nanpercentile(
-            finite_data,
-            97.5
-        )
-
-        vmin = np.nanpercentile(
-            finite_data,
-            2.5
-        )
-
-        norm = simple_norm(
-            data,
-            "linear",
-            vmin=vmin,
-            vmax=vmax
-        )
-
-        cmap = plt.cm.jet.copy()
-
-        cmap.set_bad(
-            "black",
-            alpha=1
-        )
-
-    else:
-
-        raise ValueError(
-            f"Unknown moment: {mom}"
-        )
-
-    # ============================================================
-    # Plot image
-    # ============================================================
-
-
-    im = ax.imshow(
-        image.data,
-        origin='lower',
-        norm=norm,
-        cmap=cmap,
-        interpolation='nearest'
-    )
-
-    im.axes.get_xaxis().set_visible(False)
-    im.axes.get_yaxis().set_visible(False)
-
-
-    # ------------------------------------------------------------
-    # Preserve the exact image limits
-    # ------------------------------------------------------------
-
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-
-
-    # ------------------------------------------------------------
-    # BAROLO annotations
-    # ------------------------------------------------------------
-
-    if barolo_params is not None:
-
-        xcen, ycen, pa, inc, vsys, vrot, disp, z, vrad  = barolo_params
-
-        # Annotation colour
-        annotation_colour = (
-            "white"
-            if mom == 2
-            else "lime"
-        )
-
         # --------------------------------------------------------
-        # Centre
+        # Colourmaps (order dependent)
         # --------------------------------------------------------
-
-        ax.plot(
-            xcen,
-            ycen,
-            marker='*',
-            color=annotation_colour,
-            markersize=50,
-            mew=1.5,
-            linestyle='None',
-            zorder=20
-        )
-
-        # --------------------------------------------------------
-        # PA line
-        # --------------------------------------------------------
-
-        theta = np.radians(pa - 90.0)
-
-        dx = np.cos(theta)
-        dy = np.sin(theta)
-
-        xmin, xmax = xlim
-        ymin, ymax = ylim
-
-        t = np.linspace(
-            -2 * max(nx, ny),
-            2 * max(nx, ny),
-            1000
-        )
-
-        x_line = xcen + t * dx
-        y_line = ycen + t * dy
-
-        valid = (
-            (x_line >= xmin)
-            & (x_line <= xmax)
-            & (y_line >= ymin)
-            & (y_line <= ymax)
-        )
-
-        ax.plot(
-            x_line[valid],
-            y_line[valid],
-            '--',
-            color=annotation_colour,
-            linewidth=6,
-            zorder=19
-        )
-
-
-    # ------------------------------------------------------------
-    # Restore exact image limits
-    # ------------------------------------------------------------
-
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
-    # ============================================================
-    # Colourbar
-    # ============================================================
-
-    if not normalise_norm:
-
-        cbar_ax = fig.add_axes([
-            0.82,
-            0.12,
-            0.035,
-            0.30
-        ])
-
-        cb = fig.colorbar(
-            im,
-            cax=cbar_ax,
-            orientation="vertical"
-        )
-
-        colour = (
-            "white"
-        )
-
-        cb.ax.tick_params(
-            axis="y",
-            which="major",
-            labelsize=fontsize * 0.65,
-            length=3,
-            width=0.8,
-            direction="out",
-            labelcolor=colour
-        )
-
-        cb.outline.set_edgecolor(
-            colour
-        )
 
         if mom == 0:
 
-            cb.set_label(
-                r"Intensity (K km/s)",
-                fontsize=fontsize * 0.7,
-                labelpad=5,
-                color=colour
+            cmap = plt.cm.inferno.copy()
+
+            cmap.set_bad(
+                "black",
+                alpha=1
             )
 
         elif mom == 1:
 
-            cb.set_label(
-                r"Velocity (km s$^{-1}$)",
-                fontsize=fontsize * 0.7,
-                labelpad=5,
-                color=colour
+            cmap = plt.cm.RdBu_r.copy()
+
+            cmap.set_bad(
+                "black",
+                alpha=1
             )
 
         elif mom == 2:
 
-            cb.set_label(
-                r"Dispersion (km s$^{-1}$)",
-                fontsize=fontsize * 0.7,
-                labelpad=5,
-                color=colour
+            cmap = plt.cm.jet.copy()
+
+            cmap.set_bad(
+                "black",
+                alpha=1
             )
 
-    # ============================================================
-    # Output directory
-    # ============================================================
+        else:
 
-    plot_dir = os.path.join(
-        outfolder,
-        "plots",
-        name_short
-    )
+            raise ValueError(
+                f"Unknown moment: {mom}"
+            )
 
-    os.makedirs(
-        plot_dir,
-        exist_ok=True
-    )
+        # ============================================================
+        # Plot image
+        # ============================================================
 
-    # ============================================================
-    # Save main figure
-    # ============================================================
 
-    filename = (
-        f"{name_short}_{type}_mom{mom}"
-    )
+        im = ax.imshow(
+            image.data,
+            origin='lower',
+            norm=norm,
+            cmap=cmap,
+            interpolation='nearest'
+        )
 
-    if normalise_norm:
-        filename += "_norm"
+        im.axes.get_xaxis().set_visible(False)
+        im.axes.get_yaxis().set_visible(False)
 
-    path = os.path.join(
-        plot_dir,
-        filename + ".pdf"
-    )
 
-    plt.savefig(
-        path,
-        pad_inches=0.0
-    )
+        # ------------------------------------------------------------
+        # Preserve the exact image limits
+        # ------------------------------------------------------------
 
-    plt.close(fig)
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
 
-    print(
-        f"Saved: {path}"
-    )
+        # ------------------------------------------------------------
+        # BAROLO annotations
+        # ------------------------------------------------------------
+
+        if barolo_params is not None:
+
+            xcen, ycen, pa, inc, vsys, vrot, disp, z, vrad  = barolo_params
+
+            # Annotation colour
+            annotation_colour = (
+                "white"
+                if mom == 2
+                else "lime"
+            )
+
+            # --------------------------------------------------------
+            # Centre
+            # --------------------------------------------------------
+
+            ax.plot(
+                xcen,
+                ycen,
+                marker='*',
+                color=annotation_colour,
+                markersize=50,
+                mew=1.5,
+                linestyle='None',
+                zorder=20
+            )
+
+            # --------------------------------------------------------
+            # PA line
+            # --------------------------------------------------------
+
+            theta = np.radians(pa - 90.0)
+
+            dx = np.cos(theta)
+            dy = np.sin(theta)
+
+            xmin, xmax = xlim
+            ymin, ymax = ylim
+
+            t = np.linspace(
+                -2 * max(nx, ny),
+                2 * max(nx, ny),
+                1000
+            )
+
+            x_line = xcen + t * dx
+            y_line = ycen + t * dy
+
+            valid = (
+                (x_line >= xmin)
+                & (x_line <= xmax)
+                & (y_line >= ymin)
+                & (y_line <= ymax)
+            )
+
+            ax.plot(
+                x_line[valid],
+                y_line[valid],
+                '--',
+                color=annotation_colour,
+                linewidth=6,
+                zorder=19
+            )
+
+
+        # ------------------------------------------------------------
+        # Restore exact image limits
+        # ------------------------------------------------------------
+
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+
+        # ============================================================
+        # Colourbar
+        # ============================================================
+
+        if not normalise_norm:
+
+            cbar_ax = fig.add_axes([
+                0.82,
+                0.12,
+                0.035,
+                0.30
+            ])
+
+            cb = fig.colorbar(
+                im,
+                cax=cbar_ax,
+                orientation="vertical"
+            )
+
+            colour = (
+                "white"
+            )
+
+            cb.ax.tick_params(
+                axis="y",
+                which="major",
+                labelsize=fontsize * 0.65,
+                length=3,
+                width=0.8,
+                direction="out",
+                labelcolor=colour
+            )
+
+            cb.outline.set_edgecolor(
+                colour
+            )
+
+            if mom == 0:
+
+                cb.set_label(
+                    r"Intensity (K km/s)",
+                    fontsize=fontsize * 0.7,
+                    labelpad=5,
+                    color=colour
+                )
+
+            elif mom == 1:
+
+                cb.set_label(
+                    r"Velocity (km s$^{-1}$)",
+                    fontsize=fontsize * 0.7,
+                    labelpad=5,
+                    color=colour
+                )
+
+            elif mom == 2:
+
+                cb.set_label(
+                    r"Dispersion (km s$^{-1}$)",
+                    fontsize=fontsize * 0.7,
+                    labelpad=5,
+                    color=colour
+                )
+
+        # ============================================================
+        # Output directory
+        # ============================================================
+
+        plot_dir = os.path.join(
+            outfolder,
+            "plots",
+            name_short
+        )
+
+        os.makedirs(
+            plot_dir,
+            exist_ok=True
+        )
+
+        # ============================================================
+        # Save main figure
+        # ============================================================
+
+
+        filename = (
+            f"{name_short}_{type}_mom{mom}"
+        )
+
+        if normalise_norm:
+            filename += "_norm"
+
+        path = os.path.join(
+            plot_dir,
+            filename + ".pdf"
+        )
+
+        plt.savefig(
+            path,
+            pad_inches=0.0
+        )
+
+        plt.close(fig)
+
+        print(
+            f"Saved: {path}"
+        )
 
     # ============================================================
     # Save separate colourbar for normalised maps
     # ============================================================
 
-    if normalise_norm:
+    if cbar:
 
         cbar_fig, cbar_ax = plt.subplots(
             figsize=(
@@ -843,94 +811,61 @@ for name in sorted(os.listdir(outerdir)):
         continue
 
     # ------------------------------------------------------------
-    # Load PHANGS strict CO(2-1) moment-0 map
-    #
+    # Load fits for second model if it is specified
     # ------------------------------------------------------------
 
-    # co21_file = os.path.join(
-    #     outerdir_phangs,
-    #     name,
-    #     f"{name}_12m_co21_strict_mom0.fits"
-    # ) if name not in ['NGC4388', 'NGC5728', 'NGC6814'] else os.path.join(
-    #     outerdir_phangs,
-    #     name,
-    #     f"{name}_12m_co32_strict_mom0.fits"
-    # ) 
+    if runname2 is not None:
 
-    # if not os.path.exists(co21_file):
+        maps_dir2 = os.path.join(
+            outerdir2,
+            name,
+            "maps"
+        )
 
-    #     print(
-    #         f"Missing CO(2-1) mask for {name}: "
-    #         f"{co21_file}"
-    #     )
+        fit2_maps = {}
 
-    #     continue
+        for n in [0, 1, 2]:
 
-    # with fits.open(co21_file) as hdul:
+            filepath = os.path.join(
+                maps_dir2,
+                f"{name}_local_{n}mom.fits"
+            )
 
-    #     co21_data = hdul[0].data.copy()
-    #     co21_header = hdul[0].header.copy()
+            if not os.path.exists(filepath):
 
-    #     co21_wcs = WCS(
-    #         co21_header
-    #     )
+                print(
+                    f"Missing fit2 map: {filepath}"
+                )
 
-    #     BMAJ = co21_header.get(
-    #         "BMAJ",
-    #         np.nan
-    #     )
+                fit2_maps = None
+                break
 
-    #     BMIN = co21_header.get(
-    #         "BMIN",
-    #         np.nan
-    #     )
+            with fits.open(filepath) as hdul:
 
-    # print(
-    #     f"Loaded CO(2-1) mask: {co21_file}"
-    # )
+                data = hdul[0].data.copy()
+                header = hdul[0].header.copy()
 
-    # ------------------------------------------------------------
-    # Apply CO(2-1) strict mask to every BAROLO map
-    # ------------------------------------------------------------
+                wcs = WCS(header)
 
-    # for key, image in maps[name].items():
+                fit2_maps[n] = NDData(
+                    data=data,
+                    wcs=wcs
+                )
 
-    #     map_type, n = key
+            print(
+                f"Loaded fit2: {filepath}"
+            )
 
-    #     target_data = image.data
-    #     target_wcs = image.wcs
+        if fit2_maps is None:
+            print(
+                f"Skipping {name}: "
+                f"not all fit2 maps found."
+            )
+            continue
 
-    #     co21_reprojected, footprint = (
-    #         reproject_interp(
-    #             (co21_data, co21_wcs),
-    #             target_wcs,
-    #             shape_out=target_data.shape
-    #         )
-    #     )
-
-    #     mask = (
-    #         ~np.isfinite(co21_reprojected)
-    #         | (co21_reprojected == 0)
-    #         | (footprint == 0)
-    #     )
-
-    #     masked_data = target_data.copy()
-
-    #     masked_data[mask] = np.nan
-
-    #     maps[name][key] = NDData(
-    #         data=masked_data,
-    #         wcs=target_wcs
-    #     )
-
-    #     print(
-    #         f"Masked {name} {map_type} "
-    #         f"moment {n}: "
-    #         f"{np.sum(mask)} pixels masked"
-    #     )
 
     # ------------------------------------------------------------
-    # Retrieve masked maps
+    # Retrieve maps
     # ------------------------------------------------------------
 
     mom0_true = maps[name][
@@ -957,44 +892,138 @@ for name in sorted(os.listdir(outerdir)):
         ("local", 2)
     ]
 
-    print(
-        f"Masked maps prepared for {name}"
+
+    if runname2 is not None:
+
+        mom0_fit2 = fit2_maps[0]
+        mom1_fit2 = fit2_maps[1]
+        mom2_fit2 = fit2_maps[2]
+
+
+    # Correct mom1 velocity to be centred on 0
+
+    mom1_true = NDData(
+    data=mom1_true.data - vsys,
+    wcs=mom1_true.wcs
+)
+    mom1_fit = NDData(
+    data=mom1_fit.data - vsys,
+    wcs=mom1_fit.wcs
+)
+    if runname2 is not None:
+        mom1_fit2 = NDData(
+        data=mom1_fit2.data - vsys,
+        wcs=mom1_fit2.wcs
     )
 
     # ------------------------------------------------------------
     # Residual maps
     # ------------------------------------------------------------
 
-    mom0_res = NDData(
-        data=mom0_fit.data - mom0_true.data,
-        wcs=mom0_fit.wcs
-    )
+    if runname2 is None:
 
-    mom1_res = NDData(
-        data=mom1_fit.data - mom1_true.data,
-        wcs=mom1_fit.wcs
-    )
+        mom0_res = NDData(
+            data=mom0_fit.data - mom0_true.data,
+            wcs=mom0_fit.wcs
+        )
 
-    mom2_res = NDData(
-        data=mom2_fit.data - mom2_true.data,
-        wcs=mom2_fit.wcs
-    )
+        mom1_res = NDData(
+            data=mom1_fit.data - mom1_true.data,
+            wcs=mom1_fit.wcs
+        )
 
+        mom2_res = NDData(
+            data=mom2_fit.data - mom2_true.data,
+            wcs=mom2_fit.wcs
+        )
 
+    else:
 
+        mom0_res = NDData(
+            data=mom0_fit2.data - mom0_fit.data,
+            wcs=mom0_fit.wcs
+        )
+
+        mom1_res = NDData(
+            data=mom1_fit2.data - mom1_fit.data,
+            wcs=mom1_fit.wcs
+        )
+
+        mom2_res = NDData(
+            data=mom2_fit2.data - mom2_fit.data,
+            wcs=mom2_fit.wcs
+        )
     # ============================================================
     # Record mom1 residual info
     # ============================================================
+    if runname2 == None:
+        output_csv = outerdir + f"/{runname}_fit{runn}.csv"
 
-    output_csv = outerdir + f"/{runname}_fit{runn}.csv"
+        non_circ = np.nansum(np.abs(mom1_res.data))
 
-    non_circ = np.nansum(np.abs(mom1_res.data))
+        df = pd.read_csv(output_csv)
 
-    df = pd.read_csv(output_csv)
+        df.loc[df["name"] == name, "abs_mom1_residual (km/s)"] = non_circ
 
-    df.loc[df["name"] == name, "abs_mom1_residual (km/s)"] = non_circ
+        df.to_csv(output_csv, index=False)
 
-    df.to_csv(output_csv, index=False)
+    # ============================================================
+    # Plotting logic
+    # ============================================================
+
+    if runname2 is None:
+
+        plot_maps0 = [
+            mom0_true,
+            mom0_fit,
+            mom0_res
+        ]
+
+        plot_maps1 = [
+            mom1_true,
+            mom1_fit,
+            mom1_res
+        ]
+
+        plot_maps2 = [
+            mom2_true,
+            mom2_fit,
+            mom2_res
+        ]
+
+
+        plot_labels = [
+            "true",
+            "fit",
+            "res"
+        ]
+
+    else:
+
+        plot_maps0 = [
+            mom0_fit,
+            mom0_fit2,
+            mom0_res
+        ]
+
+        plot_maps1 = [
+            mom1_fit,
+            mom1_fit2,
+            mom1_res
+        ]
+
+        plot_maps2 = [
+                        mom2_fit,
+            mom2_fit2,
+            mom2_res
+        ]
+
+
+        plot_labels = [
+            f"{runname}",
+            f"{runname2}",
+            f"{runname2}_res"
+        ]
 
     # ============================================================
     # Moment 0
@@ -1003,17 +1032,9 @@ for name in sorted(os.listdir(outerdir)):
     colourbar_list = []
 
     for image, map_type in zip(
-        [
-            mom0_true,
-            mom0_fit,
-            mom0_res
-        ],
-        [
-            "true",
-            "fit",
-            "res"
-        ]
-    ):
+    plot_maps0,
+    plot_labels
+):
 
         plot_moment_map(
             image,
@@ -1025,6 +1046,7 @@ for name in sorted(os.listdir(outerdir)):
             mom=0,
             barolo_params=barolo_params
         )
+        cb = True if map_type in ('res', f"{runname2}_res") else False
 
         plot_moment_map(
             image,
@@ -1035,7 +1057,7 @@ for name in sorted(os.listdir(outerdir)):
             norm_type="sqrt",
             mom=0,
             normalise_norm=True,
-            barolo_params=barolo_params
+            barolo_params=barolo_params, cbar = cb
         )
 
     # ============================================================
@@ -1045,18 +1067,9 @@ for name in sorted(os.listdir(outerdir)):
     colourbar_list = []
 
     for image, map_type in zip(
-        [
-            mom1_true,
-            mom1_fit,
-            mom1_res
-        ],
-        [
-            "true",
-            "fit",
-            "res"
-        ]
-    ):
-
+    plot_maps1,
+    plot_labels
+):
         plot_moment_map(
             image,
             outputdir,
@@ -1067,7 +1080,7 @@ for name in sorted(os.listdir(outerdir)):
             mom=1,
             barolo_params=barolo_params
         )
-
+        cb = True if map_type in ('res', f"{runname2}_res") else False
         plot_moment_map(
             image,
             outputdir,
@@ -1077,7 +1090,8 @@ for name in sorted(os.listdir(outerdir)):
             norm_type="linear",
             mom=1,
             normalise_norm=True,
-            barolo_params=barolo_params
+            barolo_params=barolo_params, cbar = cb
+        
         )
 
     # ============================================================
@@ -1087,17 +1101,9 @@ for name in sorted(os.listdir(outerdir)):
     colourbar_list = []
 
     for image, map_type in zip(
-        [
-            mom2_true,
-            mom2_fit,
-            mom2_res
-        ],
-        [
-            "true",
-            "fit",
-            "res"
-        ]
-    ):
+    plot_maps2,
+    plot_labels
+):
 
         plot_moment_map(
             image,
@@ -1109,7 +1115,7 @@ for name in sorted(os.listdir(outerdir)):
             mom=2,
             barolo_params=barolo_params
         )
-
+        cb = True if map_type in ('res', f"{runname2}_res") else False
         plot_moment_map(
             image,
             outputdir,
@@ -1119,7 +1125,7 @@ for name in sorted(os.listdir(outerdir)):
             norm_type="linear",
             mom=2,
             normalise_norm=True,
-            barolo_params=barolo_params
+            barolo_params=barolo_params, cbar = cb
         )
 
     # ------------------------------------------------------------

@@ -773,7 +773,7 @@ max_major_ticks=5
             elif comp == 'aperture' and m_i == 'flux90_strict':
                 label = f"90\% flux aperture"
             elif comp == 'mask':
-                label = f"\'{m_i}\' mask"
+                label = f"`{m_i}\' mask"
 
 
             # ---------------------------
@@ -1180,11 +1180,11 @@ base_AGN=base_AGN, base_inactive=base_inactive,
     bins=10,
     figsize=9, comb_llama=True, which_compare=[['strict','broad'],[1.5]], native_res=True, 
     colours_list=  
-    {"\'strict\' mask": "#008891",
-  "\'broad\' mask": "#CC6900"
+    {"`strict\' mask": "#008891",
+  "`broad\' mask": "#CC6900"
 }, markers_list={
-  "\'strict\' mask": "D",
-  "\'broad\' mask": "s",
+  "`strict\' mask": "D",
+  "`broad\' mask": "s",
 }, exclude_names=exclude1,hist=False,comp='mask',     xlims={
         "left": (0, 1.1),
         "top": (-0.1, 2.1)
@@ -1205,9 +1205,9 @@ base_AGN=base_AGN, base_inactive=base_inactive,
 #     log_axes={'x_shared': False, 'y_shared': False},
 #     bins=10,
 #     figsize=9, comb_llama=True, which_compare=[['strict','120pc_strict'],[1.5]], native_res=True, colours_list={
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "#83CC90",
-#   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "#00470E"
+#   "\`strict\' mask and 3.0x3.0kpc aperture": "#83CC90",
+#   "\`120pc_strict\' mask and 3.0x3.0kpc aperture": "#00470E"
 # }, markers_list={
-#   "\'strict\' mask and 3.0x3.0kpc aperture": "D",
-#   "\'120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
+#   "`strict\' mask and 3.0x3.0kpc aperture": "D",
+#   "`120pc_strict\' mask and 3.0x3.0kpc aperture": "s"
 # }, exclude_names=exclude1,hist=False)

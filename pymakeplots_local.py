@@ -47,7 +47,7 @@ ranges = {
     "NGC5037": [66, 133],
     "NGC5506": [60, 103],
     "NGC5728": [54, 107],
-    "NGC5845": [45, 116],
+    "NGC5845": [45, 118],
     "NGC5921": [80, 118],
     #"NGC6814": [137, 162],
     "NGC6814": [87, 112],
@@ -74,7 +74,7 @@ for name in os.listdir(base_dir):
     # if os.path.exists(outsubdir+'/_allplots.pdf'):
     #     continue
 
-    if name not in['NGC4254']:
+    if name not in['NGC5845']:
         continue
 
     print(f"Processing {name}")
