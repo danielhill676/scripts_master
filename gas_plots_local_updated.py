@@ -317,12 +317,12 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                          '120pc_flux90_strict', '120pc_flux90_broad',
                          '120pc_strict', '120pc_broad']
         compare_radii = [0.3, 1, 1.5]
-        colours = ["#008891", "#CC6900", 'green', 'cadetblue', 'darkseagreen',
+        colours = ['red', 'blue', 'green', 'cadetblue', 'darkseagreen',
                    'brown', 'pink', 'gray', 'olive', 'cyan', 'magenta',
                    'yellow', 'teal', 'navy', 'maroon', 'lime', 'coral',
                    'gold', 'indigo', 'violet', 'turquoise', 'salmon',
                    'plum', 'orchid']
-        markers = ['D', 's', '^', 'D', 'v', 'P', 'X', '*', '<', '>',
+        markers = ['o', 's', '^', 'D', 'v', 'P', 'X', '*', '<', '>',
                    'H', '+', '1', '2', '3', '4', '|', '_', '.', ',',
                    '8', 'p', 'h']
 
@@ -537,24 +537,14 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ax.errorbar(
                 plot_df[x_column], plot_df[y_column],
                 xerr=xerr_comb, yerr=yerr_comb,
-                color=colours[i], fmt=markers[i], markersize=10,
+                color=colours[i], fmt=markers[i], markersize=6,
                 capsize=2, elinewidth=1, alpha=0.5,
                 label=f'{m}_{r}kpc'
             )
 
-                            # x_agn, y_agn,
-                            # xerr=xerr_agn,
-                            # yerr=yerr_agn,
-                            # fmt=marker_AGN,
-                            # color=colour_AGN,
-                            # label=label_AGN,
-                            # markersize=10,
-                            # capsize=2,
-                            # elinewidth=1,
-                            # alpha=0.8
             ax.scatter(
                 np.nanmean(plot_df[x_column]), np.nanmean(plot_df[y_column]),
-                color=colours[i], marker=markers[i], s=250,
+                color=colours[i], marker=markers[i], s=6**2 * 2,
                 edgecolor='black', linewidth=0.8, alpha=1.0, zorder=5
             )
             plotted_combinations.append(f'{m}_{r}kpc')
@@ -564,52 +554,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             print('No comparison datasets were available to plot.')
             return
 
-
         ax.set_xlabel(x_column)
         ax.set_ylabel(y_column)
         ax.grid(False)
         ax.legend()
-
-        if manual_limits is not None:
-            ax.set_xlim(manual_limits[0], manual_limits[1])
-            ax.set_ylim(manual_limits[2], manual_limits[3])
-
-        ax.legend()
-
-                ############################### Scatter labels ###############################
-        font = 25
-        font_leg = 15
-
-        if not ratiox:
-            try:
-                ax.set_xlabel(axis_label_lookup[x_column],fontsize=font)
-            except:
-                ax.set_xlabel(x_column,fontsize=font)
-        else:
-            try:
-                ax.set_xlabel(f"{axis_label_lookup[x_column]} / {ratiox} {axis_label_lookup[x_column]}", fontsize=font)
-            except:
-                ax.set_xlabel(f"{x_column} / {ratiox} {x_column}", fontsize=font)
-        if not ratioy:
-            try:
-                ax.set_ylabel(axis_label_lookup[y_column],fontsize=font)
-            except:
-                ax.set_ylabel(y_column,fontsize=font)
-        else:
-            try:
-                ax.set_ylabel(f"{axis_label_lookup[y_column]} / {ratioy} {axis_label_lookup[y_column]}", fontsize=font)
-            except:
-                ax.set_ylabel(axis_label_lookup[y_column],fontsize=font)
-
-        ax.grid(False)
-
-        ax.tick_params(axis='both', which='major', labelsize=20)
-
-        handles, labels = ax.get_legend_handles_labels()
-
-
-        leg=ax.legend(handles=handles,loc=legend_loc,fontsize=font_leg)
-        leg.set_zorder(30)
 
         suffix_masks = '_'.join(
             str(m).replace(' ', '').replace('.', 'p') for m in compare_masks
@@ -627,6 +575,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         print(f'Saved comparison plot to: {output_path}')
         plt.close(fig)
         return
+
 
 ##########################################################################################################################################################################################################################################
 
@@ -4637,7 +4586,7 @@ axis_label_lookup = {
 masks = ['broad','strict']
 radii = [0.3,1.5]
 
-masks = ['strict']
+masks = ['broad']
 radii = [0.3]
 
 for mask in masks:
@@ -4654,9 +4603,9 @@ for mask in masks:
 
 # #         # using GB24 for concentration
 
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False,fitc=False)
-        plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=True)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=False,fitc=False)
+        # plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=True,mask=mask,R_kpc=R_kpc,nativey=True,res_comp=False,exclude_names=exclude, yhist=False,plotshared=True)
 
 # # # native res
 
@@ -4754,7 +4703,7 @@ for mask in masks:
  #      posible y_column: 'Smoothness_davis', 'Asymmetry', 'Gini', 'Sigma0', 'rs'"""
 
 
-plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,nativey=True,res_comp=False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'], yhist=True,plotshared=False,comb_llama=True,compare=True,which_compare=[['strict','broad'],[0.3]],manual_limits=[None,None,-1.5,None])
+plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,nativey=True,res_comp=False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'], yhist=False,plotshared=False,comb_llama=True,compare=True,which_compare=[['strict','broad'],[0.3]])
 
 stats_table = pd.DataFrame(stats_rows)
 stats_table.to_csv(
