@@ -24,6 +24,11 @@ from scipy.ndimage import gaussian_filter
 from radio_beam import Beam
 from astropy.convolution import convolve_fft
 from radio_beam.utils import BeamError
+import re
+import warnings
+from astropy.wcs import FITSFixedWarning
+
+warnings.filterwarnings("ignore", category=FITSFixedWarning)
 
 # ------------------ Metrics ------------------
 
@@ -67,9 +72,46 @@ def smoothness(image, mask, pc_per_arcsec, pixel_scale_arcsec, **kwargs):
     return np.sum(diff_smooth[(diff_smooth>0)]) / total_flux if total_flux > 0 else np.nan #
 
 def normalize_name(name):
-    n = str(name)
-    # Use plain str.replace for single string inputs (no regex kwarg)
-    return n.replace('–', '-').replace('−', '-').strip().upper()
+
+    if isinstance(name, pd.Series):
+
+        n = (
+            name.astype(str)
+                .str.replace('–', '-', regex=False)
+                .str.replace('−', '-', regex=False)
+                .str.upper()
+                .str.replace(r'\s+', '', regex=True)
+                .str.replace(r'^NGC0+', 'NGC', regex=True)
+                .str.replace(r'^ESO0+', 'ESO', regex=True)
+                .str.replace(r'(?<=-)0+', '', regex=True)
+                .str.replace('X', '', regex=False)
+        )
+
+    else:
+
+        n = str(name)
+
+        n = (
+            n.replace('–', '-')
+             .replace('−', '-')
+             .upper()
+        )
+
+        # Remove all whitespace
+        n = re.sub(r'\s+', '', n)
+
+        # NGC0383 -> NGC383
+        n = re.sub(r'^NGC0+', 'NGC', n)
+
+        # ESO097-013 -> ESO97-13
+        n = re.sub(r'^ESO0+', 'ESO', n)
+        n = re.sub(r'(?<=-)0+', '', n)
+
+        # Remove X
+        n = n.replace('X', '')
+
+    return n
+
 
 def make_projected_region_mask(
     shape, R_kpc, pc_per_arcsec, pixel_scale_arcsec, PA, I
@@ -175,7 +217,7 @@ def fix_ned_name(s: str) -> str:
     return s_new
 # ------------------ Processing ------------------
 
-def process_fits_file(filepath,phangs_df,wis_df):
+def process_fits_file(filepath,phangs_df,wis_df,params):
 
   ######### Set parameters ####################################
 
@@ -200,26 +242,67 @@ def process_fits_file(filepath,phangs_df,wis_df):
 
     name = normalize_name(name)
 
-    match_phangs = phangs_df.loc[phangs_df["Name"] == name]
-    match_wis = wis_df.loc[wis_df["Name"] == name]
+    match_phangs = phangs_df.loc[normalize_name(phangs_df["Name"]) == name]
+    match_wis = wis_df.loc[normalize_name(wis_df["Name"]) == name]
 
     if len(match_phangs):
         row_phangs = match_phangs.iloc[0]
-
         D_Mpc = row_phangs["Distance (Mpc)"]
-        PA = row_phangs["PA"]
-        I = row_phangs["i"]
-        RA = row_phangs['RA']
-        DEC = row_phangs['DEC']
+
+######### Davis+22 version #########
+
+        if params == 'good':
+
+            PA = row_phangs["PA"]
+            I = row_phangs["i"]
+            RA = row_phangs['RA_deg']
+            DEC = row_phangs['DEC_deg']
+
+########### rc3 version ###########
+        elif params == 'bad':
+            PA = row_phangs["PA_rc3"]
+            I = row_phangs["i_rc3"]
+            RA = row_phangs['RA_rc3']
+            DEC = row_phangs['DEC_rc3']
+
+######################################
+        else:
+            raise ValueError("params can only be 'good' or 'bad' ")
+
         print('Found in phangs df')
     else:
-        row_wis = match_wis.iloc[0]
+        try:
+            row_wis = match_wis.iloc[0]
+        except:
+            print('not found in either df, skipping')
+            return
         D_Mpc = row_wis['Distance (Mpc)']
-        PA = row_wis["PA"]
-        I = row_wis["i"]
-        RA = row_wis['RA']
-        DEC = row_wis['DEC']
+
+######### Davis+22 version #########
+        if params == 'good':
+
+            PA = row_wis["PA"]
+            I = row_wis["i"]
+            RA = 0
+            DEC = 0
+
+########### rc3 version ###########
+        elif params == 'bad':
+
+            PA = row_wis["PA_rc3"]
+            I = row_wis["i_rc3"]
+            RA = row_wis['RA_rc3']
+            DEC = row_wis['DEC_rc3']
+
+######################################
+        else:
+            raise ValueError("params can only be 'good' or 'bad' ")
+
         print('found in wis df')
+
+    if pd.isna([PA, I, RA, DEC]).any():
+        print('found nan PA, I, RA, DEC, skipping')
+        return
 
 ######### Read header info ####################################
 
@@ -233,6 +316,8 @@ def process_fits_file(filepath,phangs_df,wis_df):
     pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
     beam_scale_pc = beam_arcsec * pc_per_arcsec
 
+    print('resolution=', beam_scale_pc)
+
 
 ######### Adjust image size ####################################
 
@@ -240,12 +325,51 @@ def process_fits_file(filepath,phangs_df,wis_df):
     wcs_full = WCS(header).celestial
 
     ny, nx = image_untrimmed.shape
-    try:
-        cx, cy = gal_cen.to_pixel(wcs_full)
-        cx, cy = int(cx), int(cy)
-    except Exception as e:
-        print(f"WARNING: WCS conversion failed for {name}: {e}")
-        cx, cy = nx // 2, ny // 2
+
+############# Davis+22 version ######################
+
+    if params == 'good':
+
+        if len(match_phangs):
+            try:
+                print('using RA DEC for centring')
+                cx, cy = gal_cen.to_pixel(wcs_full)
+                cx, cy = int(cx), int(cy)
+            except Exception as e:
+                print(f"WARNING: WCS conversion failed for {name}: {e}")
+                cx, cy = nx // 2, ny // 2
+        elif name == 'NGC0524':
+            cx, cy = 92,103
+        elif name == 'NGC078':
+            cx, cy = 95,93
+        elif name == 'NGC3368':
+            cx, cy = 329,304
+        elif name == 'NGC3607':
+            cx, cy = 187,159
+        elif name == 'NGC3169':
+            cx,cy = 200,185
+        elif name == 'NGC4438':
+            cx, cy = 195,210
+        else:
+            cx, cy = nx // 2, ny // 2
+
+################################################
+
+############### rc3 version ##################
+
+    elif params == 'bad':
+
+        try:
+            print('using RA DEC for centring')
+            cx, cy = gal_cen.to_pixel(wcs_full)
+            cx, cy = int(cx), int(cy)
+        except Exception as e:
+            print(f"WARNING: WCS conversion failed for {name}: {e}")
+            cx, cy = nx // 2, ny // 2
+
+######################################################
+    else:
+        raise ValueError("params can only be 'good' or 'bad' ")
 
     target_size = 2 * R_pixel
     nx_full, ny_full = nx, ny
@@ -336,14 +460,15 @@ def process_fits_file(filepath,phangs_df,wis_df):
     plots_path = output_dir+'m0_plots/'
     if not os.path.exists(os.path.dirname(plots_path)):
         os.makedirs(os.path.dirname(plots_path))
-    plot_moment_map(image_nd, plots_path+f'{name}_mom0.png', name, BMAJ, BMIN, R_kpc, mask, aperture=aperture_to_plot)
+    plot_moment_map(image_nd, plots_path+f'{name}_{params}_mom0.png', name, BMAJ, BMIN, R_kpc, mask, aperture=aperture_to_plot)
 
 
     gin = gini(image, mask)
     asym = asymmetry(image,mask)
     smooth = smoothness(image, mask, pixel_scale_arcsec, pc_per_arcsec)
 
-
+    # print('i = ',I,'\,PA = ',PA, '\,S =',smooth)
+    print('G=',gin,'  A=',asym,'  S=',smooth)
 
     return {
         "name": name,
@@ -355,19 +480,21 @@ def process_fits_file(filepath,phangs_df,wis_df):
 
 # ------------------ Main ------------------
 
-def run_directory(input_dir, output_csv):
+def run_directory(input_dir, output_csv,params):
     results = []
-    phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples/phangs_new.csv")
-    wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_new.csv")
+    phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples/phangs_df_with_rc3.csv")
+    wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df_with_rc3.csv")
+    print('\n-------------------------------------------')
+    print(f'\n Beginning analysis with {params} params')
 
     for f in os.listdir(input_dir):
         if not f.endswith(".fits"):
             continue
 
         filepath = os.path.join(input_dir, f)
-        print(f"Processing {f}")
+        print(f"\nProcessing {f}")
 
-        row = process_fits_file(filepath,phangs_df,wis_df)
+        row = process_fits_file(filepath,phangs_df,wis_df,params)
         if row is not None:
             results.append(row)
 
@@ -380,11 +507,14 @@ def run_directory(input_dir, output_csv):
 
 if __name__ == "__main__":
     input_dir_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0/wis"
-    output_csv_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_wis.csv"
-
-    run_directory(input_dir_wis, output_csv_wis)
-
     input_dir_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0/phangs"
-    output_csv_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_phangs.csv"
 
-    run_directory(input_dir_phangs, output_csv_phangs)
+    output_csv_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_wis_good.csv"
+    output_csv_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_phangs_good.csv"
+    run_directory(input_dir_wis, output_csv_wis,'good')
+    # run_directory(input_dir_phangs, output_csv_phangs,'good')
+
+    output_csv_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_wis_bad.csv"
+    output_csv_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_phangs_bad.csv"
+    run_directory(input_dir_wis, output_csv_wis,'bad')
+    # run_directory(input_dir_phangs, output_csv_phangs,'bad')

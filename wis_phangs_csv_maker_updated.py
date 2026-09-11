@@ -14,18 +14,30 @@ from astroquery.simbad import Simbad
 import io
 from astropy.coordinates import Angle
 
+
 def normalize_name(col):
+
     s = pd.Series(col.astype(str))
+
     return (
         s.str.replace('–', '-', regex=False)
         .str.replace('−', '-', regex=False)
-        .str.strip()
         .str.upper()
-        .str.replace('X','',regex=False)
+        .str.replace(r'\s+', '', regex=True)
+
+        # NGC0383 -> NGC383
+        .str.replace(r'^NGC0+', 'NGC', regex=True)
+
+        # ESO097-013 -> ESO97-13
+        .str.replace(r'^ESO0+', 'ESO', regex=True)
+        .str.replace(r'(?<=-)0+', '', regex=True)
+
+        .str.replace('X', '', regex=False)
     )
 
-
+max_retries = 1
 def query_ned_with_retries(query_name):
+    print('searching Ned for ',query_name)
     for attempt in range(max_retries):
         try:
             return Ned.query_object(query_name)
@@ -35,6 +47,7 @@ def query_ned_with_retries(query_name):
             if attempt == max_retries - 1:
                 raise
             time.sleep(1)
+
 
 ################## WISDOM X DATA ##################
 
@@ -65,7 +78,7 @@ wisdom = pd.DataFrame([
     ["NGC6958", 0.11, 0.01, 0.10, 0.01, 0.42, 0.09],
     ["NGC7052", 0.22, 0.02, 0.14, 0.03, 0.34, 0.09],
     ["NGC7172", 0.21, 0.01, 0.18, 0.02, 0.64, 0.03]
-], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness", "Smoothness_err", "Gini", "Gini_err"])
+], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness_davis", "Smoothness_err", "Gini", "Gini_err"])
 
 simulations = pd.DataFrame([
     ["noB", 1.57, 0.08, 0.52, 0.027, 0.81, 0.03],
@@ -78,7 +91,7 @@ simulations = pd.DataFrame([
     ["B_M90_R1", 0.35, 0.04, 0.20, 0.012, 0.23, 0.02],
     ["B_M90_R2", 0.46, 0.05, 0.21, 0.016, 0.25, 0.02],
     ["B_M90_R3", 0.69, 0.05, 0.27, 0.015, 0.36, 0.02]
-], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness", "Smoothness_err", "Gini", "Gini_err"])
+], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness_davis", "Smoothness_err", "Gini", "Gini_err"])
 
 phangs = pd.DataFrame([
     ["IC1954", 0.97, 0.01, 0.30, 0.01, 0.57, 0.01],
@@ -141,7 +154,7 @@ phangs = pd.DataFrame([
     ["NGC5643", 0.89, 0.01, 0.28, 0.01, 0.82, 0.02],
     ["NGC6300", 0.78, 0.01, 0.36, 0.01, 0.87, 0.01],
     ["NGC7496", 0.53, 0.01, 0.28, 0.01, 0.77, 0.06]
-], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness", "Smoothness_err", "Gini", "Gini_err"])
+], columns=["Name", "Asymmetry", "Asymmetry_err", "Smoothness_davis", "Smoothness_err", "Gini", "Gini_err"])
 
 
 wis_properties = {
@@ -709,7 +722,7 @@ phangs_properties = [
 ]
 
 phangs_properties2 = {
-    "ESO097-013X": {"vLSR": 430.3, "PA": 36.7, "i": 64.3, "Distance (Mpc)": 4.20},
+    "ESO097-013X": {"vLSR": 430.3, "PA": 36.7, "i": 64.3, "Distance (Mpc)": 4.20}, 
     "IC 1954": {"vLSR": 1039.1, "PA": 63.4, "i": 57.1, "Distance (Mpc)": 12.80},
     "IC 5273": {"vLSR": 1286.0, "PA": 234.1, "i": 52.0, "Distance (Mpc)": 14.18},
     "IC 5332": {"vLSR": 699.3, "PA": 74.4, "i": 26.9, "Distance (Mpc)": 9.01},
@@ -895,223 +908,459 @@ phangs_coords = {
     "NGC 7793X": ("23h57m49.8s", "-32d35m28s"),
 }
 
+rc3 = Table.read("/Users/administrator/Astro/cats/rc3.csv")
+
+
 # Add coordinates to phangs_properties2
 for name, (ra, dec) in phangs_coords.items():
     if name in phangs_properties2:
         phangs_properties2[name]["αJ2000"] = ra
         phangs_properties2[name]["δJ2000"] = dec
 
+
 for name, props in phangs_properties2.items():
     props["RA_deg"] = Angle(props["αJ2000"], unit="hourangle").degree
     props["DEC_deg"] = Angle(props["δJ2000"], unit="deg").degree
 
-print(phangs_properties2["NGC 5128"])
 
-# for t in result: 
-#     if 'i' in t.colnames: 
-#         print(f"Table: {t.meta.get('name', 'unknown')}, Columns: {t['i']}")
+# print(phangs_properties2["NGC 5128"])
 
-wis_H_phot = Table.read('/Users/administrator/Astro/LLAMA/wisdom_2mass_Hphotometry.fits', format='fits')
-phangs_H_phot = Table.read('/Users/administrator/Astro/LLAMA/phangs_2mass_Hphotometry.fits', format='fits')
-#wis_H_phot.show_in_browser()
 
-def get_data(name):
-    try:
-        result = Vizier.query_object(name, catalog="VII/155/rc3")
-        if len(result) == 0:
-            result = Vizier.query_object(name, catalog="J/A+A/659/A188/ulx-xmm9")
+wis_H_phot = Table.read(
+    '/Users/administrator/Astro/LLAMA/wisdom_2mass_Hphotometry.fits',
+    format='fits'
+)
 
-        T_col = result[0]["T"]
-        if isinstance(T_col, MaskedColumn):
-            T_data = T_col.filled(np.nan)
-        else:
-            T_data = np.array(T_col)
+phangs_H_phot = Table.read(
+    '/Users/administrator/Astro/LLAMA/phangs_2mass_Hphotometry.fits',
+    format='fits'
+)
 
-        T_val = np.nanmedian(T_data)
+# ------------------------------------------------------------
+# Generic retry wrapper for updating catalogue properties
+# ------------------------------------------------------------
 
-        # # --- robust coordinate handling ---
-        # if "RA2000" in result[0].colnames:
-        #     RA_val = result[0]["RA2000"][0]
-        #     DEC_val = result[0]["DE2000"][0]
-        # else:
-        #     RA_val = result[0]["RAJ2000"][0]
-        #     DEC_val = result[0]["DEJ2000"][0]
+def update_catalogue_properties(properties_df):
 
-        # c = SkyCoord(RA_val, DEC_val, unit=(u.hourangle, u.deg))
+    # Create columns, initially filled with NaN
+    properties_df['RA_rc3'] = np.nan
+    properties_df['DEC_rc3'] = np.nan
+    properties_df['PA_rc3'] = np.nan
+    properties_df['i_rc3'] = np.nan
 
-        # ra_deg = float(c.ra.deg)
-        # dec_deg = float(c.dec.deg)
+    # Normalise RC3 names once
+    rc3_names = normalize_name(rc3['name'])
+    rc3_altnames = normalize_name(rc3['altname'])
 
-        Ned_table = query_ned_with_retries(name)
-        print(Ned_table.colnames)
-        RA = Ned_table['RA'][0]
-        DEC = Ned_table['DEC'][0]
-        print(Ned_table['Diameter Points'])
+    for name_str in properties_df.index:
 
-        # Simbad.add_votable_fields("ra", "dec")
-        # tab = Simbad.query_object(name)
-        # ra_deg = tab["ra"][0]
-        # dec_deg = tab["dec"][0]
+        print('checking rc3 for', name_str)
+        search_name = name_str
 
-        return T_val, RA, DEC
+        if name_str == 'MRK567':
+            search_name = 'A   0116+04B'
 
-    except Exception as e:
-        print(f"[{name}] failed:", e)
-        return np.nan, np.nan, np.nan
+        target_name = normalize_name(
+            pd.Series([search_name])
+        ).iloc[0]
 
-###### update wisdom table ######
+        print(target_name)
+
+        row = rc3[np.asarray(rc3_names) == target_name]
+
+        if len(row) == 0:
+            row = rc3[np.asarray(rc3_altnames) == target_name]
+            print('No RC3 match for', search_name)
+            if len(row) == 0:
+                continue
+
+            
+        # --------------------------------------------------
+        # RA
+        # --------------------------------------------------
+
+        RA_deg = (
+            row['RAh'][0]
+            + row['RAm'][0] / 60
+            + row['RAs'][0] / 3600
+        ) * 15
+
+        # --------------------------------------------------
+        # DEC
+        # --------------------------------------------------
+
+        sign = -1 if row['Decsign'][0] == '-' else 1
+
+        Dec_deg = sign * (
+            row['Decd'][0]
+            + row['Decm'][0] / 60
+            + row['Decs'][0] / 3600
+        )
+
+        # --------------------------------------------------
+        # PA
+        # --------------------------------------------------
+
+        PA = row['PA'][0]
+
+        # --------------------------------------------------
+        # Inclination
+        # --------------------------------------------------
+
+        logr25 = row['logr25'][0]
+
+        axis_ratio = 10**(-logr25)
+
+        q0 = 0.2
+
+        cos2_i = (axis_ratio**2 - q0**2) / (1 - q0**2)
+
+        # Prevent numerical issues if q is slightly outside
+        # the physically allowed range due to catalogue values
+        cos2_i = np.clip(cos2_i, 0, 1)
+
+        i = np.degrees(
+            np.arccos(
+                np.sqrt(cos2_i)
+            )
+        )
+
+        # --------------------------------------------------
+        # Add values to dataframe
+        # --------------------------------------------------
+
+        properties_df.loc[name_str, 'RA_rc3'] = RA_deg
+        properties_df.loc[name_str, 'DEC_rc3'] = Dec_deg
+        properties_df.loc[name_str, 'PA_rc3'] = PA
+        properties_df.loc[name_str, 'i_rc3'] = i
+
+    return properties_df
+
+        
+
+
+# ------------------------------------------------------------
+# Update WISDOM table
+# ------------------------------------------------------------
+
+print("Updating WISDOM table with rc3...")
 
 for name, props in wis_properties.items():
     axis_ratio = props["axis_ratio"]
     i_rad =  np.arccos(np.clip(axis_ratio, -1.0, 1.0))
     props["i_ned"] = np.degrees(i_rad)
 
-print("Updating WISDOM table with Hubble T from Vizier...")
-wis_properties = pd.DataFrame.from_dict(wis_properties, orient="index")
+wis_properties = pd.DataFrame.from_dict(
+    wis_properties,
+    orient="index"
+)
 
-for name_str in wis_properties.index:
-
-    max_retries = 3
-
-    for attempt in range(max_retries):
-        try:
-            wis_properties.loc[name_str, "Hubble Stage"], wis_properties.loc[name_str, "ra_ned"], wis_properties.loc[name_str, "dec_ned"]= get_data(name_str)
-
-            break
-
-        except (requests.exceptions.ConnectionError,
-                RemoteServiceError,
-                requests.exceptions.ReadTimeout) as e:
-
-            print(f"⚠️ Vizier query failed for {name_str} (attempt {attempt+1}/{max_retries}): {e}")
-
-            if attempt < max_retries - 1:
-                time.sleep(5)
-            else:
-                print("❌ All Vizier attempts failed.")
+update_catalogue_properties(wis_properties)
 
 
-###### update phangs table ######
-print("Updating PHANGS table with Hubble Stage from Vizier...")
+# ------------------------------------------------------------
+# Update PHANGS table
+# ------------------------------------------------------------
+
+print("Updating PHANGS table with rc3...")
+
 if isinstance(phangs_properties, list):
     phangs_properties = pd.DataFrame(phangs_properties)
 
 if "name" in phangs_properties.columns:
     phangs_properties = phangs_properties.set_index("name")
 
-for name_str in phangs_properties.index:
-    max_retries = 3
-    hubble_T = None
-
-    for attempt in range(max_retries):
-        try:
-            phangs_properties.loc[name_str, "Hubble Stage"] , phangs_properties.loc[name_str, "ra_ned"], phangs_properties.loc[name_str, "dec_ned"] = get_data(name_str)
-
-            break
-
-        except (requests.exceptions.ConnectionError,
-                RemoteServiceError,
-                requests.exceptions.ReadTimeout) as e:
-
-            print(f"⚠️ Vizier query failed for {name_str} (attempt {attempt+1}/{max_retries}): {e}")
-
-            if attempt < max_retries - 1:
-                time.sleep(5)
-            else:
-                print("❌ All Vizier attempts failed.")
+update_catalogue_properties(phangs_properties)
 
 
-
+# ============================================================
+# WISDOM FINAL TABLE
+# ============================================================
 
 wis_df = pd.DataFrame(wisdom)
+
 wis_df['Name'] = normalize_name(wis_df['Name'])
-wis_df['Name'] = wis_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
-df_wis = wis_properties
+wis_df['Name'] = wis_df['Name'].str.replace(
+    " ", "", regex=False
+)
+
+df_wis = wis_properties.copy()
+
 df_wis['Name'] = df_wis.index
 df_wis['Name'] = normalize_name(df_wis['Name'])
-df_wis['Name'] = df_wis['Name'].str.replace(" ", "", regex=False)   # remove all spaces
-wis_H_phot_df = wis_H_phot.to_pandas()
-wis_H_phot_df['ID'] = normalize_name(wis_H_phot_df['ID'])
-df_wis = df_wis.merge(
-wis_H_phot_df,
-left_on="Name",
-right_on="ID",
-how="left"
+df_wis['Name'] = df_wis['Name'].str.replace(
+    " ", "", regex=False
 )
-            
 
-wis_df = pd.merge(wis_df, df_wis, left_on='Name', right_on='Name',how='left')
-D_cm = pd.to_numeric(wis_df["Distance (Mpc)"], errors="coerce") * 3.0856776e24
-H_flux = pd.to_numeric(wis_df["H flux"], errors="coerce") if "H flux" in wis_df.columns else pd.Series(np.nan, index=wis_df.index)
-L = 4 * np.pi * D_cm**2 * (H_flux/0.21)*1.662 
+
+wis_H_phot_df = wis_H_phot.to_pandas()
+
+wis_H_phot_df['ID'] = normalize_name(
+    wis_H_phot_df['ID']
+)
+
+
+df_wis = df_wis.merge(
+    wis_H_phot_df,
+    left_on="Name",
+    right_on="ID",
+    how="left"
+)
+
+
+wis_df = pd.merge(
+    wis_df,
+    df_wis,
+    left_on='Name',
+    right_on='Name',
+    how='left'
+)
+
+
+D_cm = (
+    pd.to_numeric(
+        wis_df["Distance (Mpc)"],
+        errors="coerce"
+    )
+    * 3.0856776e24
+)
+
+
+H_flux = (
+    pd.to_numeric(
+        wis_df["H flux"],
+        errors="coerce"
+    )
+    if "H flux" in wis_df.columns
+    else pd.Series(np.nan, index=wis_df.index)
+)
+
+
+L = 4 * np.pi * D_cm**2 * (H_flux / 0.21) * 1.662
+
+
 # only take log10 where L is positive, otherwise set NaN
 with np.errstate(invalid="ignore", divide="ignore"):
-    wis_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
+
+    wis_df["log LH (L⊙)"] = np.where(
+        L > 0,
+        np.log10(L / 3.828e33),
+        np.nan
+    )
 
 
 ######## save csv, comment out later ##########
 
 out_dir = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples"
-os.makedirs(out_dir, exist_ok=True)
-out_path = os.path.join(out_dir, "wis_df_with_rc3.csv")
-wis_df.to_csv(out_path, index=False)
+
+os.makedirs(
+    out_dir,
+    exist_ok=True
+)
+
+out_path = os.path.join(
+    out_dir,
+    "wis_df_with_rc3.csv"
+)
+
+wis_df.to_csv(
+    out_path,
+    index=False
+)
 
 
-
+# ============================================================
+# PHANGS FINAL TABLE
+# ============================================================
 
 phangs_df = pd.DataFrame(phangs)
-phangs_df['Name'] = normalize_name(phangs_df['Name'])
-phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)   # remove all spaces
-df_phangs = pd.DataFrame(phangs_properties)
-df_phangs2 = pd.DataFrame(phangs_properties2).T.reset_index()
-df_phangs2 = df_phangs2.rename(columns={'index': 'Name'})
-df_phangs = df_phangs.reset_index()  # moves index to column 'name'
+
+phangs_df['Name'] = normalize_name(
+    phangs_df['Name']
+)
+
+phangs_df['Name'] = phangs_df['Name'].str.replace(
+    " ", "",
+    regex=False
+)
+
+
+df_phangs = pd.DataFrame(
+    phangs_properties
+)
+
+
+df_phangs2 = (
+    pd.DataFrame(phangs_properties2)
+    .T
+    .reset_index()
+)
+
+df_phangs2 = df_phangs2.rename(
+    columns={'index': 'Name'}
+)
+
+
+df_phangs = df_phangs.reset_index()
+
+
 if 'name' in df_phangs.columns[df_phangs.columns.duplicated()]:
-    df_phangs = df_phangs.loc[:, ~df_phangs.columns.duplicated()]
-df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)   # remove all spaces
-df_phangs2['Name'] = normalize_name(df_phangs2['Name']).str.replace(" ", "", regex=False) 
+
+    df_phangs = df_phangs.loc[
+        :,
+        ~df_phangs.columns.duplicated()
+    ]
+
+
+df_phangs['name'] = df_phangs['name'].str.replace(
+    " ", "",
+    regex=False
+)
+
+
+df_phangs2['Name'] = normalize_name(
+    df_phangs2['Name']
+).str.replace(
+    " ", "",
+    regex=False
+)
+
+
 phangs_H_phot_df = phangs_H_phot.to_pandas()
-phangs_H_phot_df['ID'] = normalize_name(phangs_H_phot_df['ID'])
-phangs_H_phot_df['ID'] = phangs_H_phot_df['ID'].str.replace(" ", "", regex=False)
+
+phangs_H_phot_df['ID'] = normalize_name(
+    phangs_H_phot_df['ID']
+)
+
+phangs_H_phot_df['ID'] = phangs_H_phot_df['ID'].str.replace(
+    " ", "",
+    regex=False
+)
+
+
 # merge phangs H-photometry into df_phangs using normalized keys
+
 df_phangs = df_phangs.merge(
     phangs_H_phot_df,
     left_on="name",
     right_on="ID",
     how="left"
 )
-# ensure df_phangs2 was created/renamed correctly and normalize its Name column
-df_phangs2['Name'] = normalize_name(df_phangs2['Name'])
-df_phangs2['Name'] = df_phangs2['Name'].str.replace(" ", "", regex=False)
 
-# also normalize df_phangs 'name' (remove spaces already done above but keep for safety)
-df_phangs['name'] = normalize_name(df_phangs['name'])
-df_phangs['name'] = df_phangs['name'].str.replace(" ", "", regex=False)
+
+# ensure df_phangs2 was created/renamed correctly
+# and normalize its Name column
+
+df_phangs2['Name'] = normalize_name(
+    df_phangs2['Name']
+)
+
+df_phangs2['Name'] = df_phangs2['Name'].str.replace(
+    " ", "",
+    regex=False
+)
+
+
+# also normalize df_phangs 'name'
+# remove spaces already done above but keep for safety
+
+df_phangs['name'] = normalize_name(
+    df_phangs['name']
+)
+
+df_phangs['name'] = df_phangs['name'].str.replace(
+    " ", "",
+    regex=False
+)
+
+
 # merge additional properties from df_phangs2
+
 df_phangs = df_phangs.merge(
     df_phangs2,
     left_on="name",
     right_on="Name",
     how="left"
 )
-# Ensure phangs_df 'Name' is in the same normalized form as df_phangs['Name'] before final merge
-phangs_df['Name'] = normalize_name(phangs_df['Name'])
-phangs_df['Name'] = phangs_df['Name'].str.replace(" ", "", regex=False)
-
-phangs_df = pd.merge(phangs_df, df_phangs, left_on='Name', right_on='Name', how='left')
 
 
-D_cm = pd.to_numeric(phangs_df["Distance (Mpc)"], errors="coerce") * 3.0856776e24
-H_flux = pd.to_numeric(phangs_df["H flux"], errors="coerce") if "H flux" in phangs_df.columns else pd.Series(np.nan, index=phangs_df.index)
+# Ensure phangs_df 'Name' is in the same normalized form
+# as df_phangs['Name'] before final merge
 
-L = 4 * np.pi * D_cm**2 * (H_flux/0.21)*1.662 # convert from L H (multiplied by bandwidth) to lambdafnu H
-        # only take log10 where L is positive, otherwise set NaN
+phangs_df['Name'] = normalize_name(
+    phangs_df['Name']
+)
+
+phangs_df['Name'] = phangs_df['Name'].str.replace(
+    " ", "",
+    regex=False
+)
+
+
+phangs_df = pd.merge(
+    phangs_df,
+    df_phangs,
+    left_on='Name',
+    right_on='Name',
+    how='left'
+)
+
+
+D_cm = (
+    pd.to_numeric(
+        phangs_df["Distance (Mpc)"],
+        errors="coerce"
+    )
+    * 3.0856776e24
+)
+
+
+H_flux = (
+    pd.to_numeric(
+        phangs_df["H flux"],
+        errors="coerce"
+    )
+    if "H flux" in phangs_df.columns
+    else pd.Series(np.nan, index=phangs_df.index)
+)
+
+
+L = (
+    4 * np.pi * D_cm**2
+    * (H_flux / 0.21)
+    * 1.662
+)
+
+
+# only take log10 where L is positive, otherwise set NaN
+
 with np.errstate(invalid="ignore", divide="ignore"):
-    phangs_df["log LH (L⊙)"] = np.where(L > 0, np.log10(L / 3.828e33), np.nan)
 
-    ######## save csv, comment out later ##########
+    phangs_df["log LH (L⊙)"] = np.where(
+        L > 0,
+        np.log10(L / 3.828e33),
+        np.nan
+    )
+
+
+######## save csv, comment out later ##########
+
 out_dir = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples"
-os.makedirs(out_dir, exist_ok=True)
-out_path = os.path.join(out_dir, "phangs_df_with_rc3.csv")
-phangs_df.to_csv(out_path, index=False)
+
+os.makedirs(
+    out_dir,
+    exist_ok=True
+)
+
+out_path = os.path.join(
+    out_dir,
+    "phangs_df_with_rc3.csv"
+)
+
+phangs_df.to_csv(
+    out_path,
+    index=False
+)
+
 ################################################
+

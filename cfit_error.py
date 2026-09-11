@@ -3,6 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "serif",
+    "font.serif": ["Computer Modern"],
+})
+
 def fit_concentration_50pc(df,
                            R_col='Resolution (pc)',
                            C_col='Concentration',
@@ -77,30 +83,62 @@ summary = (
     )
     .sort_values('Resolution_pc')
 )
+summary = (
+    fit_data
+    .groupby('resolution_source')
+    .agg(
+        Resolution_pc=('Resolution (pc)', 'mean'),
+        Resolution_min=('Resolution (pc)', 'min'),
+        Resolution_max=('Resolution (pc)', 'max'),
+        Resolution_std =('Resolution (pc)', 'std'),
+        C_err_mean=('C_err', 'mean'),
+        C_err_min=('C_err', 'min'),
+        C_err_max=('C_err', 'max'),
+        C_err_std=('C_err', 'std'),
+        N=('C_err', 'count')
+    )
+    .sort_values('Resolution_pc')
+)
+
 summary = summary[summary['Resolution_pc'] <= 180].copy()
 
-# Asymmetric error bars
-yerr = [
-    summary['C_err_mean'] - summary['C_err_min'],  # lower
-    summary['C_err_max'] - summary['C_err_mean']   # upper
+# Asymmetric x-error bars based on the actual resolution range
+xerr = [
+    summary['Resolution_pc'] - summary['Resolution_min'],
+    summary['Resolution_max'] - summary['Resolution_pc']
 ]
 
-plt.figure(figsize=(6,4))
+xerr = summary['Resolution_std']
+
+# Asymmetric y-error bars based on the C_err range
+yerr = [
+    summary['C_err_mean'] - summary['C_err_min'],
+    summary['C_err_max'] - summary['C_err_mean']
+]
+
+yerr = summary['C_err_std']
+
+plt.figure(figsize=(7, 5))
 
 plt.errorbar(
     summary['Resolution_pc'],
     summary['C_err_mean'],
+    xerr=xerr,
     yerr=yerr,
+        color='black',
+    ecolor='black',
+    alpha=0.6,
     fmt='o-',
     capsize=4
 )
 
-plt.xlabel('Resolution (pc)')
-plt.ylabel('Mean $C_{\\rm err}/C$')
-plt.grid(True)
+plt.xlabel('Resolution (pc)', fontsize=18)
+plt.ylabel('Mean $C_{\\rm err}/C$', fontsize=18)
+plt.grid(False)
 
 output_path = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Cfit_error.csv"
 summary.to_csv(output_path, index=False)
 
-plt.show()
+# plt.show()
+plt.savefig("/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/c_err_frac_plot.png")
 
