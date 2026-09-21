@@ -49,6 +49,27 @@ def query_ned_with_retries(query_name):
             time.sleep(1)
 
 
+def get_data(name):
+    try:
+        result = Vizier.query_object(name, catalog="VII/155/rc3")
+        if len(result) == 0:
+            result = Vizier.query_object(name, catalog="J/A+A/659/A188/ulx-xmm9")
+
+        T_col = result[0]["T"]
+        if isinstance(T_col, MaskedColumn):
+            T_data = T_col.filled(np.nan)
+        else:
+            T_data = np.array(T_col)
+
+        T_val = np.nanmedian(T_data)
+
+        return T_val
+
+    except Exception as e:
+        print(f"[{name}] failed:", e)
+        return np.nan
+
+
 ################## WISDOM X DATA ##################
 
 wisdom = pd.DataFrame([
@@ -1057,6 +1078,29 @@ wis_properties = pd.DataFrame.from_dict(
 
 update_catalogue_properties(wis_properties)
 
+print("Updating WISDOM table with Hubble T from Vizier...")
+
+for name_str in wis_properties.index:
+
+    max_retries = 3
+
+    for attempt in range(max_retries):
+        try:
+            wis_properties.loc[name_str, "Hubble Stage"] = get_data(name_str)
+
+            break
+
+        except (requests.exceptions.ConnectionError,
+                RemoteServiceError,
+                requests.exceptions.ReadTimeout) as e:
+
+            print(f"⚠️ Vizier query failed for {name_str} (attempt {attempt+1}/{max_retries}): {e}")
+
+            if attempt < max_retries - 1:
+                time.sleep(5)
+            else:
+                print("❌ All Vizier attempts failed.")
+
 
 # ------------------------------------------------------------
 # Update PHANGS table
@@ -1071,6 +1115,27 @@ if "name" in phangs_properties.columns:
     phangs_properties = phangs_properties.set_index("name")
 
 update_catalogue_properties(phangs_properties)
+
+for name_str in phangs_properties.index:
+    max_retries = 3
+    hubble_T = None
+
+    for attempt in range(max_retries):
+        try:
+            phangs_properties.loc[name_str, "Hubble Stage"] = get_data(name_str)
+
+            break
+
+        except (requests.exceptions.ConnectionError,
+                RemoteServiceError,
+                requests.exceptions.ReadTimeout) as e:
+
+            print(f"⚠️ Vizier query failed for {name_str} (attempt {attempt+1}/{max_retries}): {e}")
+
+            if attempt < max_retries - 1:
+                time.sleep(5)
+            else:
+                print("❌ All Vizier attempts failed.")
 
 
 # ============================================================

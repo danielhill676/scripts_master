@@ -38,6 +38,16 @@ from astropy.wcs.utils import proj_plane_pixel_scales
 from astropy.convolution import convolve_fft
 from radio_beam import Beam
 from radio_beam.utils import BeamError
+from astropy.wcs import FITSFixedWarning
+import warnings
+
+warnings.filterwarnings("ignore", category=FITSFixedWarning)
+
+warnings.filterwarnings(
+    "ignore",
+    message="Mean of empty slice",
+    category=RuntimeWarning
+)
 
 plt.rcParams.update({
     "text.usetex": True,
@@ -732,92 +742,101 @@ def plot_moment_map(image, outfolder, name_short, BMAJ, BMIN, R_kpc, rebin, mask
                 linewidth=3,
             )
             ax.add_patch(ellipse_patch)
+
     if mom == 0:
-        if rebin is not None and not normalise_norm:
-            if not flux_mask and not normalise_norm:
-                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.pdf'
-            elif flux_mask and not normalise_norm:
-                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}.pdf'
-            elif not flux_mask and normalise_norm:
-                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_{res_src}_norm.pdf'
-            elif flux_mask and normalise_norm:
-                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_{res_src}_norm.pdf'
-        elif rebin is None and not normalise_norm:
-            path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}.pdf'
-        elif rebin is None and normalise_norm:
-            path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_norm.pdf'
+        if rebin is not None:
+            if flux_mask and normalise_norm:
+                path = outfolder + f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_{res_src}_norm.pdf'
+            elif flux_mask:
+                path = outfolder + f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}.pdf'
+            elif normalise_norm:
+                path = outfolder + f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_{res_src}_norm.pdf'
+            else:
+                path = outfolder + f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}.pdf'
+
         else:
-            raise ValueError("Invalid combination of rebin and normalise_norm parameters.")
-    if mom == 0.1:
-        if rebin is not None and not normalise_norm:
-            if not flux_mask and not normalise_norm:
-                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_inferno.pdf'
-            elif flux_mask and not normalise_norm:
-                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_inferno.pdf'
-            elif not flux_mask and normalise_norm:
-                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_{res_src}_norm_inferno.pdf'
-            elif flux_mask and normalise_norm:
-                path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_{res_src}_norm_inferno.pdf'
-        elif rebin is None and not normalise_norm:
-            path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_inferno.pdf'
-        elif rebin is None and normalise_norm:
-            path = outfolder+f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_norm_inferno.pdf'
+            if normalise_norm:
+                path = outfolder + f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_norm.pdf'
+            else:
+                path = outfolder + f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}.pdf'
+
+    elif mom == 0.1:
+        if rebin is not None:
+            if flux_mask and normalise_norm:
+                path = outfolder + f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_{res_src}_norm_inferno.pdf'
+            elif flux_mask:
+                path = outfolder + f'/m0_plots/{R_kpc}_{rebin}_flux90_{mask}_{name_short}_inferno.pdf'
+            elif normalise_norm:
+                path = outfolder + f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_{res_src}_norm_inferno.pdf'
+            else:
+                path = outfolder + f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_inferno.pdf'
+
         else:
-            raise ValueError("Invalid combination of rebin and normalise_norm parameters.")
-        
-        if not os.path.exists(outfolder+'/m0_plots'):
-            os.makedirs(outfolder+'/m0_plots')
-        plt.savefig(path,bbox_inches='tight',pad_inches=0.0)
-        plt.close(fig)
+            if normalise_norm:
+                path = outfolder + f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_norm_inferno.pdf'
+            else:
+                path = outfolder + f'/m0_plots/{R_kpc}_no_rebin_{mask}_{name_short}_{res_src}_inferno.pdf'
 
-        if normalise_norm:
-            cbar_fig, cbar_ax = plt.subplots(figsize=(4, figsize*7.5))
+    elif mom == 1:
+        path = outfolder + f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_mom1.pdf'
 
-            norm_for_cbar = simple_norm(image.data, norm_type, vmin=vmin, vmax=vmax)
+    elif mom == 2:
+        path = outfolder + f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_mom2.pdf'
 
-            cb = plt.colorbar(
-                plt.cm.ScalarMappable(norm=norm_for_cbar, cmap='RdBu_r'),
-                cax=cbar_ax,
-                orientation='vertical'
+    else:
+        raise ValueError(f"Unknown moment: {mom}")
+
+    if not os.path.exists(outfolder + '/m0_plots'):
+        os.makedirs(outfolder + '/m0_plots')
+
+    plt.savefig(path, bbox_inches='tight', pad_inches=0.0)
+    plt.close(fig)
+
+    if normalise_norm and mom in [0, 0.1]:
+            
+        cbar_fig, cbar_ax = plt.subplots(figsize=(4, figsize*7.5))
+
+        norm_for_cbar = simple_norm(image.data, norm_type, vmin=vmin, vmax=vmax)
+
+        cb = plt.colorbar(
+                plt.cm.ScalarMappable(
+                    norm=norm_for_cbar,
+                    cmap='inferno' if mom == 0.1 else 'RdBu_r'
+                    ),
+            cax=cbar_ax,
+            orientation='vertical'
+        )
+
+        if np.isfinite(vmin) and np.isfinite(vmax) and vmax > vmin:
+            import matplotlib.ticker as mticker
+
+            cb.set_ticks(np.linspace(vmin, vmax, 5))
+
+            cb.ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
+
+            # Tick marks and labels
+            cb.ax.tick_params(
+                axis='y',
+                which='major',
+                labelsize=fontsize*3.5,  # smaller labels
+                length=8,                # visible ticks
+                width=1.5,
+                direction='out'
             )
 
-            if np.isfinite(vmin) and np.isfinite(vmax) and vmax > vmin:
-                import matplotlib.ticker as mticker
+            cb.locator = mticker.MaxNLocator(nbins=5)
+            cb.update_ticks()
 
-                cb.set_ticks(np.linspace(vmin, vmax, 5))
-
-                cb.ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
-
-                # Tick marks and labels
-                cb.ax.tick_params(
-                    axis='y',
-                    which='major',
-                    labelsize=fontsize*3.5,  # smaller labels
-                    length=8,                # visible ticks
-                    width=1.5,
-                    direction='out'
-                )
-
-                cb.locator = mticker.MaxNLocator(nbins=5)
-                cb.update_ticks()
-
-            # If you have a colourbar label:
-            cb.set_label(
-                "Your caption",
-                fontsize=fontsize*4,
-                labelpad=20   # increase separation from tick labels
-            )
-            cb.set_label('Surface density ($M_{\odot}\,\mathrm{pc}^{-2}$)', fontsize=fontsize*5)
-            plt.savefig('/data/c3040163/llama/alma/gas_analysis_results'+ f'/colourbar_{R_kpc}_{rebin}_{flux_mask}.pdf', bbox_inches='tight', pad_inches=0)
-            plt.close(cbar_fig)
-    if mom == 1:
-        path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_mom1.pdf'
-        plt.savefig(path,bbox_inches='tight',pad_inches=0.0)
-        plt.close(fig)
-    if mom == 2:
-        path = outfolder+f'/m0_plots/{R_kpc}_{rebin}_{mask}_{name_short}_mom2.pdf'
-        plt.savefig(path,bbox_inches='tight',pad_inches=0.0)
-        plt.close(fig)
+        # If you have a colourbar label:
+        cb.set_label(
+            "Your caption",
+            fontsize=fontsize*4,
+            labelpad=20   # increase separation from tick labels
+        )
+        cb.set_label('Surface density ($M_{\odot}\,\mathrm{pc}^{-2}$)', fontsize=fontsize*5)
+        plt.savefig('/data/c3040163/llama/alma/gas_analysis_results'+ f'/colourbar_{R_kpc}_{rebin}_{flux_mask}.pdf', bbox_inches='tight', pad_inches=0)
+        plt.close(cbar_fig)
+                    
         
 # ------------------ Processing ------------------
 
@@ -1011,9 +1030,13 @@ def resolve_galaxy_beam_scale(
                     pass
 
             else:
-                Ned_table = query_ned_with_retries(ned_name)
-                RA = Ned_table['RA'][0]
-                DEC = Ned_table['DEC'][0]
+                if base_name not in ['NGC3368', 'NGC4429']:
+                    Ned_table = query_ned_with_retries(ned_name)
+                    RA = Ned_table['RA'][0]
+                    DEC = Ned_table['DEC'][0]
+                else:
+                    RA = llamatab[llamatab['id'] == base_name]['RA (deg)'][0]
+                    DEC = llamatab[llamatab['id'] == base_name]['DEC (deg)'][0]
 
                 try:
                     I = llamatab[llamatab['id'] == base_name]['Inclination (deg)'][0]
@@ -1202,8 +1225,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
     # if name in ['NGC3783','NGC1315','NGC3717','NGC1375','NGC5037','MCG514','ESO021']: this is a set of ones that crashed on the ned search for some reason
     #     return
 
-    # if name not in ['NGC2992']:
-    #     return
+    if name not in ['NGC3368','NGC4429','ESO021','NGC7582','NGC5728']:
+        return
     
 ##############################################################################
 
@@ -1236,7 +1259,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     # Skip incompatible galaxies
-    co32_list = ['NGC4388','NGC6814','NGC5728']
+    co32_list = ['NGC4388','NGC6814','NGC5728','NGC4429']
     if not co32 and name in co32_list:
         return None
     if co32 and name not in co32_list:
@@ -1420,6 +1443,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     if rebin is None and not res_comp:
+        
+        print('pair names =',pair_names)
 
         for pair_name in pair_names:
 
@@ -1464,6 +1489,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 beam_scales_pc.append(np.nan)
                 beam_scale_labels.append(pair_name_norm)
                 print(f"Failed to process pair {pair_name_norm}: {e}")
+
     
     elif res_comp:
         n = 20
@@ -1472,7 +1498,7 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         for i in range(n-1):
             beam_scale_labels.append(str(i+2))
 
-    print(f"Beam scales (pc): {dict(zip(beam_scale_labels, beam_scales_pc))}")
+
 
 
 
@@ -1487,88 +1513,94 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
 
 
     # ---------- build resolution list ----------
-    res_list = []
 
     native_res = float(beam_scale_pc)
-    res_list.append(("native", native_res))
 
-    if not 'native' in isolate:
+    if rebin is not None:
+        # Only process the requested rebinned resolution
+        res_list = [("rebin", float(rebin))]
 
-        if rebin is None:
+    else:
+        # Process native resolution
+        res_list = [("native", native_res)]
+
+        # And all matched-pair resolutions
+        if isolate is None or 'native' not in isolate:
             for src, bs_pc in zip(beam_scale_labels, beam_scales_pc):
                 if np.isnan(bs_pc):
                     continue
+
                 if bs_pc > native_res:
                     res_list.append((src, float(bs_pc)))
 
     # preserve order, unique
     res_list = list(dict.fromkeys(res_list))
 
-    # for src, res in res_list:
-    #     assert src == "native" or src in beam_scale_labels
+    print("Resolution list:", res_list)
 
     # ---------- smoothing ----------
     for src, res in res_list:
 
-        image_copy = image.copy()
-        error_map_copy = error_map.copy()
-        beam_scale_pc_copy = native_res
+        if src == "native":
+            image_copy = image.copy()
+            error_map_copy = error_map.copy()
 
-        BMAJ_new = BMAJ
-        BMIN_new = BMIN
+            BMAJ_new = BMAJ
+            BMIN_new = BMIN
+            BPA_new = PA
 
-        # smooth_factor = res / beam_scale_pc_copy
+        else:
+            image_copy = image.copy()
+            error_map_copy = error_map.copy()
 
-        # if res is not None and smooth_factor > 1:
-        #     pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
-        #     sigma_kernel_pc = np.sqrt(res**2 - beam_scale_pc_copy**2)
-        #     sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc 
-        #     image_copy = gaussian_filter(image_copy, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
-        #     error_map_copy = gaussian_filter(error_map_copy, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
-
-        #     beam_scale_pc_copy = res
-        #     BMAJ_new = beam_scale_pc_copy / (pc_per_arcsec * 3600)
-        #     BMIN_new = BMAJ_new
-
-### ###   ###    ###### ###########################################################################
-
-
-        beam = Beam( major=BMAJ * u.deg, minor=BMIN * u.deg, pa= PA * u.deg )
-        # Target circular beam corresponding to 120 pc
-        target_fwhm_arcsec = res / pc_per_arcsec
-        target_beam = Beam( major=target_fwhm_arcsec * u.arcsec, minor=target_fwhm_arcsec * u.arcsec, pa=0 * u.deg)
-
-        try:
-            kernel = target_beam.deconvolve(beam).as_kernel(
-                pixel_scale_arcsec * u.arcsec
+            beam = Beam(
+                major=BMAJ * u.deg,
+                minor=BMIN * u.deg,
+                pa=PA * u.deg
             )
 
-            image_copy = convolve_fft(
-                image_copy,
-                kernel,
-                boundary="fill",
-                fill_value=0.0,
-                normalize_kernel=True,
-                preserve_nan=True,
+            target_fwhm_arcsec = res / pc_per_arcsec
+
+            target_beam = Beam(
+                major=target_fwhm_arcsec * u.arcsec,
+                minor=target_fwhm_arcsec * u.arcsec,
+                pa=0 * u.deg
             )
 
-            error_map_copy = convolve_fft(
-                error_map_copy,
-                kernel,
-                boundary="fill",
-                fill_value=0.0,
-                normalize_kernel=True,
-                preserve_nan=True,
-            )            
+            try:
+                kernel = target_beam.deconvolve(beam).as_kernel(
+                    pixel_scale_arcsec * u.arcsec
+                )
 
-            BMAJ_new = target_beam.major.to(u.deg).value
-            BMIN_new = target_beam.minor.to(u.deg).value
-            BPA_new = target_beam.pa.to(u.deg).value
+                image_copy = convolve_fft(
+                    image_copy,
+                    kernel,
+                    boundary="fill",
+                    fill_value=0.0,
+                    normalize_kernel=True,
+                    preserve_nan=True,
+                )
 
-        except BeamError:
-            print(f"{name}: {beam_scale_pc_copy} native beam is already larger than or incompatible with a {res} pc circular beam.")
+                error_map_copy = convolve_fft(
+                    error_map_copy,
+                    kernel,
+                    boundary="fill",
+                    fill_value=0.0,
+                    normalize_kernel=True,
+                    preserve_nan=True,
+                )
 
-        
+                BMAJ_new = target_beam.major.to(u.deg).value
+                BMIN_new = target_beam.minor.to(u.deg).value
+                BPA_new = target_beam.pa.to(u.deg).value
+
+            except BeamError:
+                print(
+                    f"{name}: native beam is already larger than or "
+                    f"incompatible with a {res} pc circular beam."
+                )
+                continue
+
         images.append(image_copy)
         errormaps.append(error_map_copy)
         BMAJs.append(BMAJ_new)
@@ -1576,77 +1608,6 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
         res_values.append(float(res))
         res_sources.append(src)
 
-
-    ######################## carry out manual rebin if missing ########################
-    if manual_rebin and rebin is not None and 'native' not in isolate:
-        smooth_factor = rebin / native_res
-    #     if rebin is not None and smooth_factor > 1:
-    #         pixel_scale_pc = pixel_scale_arcsec * pc_per_arcsec
-    #         sigma_kernel_pc = np.sqrt(rebin**2 - native_res**2)
-    #         sigma_kernel_pix = sigma_kernel_pc / pixel_scale_pc
-
-    #         image_rb = gaussian_filter(image, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
-    #         error_rb = gaussian_filter(error_map, sigma=sigma_kernel_pix, mode='constant', cval=0.0)
-    #         BMAJ_rb = rebin / (pc_per_arcsec * 3600)
-    #         BMIN_rb = BMAJ_rb
-
-    #         images.append(image_rb)
-    #         errormaps.append(error_rb)
-    #         BMAJs.append(BMAJ_rb)
-    #         BMINs.append(BMIN_rb)
-    #         res_values.append(float(rebin))
-    #         res_sources.append("rebin")
-    #     else:
-    #         print(
-    #             f"No rebinning applied for {name}: requested rebin {rebin} pc "
-    #             f"is not larger than beam scale {native_res:.2f} pc."
-    #         )
-
-
-    #         # smoothing
-
-        #Native beam (assumed stored in degrees) 
-        beam = Beam( major=BMAJ * u.deg, minor=BMIN * u.deg, pa= PA * u.deg )
-        # Target circular beam corresponding to 120 pc
-        target_fwhm_arcsec = rebin / pc_per_arcsec
-        target_beam = Beam( major=target_fwhm_arcsec * u.arcsec, minor=target_fwhm_arcsec * u.arcsec, pa=0 * u.deg)
-
-        try:
-            kernel = target_beam.deconvolve(beam).as_kernel(
-                pixel_scale_arcsec * u.arcsec
-            )
-
-            image_rb = convolve_fft(
-                image,
-                kernel,
-                boundary="fill",
-                fill_value=0.0,
-                normalize_kernel=True,
-                preserve_nan=True,
-            )
-            error_rb = convolve_fft(
-                error_map_copy,
-                kernel,
-                boundary="fill",
-                fill_value=0.0,
-                normalize_kernel=True,
-                preserve_nan=True,
-            )  
-
-            BMAJ_rb = target_beam.major.to(u.deg).value
-            BMIN_rb = target_beam.minor.to(u.deg).value
-            BPA_rb = target_beam.pa.to(u.deg).value
-
-
-            images.append(image_rb)
-            errormaps.append(error_rb)
-            BMAJs.append(BMAJ_rb)
-            BMINs.append(BMIN_rb)
-            res_values.append(float(rebin))
-            res_sources.append("rebin")
-
-        except BeamError:
-            print(f"{name}: {beam_scale_pc} native beam is already larger than or incompatible with a {rebin} pc circular beam.")
 
     ##################################################################################
 
@@ -1762,7 +1723,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 aperture=aperture_to_plot, res_src=res_src, norm_type=norm_type, normalise_norm=normalise_norm, noise = mass_surface_density_rms_noise
             )
 
-        if not 'plot' in isolate:
+        if isolate is None or 'plot' not in isolate:
+           
 
         
             LCO_10 , mass_tot = total_mass_single(image,mask,pixel_area_arcsec2,beam_area_arcsec2,beam_area_pc2,R_21,R_31,alpha_CO,name,D_Mpc,co32=co32)
@@ -1803,8 +1765,8 @@ def process_file(args, images_too_small, isolate=None, manual_rebin=False, save_
                 "emission_pixels": emission_pixels,
                 "emission_fraction": emission_fraction
             })
-            
-        return rows
+        
+    return rows
 
 
 # ------------------ Parallel Directory Processing ------------------
@@ -1841,7 +1803,7 @@ def process_directory(
 
         # ---------------- File selection logic (UNCHANGED) ----------------
         if rebin is not None and not co32:
-            if name in ["NGC4388", "NGC6814", "NGC5728"]:
+            if name in ["NGC4388", "NGC6814", "NGC5728","NGC4429"]:
                 continue
 
             rebinned = os.path.join(
@@ -1885,7 +1847,7 @@ def process_directory(
                 )
 
         elif not rebin and not co32:
-            if name in ["NGC4388", "NGC6814", "NGC5728"]:
+            if name in ["NGC4388", "NGC6814", "NGC5728","NGC4429"]:
                 continue
 
             mom0_file = os.path.join(
@@ -1896,7 +1858,7 @@ def process_directory(
             )
 
         else:
-            if name not in ["NGC4388", "NGC6814", "NGC5728"]:
+            if name not in ["NGC4388", "NGC6814", "NGC5728","NGC4429"]:
                 continue
 
             mom0_file = os.path.join(
@@ -2106,12 +2068,14 @@ inactive_by_num = {
     18: "NGC 3749",
     19: "NGC 1375",
     20: "NGC 1315",
+    21: "NGC 3368",
+    22: "NGC 4429"
 }
 
 
 active_to_nums = {
     "NGC 1365": [7],
-    "NGC 7582": [11, 17],
+    "NGC 7582": [11, 17, 21],
     "NGC 6814": [3],
     "NGC 4388": [11],
     "NGC 7213": [8],
@@ -2126,8 +2090,8 @@ active_to_nums = {
     "NGC 4593": [1, 8],
     "NGC 7172": [15, 16, 17],
     "NGC 3783": [10],
-    "ESO 021-G004": [17],
-    "NGC 5728": [13, 17],
+    "ESO 021-G004": [17, 22],
+    "NGC 5728": [13, 17, 21],
     "MCG-05-14-012": [20],
 }   
 
@@ -2143,15 +2107,16 @@ for active, nums in active_to_nums.items():
 
 df_pairs = pd.DataFrame(rows).sort_values(["pair_id", "Active Galaxy"]).reset_index(drop=True)
 print(len(df_pairs), "matched pairs constructed.")
+print(df_pairs)
 
-llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
+llamatab = Table.read('/data/c3040163/llama/llama_main_properties_newcontrols.fits', format='fits')
 colourbar_list = [] 
 
 
 # ------------------ Main ------------------
 
 if __name__ == '__main__':
-    llamatab = Table.read('/data/c3040163/llama/llama_main_properties.fits', format='fits')
+    llamatab = Table.read('/data/c3040163/llama/llama_main_properties_newcontrols.fits', format='fits')
     base_output_dir = '/data/c3040163/llama/alma/gas_analysis_results'
     isolate = None #                                     "gini":  ["Gini", "Gini_err"],
                                                         # "asym":  ["Asymmetry", "Asymmetry_err"],
@@ -2165,35 +2130,34 @@ if __name__ == '__main__':
                                                         # "expfit":["Sigma0 (Jy/beam km/s)", "rs (pc)"],
                                                         # "plot":  []
     
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=True,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=True)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,flux_mask=False,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate,flux_mask=False)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=120,mask='strict',R_kpc=1.5,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate)
 
     colourbar_list = [] 
-    isolate = ['plot', 'native']
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate)
-    isolate = ['plot', 'native']
+    isolate = ['plot','native']
     process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
     process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1.5,isolate=isolate,normalise_norm=True)
-    # isolate = None
-    # colourbar_list = [] 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    isolate = None
+    colourbar_list = [] 
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=1,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=0.3,isolate=isolate)
 
-    # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
-    # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
+    process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='strict',R_kpc=0.3,isolate=isolate)
 
     # process_directory(outer_dir_co21, llamatab, base_output_dir, co32=False,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate,res_comp=True)
     # process_directory(outer_dir_co32, llamatab, base_output_dir, co32=True,rebin=None,mask='broad',R_kpc=1.5,isolate=isolate,res_comp=True)

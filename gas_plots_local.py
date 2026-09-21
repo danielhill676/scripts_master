@@ -44,9 +44,9 @@ def get_errorbars(df, colname):
     """
     # Try exact match
     err_col = f"{colname}_err"
-    print(err_col)
+    # print(err_col)
     if err_col in df.columns:
-        print('found errcol')
+        # print('found errcol')
         err = pd.to_numeric(df[err_col], errors="coerce")
         return err.values
 
@@ -289,7 +289,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             )
 
     # Load LLAMA table
-    llamatab = Table.read('/Users/administrator/Astro/LLAMA/llama_main_properties.fits', format='fits')
+    llamatab = Table.read('/Users/administrator/Astro/LLAMA/llama_main_properties_newcontrols.fits', format='fits')
 
     base_AGN = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/AGN"
     base_inactive = "/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/inactive"
@@ -1060,7 +1060,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
 # check 1
 
-        fit_data_AGN.to_csv('/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/debugging_help/check1.csv')
+        fit_data_inactive.to_csv('/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/debugging_help/check1.csv')
 
 
         if use_cont:
@@ -1122,13 +1122,14 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
         merged_AGN = pd.merge(df_combined, fit_data_AGN, left_on='id', right_on='Galaxy_clean',how='right',validate="one_to_many")
 
 # check 2
-        merged_AGN.to_csv('/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/debugging_help/check2.csv')
 
         merged_AGN = pd.merge(merged_AGN, agn_bol, left_on='Name_clean', right_on='Name_clean',how='left',validate="many_to_one")
         # check 3
-        merged_AGN.to_csv('/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/debugging_help/check3.csv')
         merged_inactive = pd.merge(df_combined, fit_data_inactive, left_on='id', right_on='Galaxy_clean',how='right',validate="one_to_many")
+        merged_inactive.to_csv('/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/debugging_help/check2.csv')
+
         merged_inactive = pd.merge(merged_inactive, inactive_bol, left_on='Name_clean', right_on='Name_clean',how='left',validate="many_to_one")
+        merged_inactive.to_csv('/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/debugging_help/check3.csv')
 
         # Add derived log LX column from flux and distance
         #BAT_sens = 0.535e-10 # erg/cm2/s
@@ -1262,7 +1263,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ]
 
                 # check 3
-        merged_AGN_clean.to_csv('/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/debugging_help/check4.csv')
+        merged_inactive_clean.to_csv('/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/debugging_help/check4.csv')
 
         if use_aux:
             fit_data_aux_res = fit_data_aux.sort_values("Resolution (pc)", ascending=True)
@@ -1466,12 +1467,12 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             c_agn = agn_plot[c_column]
         else:
             c_agn = None
-        print('agn')
-        print('x')
+        # print('agn')
+        # print('x')
         xerr_agn = get_errorbars(agn_plot, x_column)
-        print('y')
+        # print('y')
         yerr_agn = get_errorbars(agn_plot, y_column)
-        print('yerr_agn\n',yerr_agn)
+        # print('yerr_agn\n',yerr_agn)
         names_agn = agn_plot["Name_clean"].str.replace(" ", "", regex=False).values
 
         inactive_plot = clean_df(inactive_plot, clean_cols)
@@ -1482,10 +1483,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             c_inactive = inactive_plot[c_column]
         else:
             c_inactive = None
-        print('control')
-        print('x')
+        # print('control')
+        # print('x')
         xerr_inactive = get_errorbars(inactive_plot, x_column)
-        print('y')
+        # print('y')
         yerr_inactive = get_errorbars(inactive_plot, y_column)
         names_inactive = inactive_plot["Name_clean"].str.replace(" ", "", regex=False).values
 
@@ -1521,7 +1522,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             names_gb21 = GB21_clean["Name"].values
         if use_wis:
  #see archived_comp_samp_build
-            wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df.csv")
+            wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df_with_rc3.csv")
             wis_df[x_column] = pd.to_numeric(wis_df[x_column], errors='coerce')
             wis_df[y_column] = pd.to_numeric(wis_df[y_column], errors='coerce')
             wis_clean = wis_df.dropna(subset=[x_column, y_column])
@@ -1532,7 +1533,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             names_wis = wis_clean["Name"].values
         if use_phangs:
  #see archived_comp_samp_build
-            phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_df.csv")
+            phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/phangs_df_with_rc3.csv")
             phangs_df[x_column] = pd.to_numeric(phangs_df[x_column], errors='coerce')
             phangs_df[y_column] = pd.to_numeric(phangs_df[y_column], errors='coerce')
             phangs_clean = phangs_df.dropna(subset=[x_column, y_column])
@@ -1563,6 +1564,111 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             y_leroy = leroy_clean[y_column]
             yerr_leroy = get_errorbars(leroy_clean, y_column)
             names_leroy = leroy_clean["dataset"].values
+
+        ############################ Finding new matched pairs in wis and phangs #####################
+
+    #     if use_phangs:
+
+    #         matches = {}
+    #         unique_phangs_matches = set()
+
+    #         for idx, agn in merged_AGN_clean_minres.iterrows():
+
+    #             matched = phangs_df[
+    #                 (phangs_df["Hubble Stage"].sub(agn["Hubble Stage"]).abs() <= 1)
+    #                 & (phangs_df["log LH (L⊙)"].sub(agn["log LH (L⊙)"]).abs() <= 0.3)
+    #                 & (phangs_df["i"].sub(agn["Inclination (deg)"]).abs() <= 15)
+    #                 & (phangs_df["Distance (Mpc)"] < agn["Distance (Mpc)"])
+    #             ]
+
+    #             matches[idx] = matched
+
+    #             unique_phangs_matches.update(matched["Name"].dropna().unique())
+
+    # # Print unique PHANGS matches first
+    #         print("\nUnique PHANGS matches:")
+    #         for name in sorted(unique_phangs_matches):
+    #             print(f"  {name}")
+
+    #         print(f"\nTotal unique PHANGS matches: {len(unique_phangs_matches)}")
+
+    #         for idx, matched in matches.items():
+    #             if matched.empty:
+    #                 continue
+
+    #             agn = merged_AGN_clean_minres.loc[idx]
+
+    #             print(f"\nAGN: {agn['Name_clean']}")
+    #             print(
+    #                 f"  Hubble Stage = {agn['Hubble Stage']}, "
+    #                 f"log LH = {agn['log LH (L⊙)']:.2f}, "
+    #                 f"i = {agn['Inclination (deg)']:.1f}°, "
+    #                 f"Distance = {agn['Distance (Mpc)']:.2f} Mpc"
+    #             )
+
+    #             # if matched.empty:
+    #             #     print("  NO MATCHES")
+    #             # else:
+    #             for _, inactive in matched.iterrows():
+    #                 print(
+    #                     f"    -> {inactive['Name']}: "
+    #                     f"Hubble Stage = {inactive['Hubble Stage']}, "
+    #                     f"log LH = {inactive['log LH (L⊙)']:.2f}, "
+    #                     f"i = {inactive['i']:.1f}°, "
+    #                     f"Distance = {inactive['Distance (Mpc)']:.2f} Mpc"
+    #                 )
+
+
+    #     if use_wis:
+
+    #         matches = {}
+    #         unique_wis_matches = set()
+
+    #         for idx, agn in merged_AGN_clean_minres.iterrows():
+
+    #             matched = wis_df[
+    #                 (wis_df["Hubble Stage"].sub(agn["Hubble Stage"]).abs() <= 1)
+    #                 & (wis_df["log LH (L⊙)"].sub(agn["log LH (L⊙)"]).abs() <= 0.3)
+    #                 & (wis_df["i"].sub(agn["Inclination (deg)"]).abs() <= 15)
+    #                 & (wis_df["Distance (Mpc)"] < agn["Distance (Mpc)"])
+    #             ]
+
+    #             matches[idx] = matched
+
+    #             unique_wis_matches.update(matched["Name"].dropna().unique())
+
+    # # Print unique PHANGS matches first
+    #         print("\nUnique wis matches:")
+    #         for name in sorted(unique_wis_matches):
+    #             print(f"  {name}")
+
+    #         print(f"\nTotal unique wis matches: {len(unique_wis_matches)}")
+
+    #         for idx, matched in matches.items():
+    #             if matched.empty:
+    #                 continue
+
+    #             agn = merged_AGN_clean_minres.loc[idx]
+
+    #             print(f"\nAGN: {agn['Name_clean']}")
+    #             print(
+    #                 f"  Hubble Stage = {agn['Hubble Stage']}, "
+    #                 f"log LH = {agn['log LH (L⊙)']:.2f}, "
+    #                 f"i = {agn['Inclination (deg)']:.1f}°, "
+    #                 f"Distance = {agn['Distance (Mpc)']:.2f} Mpc"
+    #             )
+
+    #             # if matched.empty:
+    #             #     print("  NO MATCHES")
+    #             # else:
+    #             for _, inactive in matched.iterrows():
+    #                 print(
+    #                     f"    -> {inactive['Name']}: "
+    #                     f"Hubble Stage = {inactive['Hubble Stage']}, "
+    #                     f"log LH = {inactive['log LH (L⊙)']:.2f}, "
+    #                     f"i = {inactive['i']:.1f}°, "
+    #                     f"Distance = {inactive['Distance (Mpc)']:.2f} Mpc"
+    #                 )
 
 
             #################################### Ratio handling #############################################
@@ -2464,8 +2570,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                             # ratios_y.append(y_end-y_start)
                 # print('median xratio',np.median(ratios_x))
                 # print('mean xratio',np.mean(ratios_x))
-                print('\nConcentation differences with GB24\n')
-                print(list(ratios_y))
+                # print('\nConcentation differences with GB24\n')
+                # print(list(ratios_y))
                 # print('median yratio',np.median(ratios_y))
                 # print('mean yratio',np.mean(ratios_y))
             if c_column is None:
@@ -2527,7 +2633,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             # AGN sample
             # =========================================================
 
-            print('yerr_agn\n',yerr_agn)
+            # print('yerr_agn\n',yerr_agn)
 
             if soloplot in (None, 'AGN'):
                 if not res_comp:
@@ -2545,7 +2651,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                             elinewidth=1,
                             alpha=0.8
                         )
-                        print(pd.Series(y_agn.values, index=names_agn))
+                        # print(pd.Series(y_agn.values, index=names_agn))
 
                     else:
 
@@ -2721,7 +2827,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                                     y,
                                     color=colour_inactive
                                 )
-                            print(pd.Series(y_inactive.values, index=names_inactive))
+                            # print(pd.Series(y_inactive.values, index=names_inactive))
 
                         else:
 
@@ -2738,7 +2844,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                                 elinewidth=1,
                                 alpha=0.8
                             )
-                            print(pd.Series(y_inactive.values, index=names_inactive))
+                            # print(pd.Series(y_inactive.values, index=names_inactive))
                     else:
 
                         sc_inactive = ax_scatter.scatter(
@@ -3785,7 +3891,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ax.hist(diffs, bins=bin_edges, color="lightgrey", histtype='bar', linewidth=4)
                 ax.axvline(mean, color="red", linestyle="-", label=f"Mean = {mean:.2g} ± {mean_err:.2g}",linewidth=3)
                 ax.axvline(mean - sigma, color="blue", linestyle="--")
-                ax.axvline(mean + sigma, color="blue", linestyle="--",label=f"$1\sigma = {(sigma):.2g}$" if sigma > 0 else r"$1\sigma = \infty$")
+                ax.axvline(mean + sigma, color="blue", linestyle="--",label=fr"$1\sigma = {(sigma):.2g}$" if sigma > 0 else r"$1\sigma = \infty$")
                 ax.axvline(0, color="black", linestyle="solid")  # reference line
 
 
@@ -3796,7 +3902,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
                 ax.set_ylabel("Number of pairs", fontsize=font)
 
-                ax.set_title(f"p = {(p_value_t*100):.3f}\% \qquad N = {n}", fontsize=font)
+                ax.set_title(fr"p = {(p_value_t*100):.3f}\% \qquad N = {n}", fontsize=font)
                 # else:
                 #     ax.set_title(f"Wilcoxon test p-value: {p_value_w:.3f}")
                 ax.legend(fontsize=font_leg)
@@ -3828,7 +3934,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 ax.hist(diffs_frac , bins=bin_edges, color="lightgrey", histtype='bar', linewidth=4)
                 ax.axvline(mean_frac , color="red", linestyle="-", label=f"Mean = {mean_frac :.2g} ± {mean_err_frac:.2g}",linewidth=3)
                 ax.axvline(mean_frac  - sigma_frac , color="blue", linestyle="--")
-                ax.axvline(mean_frac  + sigma_frac , color="blue", linestyle="--",label=f"$1\sigma = {(sigma_frac):.2g}$" if sigma_frac > 0 else r"$1\sigma = \infty$")
+                ax.axvline(mean_frac  + sigma_frac , color="blue", linestyle="--",label=fr"$1\sigma = {(sigma_frac):.2g}$" if sigma_frac > 0 else r"$1\sigma = \infty$")
                 ax.axvline(0, color="black", linestyle="solid")  # reference line
 
 
@@ -3839,7 +3945,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
                 ax.set_ylabel("Number of pairs", fontsize=font)
 
-                ax.set_title(f"p = {(p_value_t_frac*100):.3f}\% \qquad N = {n_frac}", fontsize=font)
+                ax.set_title(fr"p = {(p_value_t_frac*100):.3f}\% \qquad N = {n_frac}", fontsize=font)
                 # else:
                 #     ax.set_title(f"Wilcoxon test p-value: {p_value_w:.3f}")
                 ax.legend( fontsize=font_leg)
@@ -3919,7 +4025,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
                 title = "\n".join(
                     [
-                        f"{labels[o]}: p = {(float(stats_by_class[o]['p_value'])*100):.3g}\%"
+                        fr"{labels[o]}: p = {(float(stats_by_class[o]['p_value'])*100):.3g}\%"
                         for o in ["o", "u"]
                     ]
                 )
@@ -3945,93 +4051,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 plt.savefig(output_path_obs)
                 print(f"Saved obscuration-split plot to: {output_path_obs}")
                 plt.close(fig)
-
-
-                # ###########################################################
-                # # Fractional obscuration-split histogram
-                # ###########################################################
-
-                # fig, ax = plt.subplots(figsize=(8, 5))
-
-                # for obsclass in ["o", "i", "u"]:
-
-                #     stats = stats_by_class[obsclass]
-
-                #     ax.hist(
-                #         diffs_frac_obs[obsclass],
-                #         bins=12,
-                #         histtype="step",
-                #         linewidth=3,
-                #         color=obs_colors[obsclass],
-                #         label=f"{labels[obsclass]} (N={stats['n_frac']})",
-                #     )
-
-                #     ax.axvline(
-                #         stats["mean_frac"],
-                #         color=obs_colors[obsclass],
-                #         linestyle="--",
-                #         linewidth=2,
-                #     )
-
-                #     ax.axvline(
-                #         stats["mean_frac"] - stats["sigma_frac"],
-                #         color=obs_colors[obsclass],
-                #         linestyle=":",
-                #         linewidth=1.5,
-                #     )
-
-                #     ax.axvline(
-                #         stats["mean_frac"] + stats["sigma_frac"],
-                #         color=obs_colors[obsclass],
-                #         linestyle=":",
-                #         linewidth=1.5,
-                #     )
-
-                # ax.axvline(0, color="black", linestyle="-")
-
-                # try:
-                #     ax.set_xlabel(
-                #         fr"$\Delta$ {axis_label_lookup[y_column]} (1 - Inactive/AGN)",
-                #         fontsize=font,
-                #     )
-                # except:
-                #     ax.set_xlabel(
-                #         fr"$\Delta$ {y_column} (1 - Inactive/AGN)",
-                #         fontsize=font,
-                #     )
-
-                # ax.set_ylabel("Number of pairs", fontsize=font)
-
-                # title = "\n".join(
-                #     [
-                #         f"{labels[o]}: p={stats_by_class[o]['p_value_frac']:.3g}"
-                #         for o in ["o", "i", "u"]
-                #     ]
-                # )
-
-                # ax.set_title(title, fontsize=font-2)
-
-                # ax.legend()
-
-                # outputdir_frac_obs = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/frac/obsclass/{masky}_{R_kpcy}kpc/'
-                # os.makedirs(outputdir_frac_obs, exist_ok=True)
-
-                # output_path_frac_obs = outputdir_frac_obs + f'{y_column}_pair_differences_obsclass.pdf'
-
-                # if co21only:
-                #     output_path_frac_obs = outputdir_frac_obs + f'{y_column}_pair_differences_obsclass_co21only.pdf'
-                # if nativey and y_column == "flux (Jy km/s)":
-                #     output_path_frac_obs = outputdir_frac_obs + 'fluxjykms_native_pair_differences_obsclass.pdf'
-                # elif nativey:
-                #     output_path_frac_obs = outputdir_frac_obs + f'{y_column}_native_pair_differences_obsclass.pdf'
-                # elif y_column == "flux (Jy km/s)":
-                #     output_path_frac_obs = outputdir_frac_obs + 'fluxjykms_pair_differences_obsclass.pdf'
-
-                # plt.savefig(output_path_frac_obs)
-                # print(f"Saved obscuration-split plot to: {output_path_frac_obs}")
-                # plt.close(fig)
-
-
 
 
                 ###########################################################
@@ -4507,12 +4526,14 @@ inactive_by_num = {
     18: "NGC 3749",
     19: "NGC 1375",
     20: "NGC 1315",
+    21: "NGC 3368",
+    22: "NGC 4429"
 }
 
 # Active galaxies with the exact numbers shown in their corners (from the image; left panel)
 active_to_nums = {
     "NGC 1365": [7],
-    "NGC 7582": [11, 17],
+    "NGC 7582": [11, 17, 21],
     "NGC 6814": [3],
     "NGC 4388": [11],
     "NGC 7213": [8],
@@ -4527,8 +4548,8 @@ active_to_nums = {
     "NGC 4593": [1, 8],
     "NGC 7172": [15, 16, 17],
     "NGC 3783": [10],
-    "ESO 021-G004": [17],
-    "NGC 5728": [13, 17],
+    "ESO 021-G004": [17, 22],
+    "NGC 5728": [13, 17, 21],
     "MCG-05-14-012": [20],
 }
 
@@ -4544,6 +4565,142 @@ for active, nums in active_to_nums.items():
 
 df_pairs = pd.DataFrame(rows).sort_values(["pair_id", "Active Galaxy"]).reset_index(drop=True)
 print(len(df_pairs), "matched pairs constructed.")
+
+################################################################################################
+# Bootstrapping pair sets
+################################################################################################
+
+usable_inactive = {
+    n: galaxy
+    for n, galaxy in inactive_by_num.items()
+    if n != 14
+}
+
+
+# Build possible matches directly from active_to_nums
+possible_matches = {}
+
+for active, nums in active_to_nums.items():
+    possible_matches[active] = [
+        (n, usable_inactive[n])
+        for n in nums
+        if n in usable_inactive
+    ]
+
+
+# Work on the most constrained AGN first
+active_order = sorted(
+    possible_matches,
+    key=lambda active: len(possible_matches[active])
+)
+
+
+all_sets = []
+
+
+def find_matchings(index, inactive_counts, current_set, n_repeats):
+
+    # All AGN have been assigned
+    if index == len(active_order):
+
+        if len(current_set) == 19:
+            all_sets.append(current_set.copy())
+
+        return
+
+    active = active_order[index]
+
+    for pair_id, inactive in possible_matches[active]:
+
+        current_count = inactive_counts.get(inactive, 0)
+
+        # Maximum of two appearances of an inactive galaxy
+        if current_count >= 1:
+            continue
+
+        # If this is the second appearance, it uses up one repeat
+        new_n_repeats = n_repeats
+
+        if current_count == 1:
+            new_n_repeats += 1
+
+        # Allow at most two different repeated inactive galaxies
+        if new_n_repeats > 1:
+            continue
+
+        # Add the pair
+        inactive_counts[inactive] = current_count + 1
+
+        current_set.append({
+            "pair_id": pair_id,
+            "Active Galaxy": active,
+            "Inactive Galaxy": inactive,
+        })
+
+        # Continue
+        find_matchings(
+            index + 1,
+            inactive_counts,
+            current_set,
+            new_n_repeats
+        )
+
+        # Backtrack
+        current_set.pop()
+
+        if current_count == 0:
+            del inactive_counts[inactive]
+        else:
+            inactive_counts[inactive] = current_count
+
+
+# Run search
+find_matchings(
+    index=0,
+    inactive_counts={},
+    current_set=[],
+    n_repeats=0
+)
+
+
+print(f"{len(all_sets)} valid matching sets found.")
+
+df_sets = [
+    pd.DataFrame(match_set).sort_values("pair_id").reset_index(drop=True)
+    for match_set in all_sets
+]
+
+for i, df in enumerate(df_sets):
+
+    print(f"\n{'='*60}")
+    print(f"SET {i + 1}")
+    print(f"{'='*60}")
+
+    print(df.to_string(index=False))
+
+for i, df in enumerate(df_sets):
+
+    assert len(df) == 19
+    assert df["Active Galaxy"].nunique() == 19
+
+    counts = df["Inactive Galaxy"].value_counts()
+
+    # No inactive appears more than twice
+    assert counts.max() <= 1
+
+    # At most two inactive galaxies are repeated
+    assert (counts > 1).sum() <= 0
+
+    # IC 4653 is never used
+    assert "IC 4653" not in df["Inactive Galaxy"].values
+
+    repeated = counts.loc[lambda x: x > 1]
+
+    # print(f"Set {i + 1}: {repeated.to_dict()}")
+
+print("All matching sets passed validation.")
+
+################################################################################################
 
 
 
@@ -4567,7 +4724,9 @@ inactive_data = [
     {"Name": "NGC 5921", "Distance (Mpc)": 21, "log LH (L⊙)": 10.08, "Hubble Stage": 4, "Axis Ratio": 0.82, "Bar": "B"},
     {"Name": "IC 4653", "Distance (Mpc)": 26, "log LH (L⊙)": 9.48, "Hubble Stage": -0.5, "Axis Ratio": 0.63, "Bar": "B"},
     {"Name": "NGC 7727", "Distance (Mpc)": 26, "log LH (L⊙)": 10.41, "Hubble Stage": 1, "Axis Ratio": 0.74, "Bar": "AB"},
-    {"Name": "NGC 1375", "Distance (Mpc)": 20, "log LH (L⊙)": 9.91, "Hubble Stage": -2.2, "Axis Ratio": 0.36, "Bar": "AB"}
+    {"Name": "NGC 1375", "Distance (Mpc)": 20, "log LH (L⊙)": 9.91, "Hubble Stage": -2.2, "Axis Ratio": 0.36, "Bar": "AB"},
+    {"Name": "NGC 3368", "Distance (Mpc)": 18, "log LH (L⊙)": 10.65, "Hubble Stage": 2.0, "Axis Ratio": np.nan, "Bar": np.nan},
+    {"Name": "NGC 4429", "Distance (Mpc)": 16.5, "log LH (L⊙)": 10.40, "Hubble Stage": -1.0, "Axis Ratio": np.nan, "Bar": np.nan}
 ]
 
 agn_Rosario2018 = pd.DataFrame([
@@ -4611,7 +4770,10 @@ inactive_Rosario2018 = pd.DataFrame([
     {"Name": "NGC 5921",     "log L′ CO": "7.960", "log LGAL": "43.40", "log LAGN": "40.7"},
     {"Name": "NGC 718",      "log L′ CO": "7.262", "log LGAL": "42.66", "log LAGN": "38.8"},
     {"Name": "NGC 7727",     "log L′ CO": "7.449", "log LGAL": "42.56", "log LAGN": "41.2"},
-    {"Name": "NGC 1375",     "log L′ CO": "NaN", "log LGAL": "NaN", "log LAGN": "NaN"}
+    {"Name": "NGC 1375",     "log L′ CO": "NaN", "log LGAL": "NaN", "log LAGN": "NaN"},
+    {"Name": "NGC 3368",     "log L′ CO": "NaN", "log LGAL": "NaN", "log LAGN": "NaN"},
+    {"Name": "NGC 4429",     "log L′ CO": "NaN", "log LGAL": "NaN", "log LAGN": "NaN"}
+
 ])
 
 
@@ -4856,16 +5018,16 @@ obsclass_labels = {
 
 axis_label_lookup = {
     "Resolution (pc)": "Resolution (pc)",
-    "log LH (L⊙)": "$\log{L_H}$ (L$_\odot$)",
+    "log LH (L⊙)": r"$\log{L_H}$ (L$_\odot$)",
     "Smoothness": "S",
     "clumping_factor": "Clumping Factor",
     "Smoothness_davis": "S",
     "Concentration": "C",
     "Asymmetry": "A",
     "Gini": "G",
-    "log LX": "$\log{L_{2-10}}$ (erg s$^{-1}$)",
-    "total_mass (M_sun)": "Total Molecular Gas Mass ($M_\odot$)",
-    "avg_mass_dens": "H$_2$ Mass Surface Density ($M_\odot$kpc$^{-2}$)",
+    "log LX": r"$\log{L_{2-10}}$ (erg s$^{-1}$)",
+    "total_mass (M_sun)": r"Total Molecular Gas Mass ($M_\odot$)",
+    "avg_mass_dens": r"H$_2$ Mass Surface Density ($M_\odot$kpc$^{-2}$)",
     "L'CO_JCMT (K km s pc2)": "ALMA L$'$ CO (K km s pc$^2$)",
     "L'CO_APEX (K km s pc2)": "ALMA L$'$ CO (K km s pc$^2$)",
     'log L′ CO': "Single-dish L$'$ CO (K km s pc$^2$)",
@@ -4885,18 +5047,18 @@ axis_label_lookup = {
 masks = ['broad','strict']
 radii = [0.3,1.5]
 
-masks = ['strict']
-radii = [0.3,1.5]
+masks = ['broad']
+radii = [1.5]
 
 for mask in masks:
     for R_kpc in radii:
         print(f"Running plots for mask={mask}, R_kpc={R_kpc}")
 
         exclude = ['NGC 1375','NGC 1315','NGC 2775']
-        exclude_co21only = ['NGC 1375','NGC 1315','NGC 2775','NGC 4388','NGC 5728','NGC 6814']
+        exclude_co21only = ['NGC 1375','NGC 1315','NGC 2775','NGC 4388','NGC 5728','NGC 6814','NGC 4429']
         if R_kpc == 0.3:
             exclude= ['NGC 1375','NGC 1315','NGC 2775','NGC 4260']
-            exclude_co21only = ['NGC 1375','NGC 1315','NGC 2775','NGC 4260','NGC 4388','NGC 5728','NGC 6814']
+            exclude_co21only = ['NGC 1375','NGC 1315','NGC 2775','NGC 4260','NGC 4388','NGC 5728','NGC 6814', 'NGC 4429']
         
 
 
@@ -4982,7 +5144,7 @@ for mask in masks:
 
 
         # plot_llama_property('emission_pixels', 'total_mass (M_sun)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
-        # plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
+        plot_llama_property('emission_pixels', 'avg_mass_dens', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True,logy=True)
         # plot_llama_property('emission_pixels', 'L\'CO (K km_s pc2)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
         # plot_llama_property('emission_pixels', 'flux (Jy km/s)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativey=True)
 
@@ -4992,20 +5154,20 @@ for mask in masks:
         # plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
 
         # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude_co21only,nativey=True,co21only=True)
-        plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude_co21only,co21only=True)
+        # plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude_co21only,co21only=True)
 
 
-        # plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
-        # plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
-        # plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
-        # plot_llama_property('Hubble Stage', 'Distance (Mpc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=R_kpc, exclude_names=None,nativex=False,nativey=False,leg_alone=True,logy=True)
+    # plot_llama_property('Distance (Mpc)', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True, plotshared=False, rebin=120, mask='flux90_strict', R_kpc=1.5, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+    # plot_llama_property('Distance (Mpc)', 'Hubble Stage', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=1.5, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+    # plot_llama_property('Hubble Stage', 'log LH (L⊙)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=1.5, exclude_names=None,nativex=False,nativey=False,leg_alone=True)
+    # plot_llama_property('Hubble Stage', 'Distance (Mpc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,use_gb21=False, use_wis=True, use_phangs=True, use_sim=False, comb_llama=True,plotshared=False, rebin=120, mask=mask, R_kpc=1.5, exclude_names=None,nativex=False,nativey=False,leg_alone=True,logy=True)
 
 
  #   """posible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
  #      posible y_column: 'Smoothness_davis', 'Asymmetry', 'Gini', 'Sigma0', 'rs'"""
 
 
-plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,nativey=True,res_comp=False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'], yhist=True,plotshared=False,comb_llama=True,compare=True,which_compare=[['strict','broad'],[0.3]],manual_limits=[None,None,-1.5,None])
+# plot_llama_property('log LX','Concentration',AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,nativey=True,res_comp=False,exclude_names=['NGC 1375','NGC 1315','NGC 2775','NGC 4260'], yhist=True,plotshared=False,comb_llama=True,compare=True,which_compare=[['strict','broad'],[0.3]],manual_limits=[None,None,-1.5,None])
 
 stats_table = pd.DataFrame(stats_rows)
 stats_table.to_csv(

@@ -28,6 +28,9 @@ import re
 import warnings
 from astropy.wcs import FITSFixedWarning
 
+from cas_molecules import cas_molecules
+import cas_molecules
+
 warnings.filterwarnings("ignore", category=FITSFixedWarning)
 
 # ------------------ Metrics ------------------
@@ -238,6 +241,7 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
 
     name = os.path.basename(filepath).replace(".fits", "")
 
+
 ######### Query databases ####################################
 
     name = normalize_name(name)
@@ -318,7 +322,6 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
 
     print('resolution=', beam_scale_pc)
 
-
 ######### Adjust image size ####################################
 
     gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
@@ -351,6 +354,7 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
         elif name == 'NGC4438':
             cx, cy = 195,210
         else:
+            print('taking pixel centre')
             cx, cy = nx // 2, ny // 2
 
 ################################################
@@ -365,6 +369,7 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
             cx, cy = int(cx), int(cy)
         except Exception as e:
             print(f"WARNING: WCS conversion failed for {name}: {e}")
+            print('taking pixel centre')
             cx, cy = nx // 2, ny // 2
 
 ######################################################
@@ -389,7 +394,8 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
     image[yp1:yp2, xp1:xp2] = image_untrimmed[y1i:y2i, x1i:x2i]
     mask[yp1:yp2, xp1:xp2] = mask_untrimmed[y1i:y2i, x1i:x2i]
 
-########## ---------- NaN handling ---------- ##################
+########## ---------- NaN handling ---------- ################## (remove to keep Nans in)
+
     nan_pixels = np.isnan(image)
     if nan_pixels.any():
         image[nan_pixels] = 0.0
@@ -398,6 +404,7 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
     # smoothing
 
     rebin = 120 # target resolution (pc)
+    print('smooth to', rebin)
     #Native beam (assumed stored in degrees) 
     beam = Beam( major=BMAJ * u.deg, minor=BMIN * u.deg, pa= PA * u.deg )
     # Target circular beam corresponding to 120 pc
@@ -425,13 +432,11 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
     except BeamError:
         print(f"{name}: {beam_scale_pc} native beam is already larger than or incompatible with a {rebin} pc circular beam.")
 
-    # ---------- Update WCS ----------
-    wcs_trimmed = wcs_full.deepcopy()
-    wcs_trimmed.wcs.crpix[0] -= x1
-    wcs_trimmed.wcs.crpix[1] -= y1
-    image_nd = NDData(data=image, wcs=wcs_trimmed)  
+
 
     # ---------- Flux mask ----------
+
+    print('defining flux90 after smoothing')
 
     total_flux = np.nansum(image[~mask])
     f = 2.0
@@ -451,6 +456,13 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
     mask = flux_mask_90 | mask
     aperture_to_plot = flux_aperture_90
 
+
+    # ---------- Update WCS ----------
+    wcs_trimmed = wcs_full.deepcopy()
+    wcs_trimmed.wcs.crpix[0] -= x1
+    wcs_trimmed.wcs.crpix[1] -= y1
+    image_nd = NDData(data=image, wcs=wcs_trimmed)
+
     output_dir = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/"
     flux_mask_path = output_dir + '/masks'+ f'/{name}_flux90_mask.fits'  
     if not os.path.exists(os.path.dirname(flux_mask_path)):
@@ -463,19 +475,54 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
     plot_moment_map(image_nd, plots_path+f'{name}_{params}_mom0.png', name, BMAJ, BMIN, R_kpc, mask, aperture=aperture_to_plot)
 
 
-    gin = gini(image, mask)
-    asym = asymmetry(image,mask)
-    smooth = smoothness(image, mask, pixel_scale_arcsec, pc_per_arcsec)
+    # gin = gini(image, mask)
+    # asym = asymmetry(image,mask)
+    # smooth = smoothness(image, mask, pixel_scale_arcsec, pc_per_arcsec)
 
-    # print('i = ',I,'\,PA = ',PA, '\,S =',smooth)
-    print('G=',gin,'  A=',asym,'  S=',smooth)
+    ####### Insert here #######
 
-    return {
-        "name": name,
-        "Gini": round(gin,3),
-        "Asymmetry": round(asym,3),
-        "Smoothness_davis": round(smooth,3)
-    }
+    ## create obj
+    davis = cas_molecules.cas_molecules(
+        image=image,
+        inc=I,
+        pa=PA,
+        xc=cx,
+        yc=cy,
+        cellsize=pixel_scale_pc,
+        scale=500 / pixel_scale_pc
+    )
+
+    ## run all
+    (
+        g_davis,
+        m20_davis,
+        c_davis,
+        a_davis,
+        s_davis,
+        meangasden_davis,
+        egini_davis,
+        ea_davis,
+        es_davis,
+        meangasden_nozero_davis,
+        r90_davis
+    ) = davis.run_all(clip=None)
+
+    ## print results
+    print("\nDavis results:")
+    print(f"G = {g_davis} ± {egini_davis}")
+    print(f"A = {a_davis} ± {ea_davis}")
+    print(f"S = {s_davis} ± {es_davis}")
+
+    # print('mine')
+    print('i = ',I,' PA = ',PA)
+    # print('G=',gin,'  A=',asym,'  S=',smooth)
+
+    # return {
+    #     "name": name,
+    #     "Gini": round(gin,3),
+    #     "Asymmetry": round(asym,3),
+    #     "Smoothness_davis": round(smooth,3)
+    # }
 
 
 # ------------------ Main ------------------
@@ -484,14 +531,19 @@ def run_directory(input_dir, output_csv,params):
     results = []
     phangs_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples/phangs_df_with_rc3.csv")
     wis_df = pd.read_csv("/Users/administrator/Astro/LLAMA/ALMA/comp_samples"+"/wis_df_with_rc3.csv")
-    print('\n-------------------------------------------')
-    print(f'\n Beginning analysis with {params} params')
 
     for f in os.listdir(input_dir):
         if not f.endswith(".fits"):
             continue
 
         filepath = os.path.join(input_dir, f)
+
+        # if f not in ['NGC1574.fits']:
+        #     continue
+
+        if f not in ['NGC3521.fits','NGC4429.fits','NGC3368.fits','NGC1512.fits',]:
+            continue
+        
         print(f"\nProcessing {f}")
 
         row = process_fits_file(filepath,phangs_df,wis_df,params)
@@ -499,8 +551,8 @@ def run_directory(input_dir, output_csv,params):
             results.append(row)
 
     df = pd.DataFrame(results)
-    df.to_csv(output_csv, index=False)
-    print(f"\nSaved: {output_csv}")
+    # df.to_csv(output_csv, index=False)
+    # print(f"\nSaved: {output_csv}")
 
 
 # ------------------ Execute ------------------
@@ -509,12 +561,19 @@ if __name__ == "__main__":
     input_dir_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0/wis"
     input_dir_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0/phangs"
 
+
+    print('\n-------------------------------------------')
+    print(f'\n Beginning analysis with good params')
+
     output_csv_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_wis_good.csv"
     output_csv_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_phangs_good.csv"
     run_directory(input_dir_wis, output_csv_wis,'good')
-    # run_directory(input_dir_phangs, output_csv_phangs,'good')
+    run_directory(input_dir_phangs, output_csv_phangs,'good')
+
+    print('\n-------------------------------------------')
+    print(f'\n Beginning analysis with bad params')
 
     output_csv_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_wis_bad.csv"
     output_csv_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_phangs_bad.csv"
     run_directory(input_dir_wis, output_csv_wis,'bad')
-    # run_directory(input_dir_phangs, output_csv_phangs,'bad')
+    run_directory(input_dir_phangs, output_csv_phangs,'bad')
