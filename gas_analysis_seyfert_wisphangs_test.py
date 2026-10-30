@@ -311,7 +311,7 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
 ######### Read header info ####################################
 
     header = fits.getheader(filepath)
-    pixel_scale_arcsec = np.abs(header.get("CDELT1", 0)) * 3600
+    pixel_scale_arcsec = (((np.abs(header.get("CDELT1", 0)) * 3600) + (np.abs(header.get("CDELT2", 0)) * 3600))/2) * 1.8
     R_pixel = int(R_kpc * (206.265 / D_Mpc) / pixel_scale_arcsec)
     BMAJ = header.get("BMAJ", np.nan)
     BMIN = header.get("BMIN", np.nan)
@@ -326,6 +326,11 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
 
     gal_cen = SkyCoord(ra=RA*u.degree, dec=DEC*u.degree, frame='icrs')
     wcs_full = WCS(header).celestial
+
+    if wcs_full.wcs.has_cd():
+        wcs_full.wcs.cd *= 1.8
+    else:
+        wcs_full.wcs.cdelt *= 1.8
 
     ny, nx = image_untrimmed.shape
 
@@ -343,7 +348,7 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
                 cx, cy = nx // 2, ny // 2
         elif name == 'NGC0524':
             cx, cy = 92,103
-        elif name == 'NGC078':
+        elif name == 'NGC0708':
             cx, cy = 95,93
         elif name == 'NGC3368':
             cx, cy = 329,304
@@ -489,7 +494,8 @@ def process_fits_file(filepath,phangs_df,wis_df,params):
         xc=cx,
         yc=cy,
         cellsize=pixel_scale_pc,
-        scale=500 / pixel_scale_pc
+        scale=500 / pixel_scale_pc,
+        name=name
     )
 
     ## run all
@@ -541,7 +547,7 @@ def run_directory(input_dir, output_csv,params):
         # if f not in ['NGC1574.fits']:
         #     continue
 
-        if f not in ['NGC3521.fits','NGC4429.fits','NGC3368.fits','NGC1512.fits',]:
+        if f not in ['NGC1574.fits',]:
             continue
         
         print(f"\nProcessing {f}")
@@ -570,10 +576,10 @@ if __name__ == "__main__":
     run_directory(input_dir_wis, output_csv_wis,'good')
     run_directory(input_dir_phangs, output_csv_phangs,'good')
 
-    print('\n-------------------------------------------')
-    print(f'\n Beginning analysis with bad params')
+    # print('\n-------------------------------------------')
+    # print(f'\n Beginning analysis with bad params')
 
-    output_csv_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_wis_bad.csv"
-    output_csv_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_phangs_bad.csv"
-    run_directory(input_dir_wis, output_csv_wis,'bad')
-    run_directory(input_dir_phangs, output_csv_phangs,'bad')
+    # output_csv_wis = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_wis_bad.csv"
+    # output_csv_phangs = "/Users/administrator/Astro/LLAMA/ALMA/comp_samples/m0_metrics_phangs_bad.csv"
+    # run_directory(input_dir_wis, output_csv_wis,'bad')
+    # run_directory(input_dir_phangs, output_csv_phangs,'bad')

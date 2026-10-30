@@ -11,7 +11,7 @@ from regions import EllipsePixelRegion, PixCoord
 from matplotlib.patches import Ellipse
 from astropy.table import Table
 
-def plot_moment_map_debug(image, title,flux_mask=False,R_kpc=1.0, snmask=False, rebin=None, output_dir='debug_plots', name='debug', aperture=None,): 
+def plot_moment_map_debug(image, title,flux_mask=False,R_kpc=1.0, snmask=False, rebin=None, output_dir='/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/debugging_help/debug_plots', name='debug', aperture=None,): 
     # Initialise plot
     fontsize = 35 * R_kpc
     plt.rcParams.update({'font.size': fontsize})

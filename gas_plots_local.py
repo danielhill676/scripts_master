@@ -32,6 +32,7 @@ plt.rcParams.update({
 })
 
 stats_rows = []
+diff_sets_rows = []
 
 def strip_units(colname: str) -> str:
     """Return column name without units in parentheses."""
@@ -85,6 +86,16 @@ def normalize_name(col):
     return (
         s.str.replace('–', '-', regex=False)
         .str.replace('−', '-', regex=False)
+        .str.strip()
+        .str.upper()
+    )
+
+def normalize_obs_name(names):
+    return (
+        pd.Series(names).astype(str)
+        .str.replace('–', '-', regex=False)
+        .str.replace('−', '-', regex=False)
+        .str.replace(r'\s+', '', regex=True)
         .str.strip()
         .str.upper()
     )
@@ -262,7 +273,7 @@ def _prepare_replacement_df(df, value_column):
 def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, agn_bol, inactive_bol, use_gb21=False, soloplot=None, exclude_names=None, isolate_names=None, logx=False, logy=False,  #see archived_comp_samp_build for rebuilding PHANGS WIS SIM GB21
                         background_image=None, manual_limits=None, square=False, best_fit=False, legend_loc='best', truescale=False, use_wis=False, use_phangs=False, use_sim=False, use_leroy=False,
                         comb_llama=False,plotshared=True,rebin=None,mask=None,R_kpc=1,compare=False, which_compare=None, use_aux=False, use_cont = False,nativex=False,nativey=False,
-                        yhist=True,res_comp=False,rebinxc=None,rebinyc=None, maskxc=None, maskyc=None, R_kpcxc=None, R_kpcyc=None, ratiox = None, ratioy = None, force_names=False, x_ref=None, y_ref=None, co21only=False,c_column=None,legend_hist=False,leg_alone=False,fitc=True):
+                        yhist=True,res_comp=False,rebinxc=None,rebinyc=None, maskxc=None, maskyc=None, R_kpcxc=None, R_kpcyc=None, ratiox = None, ratioy = None, force_names=False, x_ref=None, y_ref=None, co21only=False,c_column=None,legend_hist=False,leg_alone=False,fitc=True, domc = True):
     """possible x_column: '"Distance (Mpc)"', 'log LH (L⊙)', 'Hubble Stage', 'Axis Ratio', 'Bar'
        possible y_column: 'Smoothness_davis', 'Asymmetry', 'Gini Coefficient', 'Sigma0', 'rs'"""
 
@@ -1847,14 +1858,30 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             # --------------------------------------------------
             # Convert from log to linear
             # --------------------------------------------------
-            x_agn = 10 ** x_agn
-            x_inactive = 10 ** x_inactive
+            # Keep the original logarithmic values
+            x_agn_log = x_agn.copy()
+            x_inactive_log = x_inactive.copy()
+
+            limit_agn = xerr_agn == 0
+            limit_inactive = xerr_inactive == 0
+
+            # Convert central values
+            x_agn = 10 ** x_agn_log
+            x_inactive = 10 ** x_inactive_log
+
+            # Convert logarithmic errors to asymmetric linear errors
             if xerr_agn is not None:
-                xerr_agn = 10 ** xerr_agn
+                xerr_agn = np.array([
+                    x_agn - 10 ** (x_agn_log - xerr_agn),
+                    10 ** (x_agn_log + xerr_agn) - x_agn
+                ])
+
             if xerr_inactive is not None:
-                xerr_inactive = 10 ** xerr_inactive
-            if xerr_aux is not None:
-                xerr_aux = 10 ** xerr_aux
+                xerr_inactive = np.array([
+                    x_inactive - 10 ** (x_inactive_log - xerr_inactive),
+                    10 ** (x_inactive_log + xerr_inactive) - x_inactive
+                ])
+
 
 ####################################################################################################################################################################################
 
@@ -1932,6 +1959,39 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ax_scatter = fig.add_subplot(gs[0])
             ax_scatter.set_facecolor('none')
 
+
+############################### seperate obscuration ##############################
+
+            # Normalise AGN names
+            names_agn_normalized = normalize_obs_name(pd.Series(names_agn))
+
+            # Normalise names in agn_obs table
+            agn_obs_normalized = {
+                name: info
+                for name, info in zip(
+                    normalize_obs_name(pd.Series(agn_obs.keys())),
+                    agn_obs.values()
+                )
+            }
+
+            # Split AGN values according to obscuration class
+            y_agn_o = []
+            y_agn_u = []
+            y_agn_unknown = []
+
+            for name, value in zip(names_agn_normalized, y_agn):
+
+                obsclass = agn_obs_normalized.get(name, {}).get("obsclass")
+
+                if obsclass == "o":
+                    y_agn_o.append(value)
+
+                elif obsclass == "u":
+                    y_agn_u.append(value)
+
+                else:
+                    y_agn_unknown.append(value)
+
         ############################## Spearman coefficients ##############################
 
             from scipy.stats import spearmanr
@@ -1939,10 +1999,12 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             global stats_rows
 
             if logy:
-                y_inactive_stat = np.log(y_inactive)
-                y_agn_stat = np.log(y_agn)
+                y_inactive_stat = np.log10(y_inactive)
+                y_agn_stat = np.log10(y_agn)
+                y_agn_o_stat = np.log10(y_agn_o)
+                y_agn_u_stat = np.log10(y_agn_u)
             else:
-                y_inactive_stat,y_agn_stat = y_inactive, y_agn
+                y_inactive_stat,y_agn_stat,y_agn_o_stat,y_agn_u_stat = y_inactive, y_agn, y_agn_o, y_agn_u
             
             if logx:
                 x_inactive_stat = np.log(x_inactive)
@@ -1950,8 +2012,13 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             else:
                 x_inactive_stat,x_agn_stat = x_inactive, x_agn
 
+            
+
             if soloplot is None:
                 statistic, p_value = ks_2samp(y_inactive_stat, y_agn_stat)
+                statistic_obs, p_value_obs = ks_2samp(y_agn_o_stat, y_agn_u_stat)
+
+            
 
             # Helper: return (rho, p) or (None, None)
             def safe_spearman(x, y, enabled):
@@ -1996,11 +2063,16 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             ks_stat = statistic if soloplot is None else None
             ks_p = p_value if soloplot is None else None
 
+            ks_stat_obs = statistic_obs if soloplot is None else None
+            ks_p_obs = p_value_obs if soloplot is None else None
+
             new_row = {
                 "x_column": x_column,
                 "y_column": y_column,
                 "ks_stat": ks_stat,
                 "ks_p": ks_p,
+                "ks_stat_obs": ks_stat_obs,
+                "ks_p_obs": ks_p_obs,
                 "spearman_agn": rho_agn,
                 "spearman_agn_p": p_agn,
                 "spearman_inactive": rho_inact,
@@ -2490,7 +2562,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     solid_capstyle='butt'
                 )
 
-                # Horizontal bar "--"
+                # Horizontal bar "-"
                 ax.annotate(
                     "",
                     xy=(x+0.02, y),
@@ -2638,7 +2710,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             if soloplot in (None, 'AGN'):
                 if not res_comp:
                     if c_column is None:
-
+                        
                         ax_scatter.errorbar(
                             x_agn, y_agn,
                             xerr=xerr_agn,
@@ -2651,6 +2723,30 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                             elinewidth=1,
                             alpha=0.8
                         )
+
+                        if x_column == 'log L′ CO':
+                            det_agn = ~limit_agn
+                            ax_scatter.errorbar(
+                                x_agn[det_agn], y_agn[det_agn],
+                                xerr=xerr_agn[:,det_agn],
+                                yerr=yerr_agn[det_agn] if yerr_agn is not None else None,
+                                fmt=marker_AGN,
+                                color=colour_AGN,
+                                label=label_AGN,
+                                markersize=10,
+                                capsize=2,
+                                elinewidth=1,
+                                alpha=0.8
+                            )
+
+                            for x, y, limit in zip(x_agn, y_agn, limit_agn):
+                                if limit:
+                                    draw_x_upper_limit(
+                                        ax_scatter,
+                                        x,
+                                        y,
+                                        color=colour_AGN
+                                    )
                         # print(pd.Series(y_agn.values, index=names_agn))
 
                     else:
@@ -2773,7 +2869,7 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     ax_scatter.axvline(
                         161.22,
                         color="grey",
-                        linestyle="--",
+                        linestyle="-",
                         linewidth=2,
                         alpha = 0.7
                     )
@@ -2839,11 +2935,35 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                                 fmt=marker_inactive,
                                 color=colour_inactive,
                                 label=label_inactive,
-                                markersize=8,
+                                markersize=10,
                                 capsize=2,
                                 elinewidth=1,
                                 alpha=0.8
                             )
+                            if x_column == 'log L′ CO':
+                                det_inactive = ~limit_inactive
+
+                                ax_scatter.errorbar(
+                                    x_inactive[det_inactive],
+                                    y_inactive[det_inactive],
+                                    xerr=xerr_inactive[:,det_inactive],
+                                    yerr=yerr_inactive[det_inactive] if yerr_inactive is not None else None,
+                                    fmt=marker_inactive,
+                                    color=colour_inactive,
+                                    label=label_inactive,
+                                    markersize=10,
+                                    capsize=2,
+                                    elinewidth=1,
+                                    alpha=0.8
+                                )
+                                for x, y, limit in zip(x_inactive, y_inactive, limit_inactive):
+                                    if limit:
+                                        draw_x_upper_limit(
+                                            ax_scatter,
+                                            x,
+                                            y,
+                                            color=colour_inactive
+                                        )
                             # print(pd.Series(y_inactive.values, index=names_inactive))
                     else:
 
@@ -3041,10 +3161,16 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             #         ax_scatter.text(x_val, ylower, name, fontsize=font_names, rotation=90, color='gray', verticalalignment='bottom')
 
             ############################### apply scale and limits ##############################
+
+
+
             if logx:
                 ax_scatter.set_xscale("log")
             if logy:
                 ax_scatter.set_yscale("log")
+                if y_column == "avg_mass_dens":
+                    yupper = 1287100025.741864
+                    ylower = 6281.274960839031
 
             ax_scatter.set_xlim(xlower, xupper)
             ax_scatter.set_ylim(ylower, yupper)
@@ -3059,6 +3185,8 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                 bin_edges = np.logspace(np.log10(ylower), np.log10(yupper), 10)
             else:
                 bin_edges = np.histogram_bin_edges(y_for_bins, bins=9)
+
+            
 
             ############################### Scatter labels ###############################
             font = 25
@@ -3143,11 +3271,11 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                     median_inactive-(bin_edges[1]-bin_edges[0])/2, ax_hist_only.get_ylim()[1]*0.9,
                     f"{median_inactive:.2f}", color='dark'+colour_inactive, fontsize=14, ha='center'
                 )
-
+            combined_y = pd.concat([y_agn, y_inactive])
             # --- Combined LLAMA ---
             if comb_llama:
                 y_agn, y_inactive = pd.DataFrame(y_agn), pd.DataFrame(y_inactive)
-                combined_y = pd.concat([y_agn, y_inactive])
+                
                 ax_hist_only.hist(
                     combined_y, bins=bin_edges,
                     color='red', linewidth=4, label='LLAMA Galaxies', alpha=0.8 #,histtype='step'
@@ -3290,6 +3418,219 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             plt.close(fig_hist)
 
             print(f"Saved histogram to: {hist_path}")
+
+
+            ############################### AGN obscuration histogram ###############################
+
+
+
+            # Create figure
+            fig_obs, ax_obs = plt.subplots(figsize=(6, 4))
+
+            print(list(bin_edges))
+
+
+            # --- Obscured ---
+            if len(y_agn_o) > 0:
+                ax_obs.hist(
+                    y_agn_o,
+                    bins=bin_edges,
+                    color='red',
+                    linewidth=4,
+                    alpha=0.5,
+                    label=obsclass_labels["o"]
+                )
+
+                median_o = np.median(y_agn_o)
+
+                if logy:
+                    median_label = rf"$10^{{{np.log10(median_o):.1f}}}$"
+                else:
+                    median_label = f"{median_o:.2f}"
+
+                ax_obs.axvline(
+                    median_o,
+                    color='red',
+                    linestyle='-',
+                    linewidth=3
+                )
+
+
+                ax_obs.annotate(
+                    f"{median_label}",
+                    xy=(median_o, 0.80),
+                    xycoords=('data', 'axes fraction'),
+                    xytext=(3, 0),
+                    textcoords='offset points',
+                    color='darkred',
+                    fontsize=16,
+                    ha='left',
+                    va='center'
+                )
+
+
+            # --- Unobscured ---
+            if len(y_agn_u) > 0:
+                ax_obs.hist(
+                    y_agn_u,
+                    bins=bin_edges,
+                    color='blue',
+                    linewidth=4,
+                    histtype='step',
+                    label=obsclass_labels["u"]
+                )
+
+                median_u = np.median(y_agn_u)
+
+                if logy:
+                    median_label = rf"$10^{{{np.log10(median_u):.1f}}}$"
+                else:
+                    median_label = f"{median_u:.2f}"
+
+                ax_obs.axvline(
+                    median_u,
+                    color='blue',
+                    linestyle='-',
+                                   linewidth=3
+                )
+
+                ax_obs.annotate(
+                    f"{median_label}",
+                      xy=(median_u, 0.80),
+                    xycoords=('data', 'axes fraction'),
+                    xytext=(3, 0),
+                    textcoords='offset points',
+                    color='darkblue',
+                    fontsize=16,
+                    ha='left',
+                    va='center'
+                )
+
+            print('u sigma = 10^', round(np.log10(np.std(y_agn_u)),2))
+            print('o sigma = 10^', round(np.log10(np.std(y_agn_o)),2))
+
+            # # --- Unknown ---
+            # if len(y_agn_unknown) > 0:
+            #     ax_obs.hist(
+            #         y_agn_unknown,
+                #     bins=bin_edges,
+                #     color='grey',
+                #     linewidth=4,
+                #     alpha=0.8,
+                #     label='unknown'
+                # )
+
+            #     median_unknown = np.median(y_agn_unknown)
+
+            #     if logy:
+            #         median_label = rf"$10^{{{np.log10(median_unknown):.1f}}}$"
+            #     else:
+            #         median_label = f"{median_unknown:.2f}"
+
+                # ax_obs.axvline(
+                #     median_unknown,
+                #     color='grey',
+                #     linestyle='--'
+                # )
+
+                # ax_obs.text(
+                #     median_unknown - (bin_edges[1] - bin_edges[0]) / 2,
+                #     ax_obs.get_ylim()[1] * 0.9,
+                #     f"{median_label}",
+                #     color='dimgrey',
+                #     fontsize=14,
+                #     ha='center'
+                # )
+
+
+            # --- Inactive ---
+            ax_obs.hist(
+                y_inactive,
+                bins=bin_edges,
+                color='grey',
+                alpha = 0.4,
+                linewidth=4,
+                label='Inactive'
+            )
+
+            median_inactive = np.median(y_inactive)
+
+            if logy:
+                median_label = rf"$10^{{{np.log10(median_inactive):.1f}}}$"
+            else:
+                median_label = f"{median_inactive:.2f}"
+
+            # ax_obs.axvline(
+            #     median_inactive,
+            #     color='grey',
+            #     linestyle='--'
+            # )
+
+            # ax_obs.text(
+            #     median_inactive - (bin_edges[1] - bin_edges[0]) / 2,
+            #     ax_obs.get_ylim()[1] * 0.9,
+            #     f"{median_label}",
+            #     color='dimgrey',
+            #     fontsize=14,
+            #     ha='center'
+            # )
+            # Axis labels
+            try:
+                ax_obs.set_xlabel(axis_label_lookup[y_column], fontsize=20)
+            except:
+                ax_obs.set_xlabel(y_column, fontsize=20)
+
+            ax_obs.set_ylabel("Number of galaxies", fontsize=20)
+
+            if logy:
+                ax_obs.set_xscale("log")
+
+            ax_obs.set_xlim(ylower, yupper)
+            ax_obs.tick_params(axis='both', which='major', labelsize=14)
+            ax_obs.grid(False, axis='y', alpha=0.3)
+
+            # Legend
+            ax_obs.legend(loc='best', fontsize=font_leg)
+
+            # Build same suffix as original histogram
+            parts_obs = []
+
+            if soloplot:
+                parts_obs.append(f"_{soloplot}")
+            if use_gb21:
+                parts_obs.append('_gb21')
+            if use_wis:
+                parts_obs.append('_wis')
+            if use_phangs:
+                parts_obs.append('_phangs')
+            if use_sim:
+                parts_obs.append('_sim')
+            if comb_llama:
+                parts_obs.append('_comb')
+            if rebin is not None:
+                parts_obs.append(f'_{rebin}pc')
+            if ratioy is not None:
+                parts_obs.append(f'_ratio_{ratioy}')
+
+            suffix_obs = ''.join(parts_obs)
+
+            # Save with "_obs" appended
+            obs_hist_path = (
+                f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/"
+                f"histograms/{masky}_{R_kpcy}kpc/{suffix_obs}_hist_{y_column}_obs.pdf"
+            )
+
+            if y_column == "flux (Jy km/s)":
+                obs_hist_path = (
+                    f"/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/"
+                    f"histograms/{masky}_{R_kpcy}kpc/{suffix_obs}_hist_fluxjykms_obs.pdf"
+                )
+
+            plt.tight_layout()
+            plt.savefig(obs_hist_path, dpi=300)
+            plt.close(fig_obs)
+
+            print(f"Saved obscuration-class histogram to: {obs_hist_path}")
 
 
             # ###############################
@@ -3565,7 +3906,6 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
                                 f"{median_inactive:.1f}", color='navy', fontsize=14, va='center')
 
                 if comb_llama:
-                    combined_y = pd.concat([y_agn, y_inactive])
                     ax_hist.hist(combined_y, bins=bin_edges, orientation='horizontal',
                                 color='black', linewidth=4,alpha=0.5, label='LLAMA Galaxies')
                     median_combined = np.median(combined_y)
@@ -3650,526 +3990,1897 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
             print(f"Saved plot to: {output_path}")
             plt.close(fig)
 
-            ############################## Matched-pairs difference histogram ##############################
+
+
+            #################### matched pair difference histogram ###################################
+
             if not res_comp:
-                diffs = []
-                diffs_frac = []
-                indeps = []
-                valid_pairs = 0
+
+                #####################################################################
+                # Calculate metric differences for every matched-galaxy set
+                #####################################################################
+
+                set_results = []
 
                 obs_groups = ["o", "u"]
+
                 labels = {
                     "o": "Obscured",
                     "u": "Unobscured",
                 }
-                diffs_obs = {k: [] for k in obs_groups}
-                diffs_frac_obs = {k: [] for k in obs_groups}
-                indeps_obs = {k: [] for k in obs_groups}
-                stats_by_class = {}
 
-                df_pairs['Active Galaxy'] = normalize_name(df_pairs['Active Galaxy'])
-                df_pairs['Inactive Galaxy'] = normalize_name(df_pairs['Inactive Galaxy'])
-                # print(f'AGN\n len({len(merged_AGN_clean["Name_clean"])})\n',merged_AGN_clean["Name_clean"])
-                # print(f'Inactive\n len({len(merged_inactive_clean["Name_clean"])})\n',merged_inactive_clean["Name_clean"])
+                set_means = []
+                set_stds = []
+                set_galnames = []
 
-                for _, row in df_pairs.iterrows():
-                    agn_name = row["Active Galaxy"].strip()
-                    inactive_name = row["Inactive Galaxy"].strip()
-                    # print('\n row:', _)
-                    # print(agn_name, inactive_name)
-                    obsclass = agn_obs.get(agn_name, {}).get("obsclass")
-                    if obsclass is None:
-                        continue
-                    # Extract rows for each galaxy
-                    agn_rows = merged_AGN_clean[merged_AGN_clean["Name_clean"] == agn_name]
-                    inactive_rows = merged_inactive_clean[merged_inactive_clean["Name_clean"] == inactive_name]
+                for set_number, df_pairs_set in enumerate(df_sets):
 
-                    # print('agn rows:', len(agn_rows))
-                    # print('inactive rows:', len(inactive_rows))
 
-                    if agn_rows.empty or inactive_rows.empty:
-                        continue
+                    # -------------------------------------------------------------
+                    # Initialise results for this matching set
+                    # -------------------------------------------------------------
 
-                    # =========================
-                    # NATIVE RESOLUTION MODE
-                    # =========================
-                    if nativey:
+                    diffs = []
+                    diffs_frac = []
+                    indeps = []
 
-                        # Select best (smallest) resolution row for each galaxy
-                        agn_row = (
-                            agn_rows
-                            .sort_values("Resolution (pc)")
-                            .iloc[0]
-                        )
-                        inactive_row = (
-                            inactive_rows
-                            .sort_values("Resolution (pc)")
-                            .iloc[0]
-                        )
+                    vals_comb = []
+                    set_names = []
+                    diffs_rep = []
+                    diffs_frac_rep =[]
 
-                        if y_column == 'Concentration':
-                            # agn_row[y_column],_ = fit_concentration_50pc(agn_row,c_errs,extrapolate_hires=False)
-                            agn_row = apply_native_concentration(agn_row, y_column, fitc, c_errs)
-                            # inactive_row[y_column],_ = fit_concentration_50pc(inactive_row,c_errs,extrapolate_hires=False,fitc = fitc)
-                            inactive_row = apply_native_concentration(inactive_row, y_column, fitc, c_errs)
-                        if logy:
-                            val_agn = np.log10(agn_row[y_column]) if agn_row[y_column] > 0 else 0
-                            val_inactive = np.log10(inactive_row[y_column]) if inactive_row[y_column] > 0 else 0
-                        else:
-                            val_agn = agn_row[y_column]
-                            val_inactive = inactive_row[y_column]
+                    valid_pairs = 0
 
-                        indep_AGN = agn_row[x_column]
-                        indep_inactive = inactive_row[x_column]
-                        
+                    diffs_obs = {k: [] for k in obs_groups}
+                    diffs_frac_obs = {k: [] for k in obs_groups}
+                    indeps_obs = {k: [] for k in obs_groups}
 
-                        if not (np.isfinite(val_agn) and np.isfinite(val_inactive)):
-                            continue
-                        if not (np.isfinite(indep_AGN) and np.isfinite(indep_inactive)):
+                    stats_by_class = {}
+
+                    # Work on a copy so that df_sets itself is not modified
+                    df_pairs_set = df_pairs_set.copy()
+
+                    # Normalise galaxy names
+                    df_pairs_set["Active Galaxy"] = normalize_name(
+                        df_pairs_set["Active Galaxy"]
+                    )
+
+                    df_pairs_set["Inactive Galaxy"] = normalize_name(
+                        df_pairs_set["Inactive Galaxy"]
+                    )
+
+                    # -------------------------------------------------------------
+                    # Loop through the 19 pairs in this matching set
+                    # -------------------------------------------------------------
+
+                    for _, row in df_pairs_set.iterrows():
+
+                        agn_name = row["Active Galaxy"].strip()
+                        inactive_name = row["Inactive Galaxy"].strip()
+
+                        obsclass = agn_obs.get(
+                            agn_name, {}
+                        ).get("obsclass")
+
+                        if obsclass is None:
                             continue
 
-                        diff = float(val_agn) - float(val_inactive)
+                        # Extract rows for each galaxy
+                        agn_rows = merged_AGN_clean[
+                            merged_AGN_clean["Name_clean"] == agn_name
+                        ]
 
-                        # print(agn_row['Name_clean'],val_agn,inactive_row['Name_clean'],val_inactive,diff)
-                        diffs.append(diff)
-                        diffs_obs[obsclass].append(diff)
-                        # denom = abs(val_agn) + abs(val_inactive)
+                        inactive_rows = merged_inactive_clean[
+                            merged_inactive_clean["Name_clean"] == inactive_name
+                        ]
 
-                        # if denom == 0:
-                        #     diff_frac = 0.0
-                        # else:
-                        #     diff_frac = (val_agn - val_inactive) / denom
-                        diff_frac =  (val_agn - val_inactive) / val_agn                      
-                        diffs_frac.append(diff_frac)
-                        diffs_frac_obs[obsclass].append(diff_frac)
-                        indep = 0.5*(float(indep_AGN)+float(indep_inactive))
-                        indeps.append(indep)
-                        indeps_obs[obsclass].append(indep)
-                        valid_pairs += 1
+                        if agn_rows.empty or inactive_rows.empty:
+                            continue
 
-                        continue  # move to next pair
 
-                    # =========================
-                    # MATCHED RESOLUTION MODE
-                    # =========================
-                    else:
-                        for _, agn_row in agn_rows.iterrows():
-                            res_agn = agn_row["Resolution (pc)"]
+                        # =========================
+                        # NATIVE RESOLUTION MODE
+                        # =========================
+                        if nativey:
+
+                            # Select best (smallest) resolution row for each galaxy
+                            agn_row = (
+                                agn_rows
+                                .sort_values("Resolution (pc)")
+                                .iloc[0]
+                            )
+                            inactive_row = (
+                                inactive_rows
+                                .sort_values("Resolution (pc)")
+                                .iloc[0]
+                            )
+
+                            if y_column == 'Concentration':
+                                # agn_row[y_column],_ = fit_concentration_50pc(agn_row,c_errs,extrapolate_hires=False)
+                                agn_row = apply_native_concentration(agn_row, y_column, fitc, c_errs)
+                                # inactive_row[y_column],_ = fit_concentration_50pc(inactive_row,c_errs,extrapolate_hires=False,fitc = fitc)
+                                inactive_row = apply_native_concentration(inactive_row, y_column, fitc, c_errs)
                             if logy:
                                 val_agn = np.log10(agn_row[y_column]) if agn_row[y_column] > 0 else 0
-                            else:
-                                val_agn = agn_row[y_column]
-                            indep_AGN = agn_row[x_column]
-
-                            if not np.isfinite(val_agn) or not np.isfinite(indep_AGN):
-                                continue
-
-                            # Find inactive rows at the SAME resolution
-                            match_inactive = inactive_rows[
-                                inactive_rows["Resolution (pc)"] == res_agn
-                            ]
-
-                            if match_inactive.empty:
-                                #print(f"No inactive match for AGN {agn_row['Name_clean']} at resolution {res_agn} pc")
-                                continue
-
-                            inactive_row = match_inactive.iloc[0]
-                            if logy:                           
                                 val_inactive = np.log10(inactive_row[y_column]) if inactive_row[y_column] > 0 else 0
                             else:
+                                val_agn = agn_row[y_column]
                                 val_inactive = inactive_row[y_column]
-                            indep_inactive = inactive_row[x_column]
-                        
 
-                            if not np.isfinite(val_inactive) or not np.isfinite(indep_inactive):
+
+                            indep_AGN = agn_row[x_column]
+                            indep_inactive = inactive_row[x_column]
+                            
+
+                            if not (np.isfinite(val_agn) and np.isfinite(val_inactive)):
+                                continue
+                            if not (np.isfinite(indep_AGN) and np.isfinite(indep_inactive)):
                                 continue
 
+                            vals_comb.append(float(val_agn))
+                            vals_comb.append(float(val_inactive))
+
+                            set_names.append(agn_name)
+                            set_names.append(inactive_name)
+
+
                             diff = float(val_agn) - float(val_inactive)
+
                             # print(agn_row['Name_clean'],val_agn,inactive_row['Name_clean'],val_inactive,diff)
-                            
+                            diffs.append(diff)
+                            diffs_obs[obsclass].append(diff)
                             # denom = abs(val_agn) + abs(val_inactive)
+
                             # if denom == 0:
                             #     diff_frac = 0.0
                             # else:
                             #     diff_frac = (val_agn - val_inactive) / denom
-
                             diff_frac =  (val_agn - val_inactive) / val_agn                      
+                            diffs_frac.append(diff_frac)
+                            diffs_frac_obs[obsclass].append(diff_frac)
                             indep = 0.5*(float(indep_AGN)+float(indep_inactive))
                             indeps.append(indep)
                             indeps_obs[obsclass].append(indep)
-                            diffs.append(diff)
-                            diffs_obs[obsclass].append(diff)
-                            diffs_frac.append(diff_frac)
-                            diffs_frac_obs[obsclass].append(diff_frac)
                             valid_pairs += 1
 
-                            # Stop after first valid match for this pair
-                            break
+                            continue  # move to next pair
 
-                diffs = np.asarray(diffs)
-                diffs = diffs[np.isfinite(diffs)]
-                diffs_frac = np.asarray(diffs_frac)
-                diffs_frac = diffs_frac[np.isfinite(diffs_frac)]
+                        # =========================
+                        # MATCHED RESOLUTION MODE
+                        # =========================
+                        else:
+                            for _, agn_row in agn_rows.iterrows():
+                                res_agn = agn_row["Resolution (pc)"]
+                                if logy:
+                                    val_agn = np.log10(agn_row[y_column]) if agn_row[y_column] > 0 else 0
+                                else:
+                                    val_agn = agn_row[y_column]
+                                indep_AGN = agn_row[x_column]
 
-                n = len(diffs)
-                n_frac = len(diffs_frac)
-                print(f"Number of valid pairs: {n}")
+                                if not np.isfinite(val_agn) or not np.isfinite(indep_AGN):
+                                    continue
 
-                mean = np.mean(diffs)
-                sigma = np.std(diffs, ddof=1)  # sample standard deviation
+                                # Find inactive rows at the SAME resolution
+                                match_inactive = inactive_rows[
+                                    inactive_rows["Resolution (pc)"] == res_agn
+                                ]
 
-                mean_err = sigma / np.sqrt(n)
+                                if match_inactive.empty:
+                                    #print(f"No inactive match for AGN {agn_row['Name_clean']} at resolution {res_agn} pc")
+                                    continue
 
-                # One sample T test against zero difference
+                                inactive_row = match_inactive.iloc[0]
+                                if logy:                           
+                                    val_inactive = np.log10(inactive_row[y_column]) if inactive_row[y_column] > 0 else 0
+                                else:
+                                    val_inactive = inactive_row[y_column]
+                                indep_inactive = inactive_row[x_column]
+                            
 
+                                if not np.isfinite(val_inactive) or not np.isfinite(indep_inactive):
+                                    continue
 
-                t_stat, p_value_t = ttest_1samp(diffs, 0)
-                # else:
-                #     w_stat, p_value_w = wilcoxon(diffs, alternative='two-sided')  # or 'greater' / 'less'
+                                vals_comb.append(float(val_agn))
+                                vals_comb.append(float(val_inactive))
 
-                mean_frac = np.mean(diffs_frac )
-                sigma_frac  = np.std(diffs_frac , ddof=1)  # sample standard deviation
-                mean_err_frac  = sigma_frac / np.sqrt(n_frac)
-                t_stat_frac , p_value_t_frac = ttest_1samp(diffs_frac , 0)
+                                set_names.append(agn_name)
+                                set_names.append(inactive_name)
 
-                for obsclass in ["o", "u"]:
+                                diff = float(val_agn) - float(val_inactive)
+                                # print(agn_row['Name_clean'],val_agn,inactive_row['Name_clean'],val_inactive,diff)
+                                
+                                # denom = abs(val_agn) + abs(val_inactive)
+                                # if denom == 0:
+                                #     diff_frac = 0.0
+                                # else:
+                                #     diff_frac = (val_agn - val_inactive) / denom
 
-                    # -------------------------
-                    # Absolute differences
-                    # -------------------------
-                    d = np.asarray(diffs_obs[obsclass], dtype=float)
-                    d = d[np.isfinite(d)]
+                                diff_frac =  (val_agn - val_inactive) / val_agn                      
+                                indep = 0.5*(float(indep_AGN)+float(indep_inactive))
+                                indeps.append(indep)
+                                indeps_obs[obsclass].append(indep)
+                                diffs.append(diff)
+                                diffs_obs[obsclass].append(diff)
+                                diffs_frac.append(diff_frac)
+                                diffs_frac_obs[obsclass].append(diff_frac)
+                                valid_pairs += 1
 
-                    # -------------------------
-                    # Fractional differences
-                    # -------------------------
-                    df = np.asarray(diffs_frac_obs[obsclass], dtype=float)
-                    df = df[np.isfinite(df)]
+                                # Stop after first valid match for this pair
+                                break
 
-                    n_obs = len(d)
-                    n_frac_obs = len(df)
+                        
+                    ####### store Gaussian parameters for this set #######
 
-                    print(f"\n{labels[obsclass]}")
-                    print(f"Number of valid pairs: {n_obs}")
+                    set_galnames.append(set_names)
 
-                    mean_obs = np.mean(d)
-                    sigma_obs = np.std(d, ddof=1)
-                    mean_err_obs = sigma_obs / np.sqrt(n_obs)
-                    t_stat_obs, p_value_t_obs = ttest_1samp(d, 0)
+                    if len(vals_comb) > 0:
+                        set_mean = np.nanmean(vals_comb)
+                        set_std = np.nanstd(vals_comb)
 
-                    mean_frac_obs = np.mean(df)
-                    sigma_frac_obs = np.std(df, ddof=1)
-                    mean_err_frac_obs = sigma_frac_obs / np.sqrt(n_frac_obs)
-                    t_stat_frac_obs, p_value_t_frac_obs = ttest_1samp(df, 0)
-
-
-                    stats_by_class[obsclass] = {
-                        "n": n_obs,
-                        "mean": mean_obs,
-                        "sigma": sigma_obs,
-                        "mean_err": mean_err_obs,
-                        "t_stat": t_stat_obs,
-                        "p_value": p_value_t_obs,
-                        "n_frac": n_frac_obs,
-                        "mean_frac": mean_frac_obs,
-                        "sigma_frac": sigma_frac_obs,
-                        "mean_err_frac": mean_err_frac_obs,
-                        "t_stat_frac": t_stat_frac_obs,
-                        "p_value_frac": p_value_t_frac_obs,
-                    }
+                        set_means.append(set_mean)
+                        set_stds.append(set_std)
 
 
-                #########################################################
+                    # -------------------------------------------------------------
+                    # Convert results to numpy arrays
+                    # -------------------------------------------------------------
+
+                    # if valid_pairs != 19:
+                    #     continue
+
+                    diffs = np.asarray(diffs, dtype=float)
+                    diffs = diffs[np.isfinite(diffs)]
+
+                    diffs_frac = np.asarray(diffs_frac, dtype=float)
+                    diffs_frac = diffs_frac[np.isfinite(diffs_frac)]
+
+                    t_stat, p_value_t = ttest_1samp(diffs, 0)
+
+                    # -------------------------------------------------------------
+                    # Save results for this matching set
+                    # -------------------------------------------------------------
+
+                    set_results.append({
+                        "diffs": diffs,
+                        "diffs_frac": diffs_frac,
+                        "indeps": indeps,
+                        "diffs_obs": diffs_obs,
+                        "diffs_frac_obs": diffs_frac_obs,
+                        "indeps_obs": indeps_obs,
+                        "stats_by_class": stats_by_class,
+                        "p": p_value_t
+                    })
+
+                #######################################################################
+                # Random Monte Carlo
+                #######################################################################
+
+                shared_mean = np.nanmean(set_means)
+                shared_std = np.nanmean(set_stds)
+
+                n_reps = 10000
+
+                # -------------------------------------------------------------
+                # Create global galaxy list
+                # -------------------------------------------------------------
+
+                galaxy_names_tot = []
+
+                for galaxy_names in set_galnames:
+                    for name in galaxy_names:
+                        if name not in galaxy_names_tot:
+                            galaxy_names_tot.append(name)
+
+                n_gals_tot = len(galaxy_names_tot)
+
+                # Map galaxy name -> position in rep_samples
+                galaxy_index = {
+                    name: i
+                    for i, name in enumerate(galaxy_names_tot)
+                }
+
+
+                # -------------------------------------------------------------
+                # Precompute the AGN/inactive index pairs for every set
+                # -------------------------------------------------------------
+
+                set_pair_indices = []
+
+                for set_number, _ in enumerate(set_galnames):
+
+                    df_pairs_set = df_sets[set_number]
+
+                    agn_names = normalize_name(
+                        df_pairs_set["Active Galaxy"]
+                    ).str.strip()
+
+                    inactive_names = normalize_name(
+                        df_pairs_set["Inactive Galaxy"]
+                    ).str.strip()
+
+                    pair_indices = []
+
+                    for agn_name, inactive_name in zip(
+                        agn_names,
+                        inactive_names
+                    ):
+
+                        if (
+                            agn_name not in galaxy_index
+                            or inactive_name not in galaxy_index
+                        ):
+                            continue
+
+                        pair_indices.append(
+                            (
+                                galaxy_index[agn_name],
+                                galaxy_index[inactive_name]
+                            )
+                        )
+
+                    set_pair_indices.append(pair_indices)
+
+
+                # -------------------------------------------------------------
+                # Monte Carlo
+                # -------------------------------------------------------------
+
+
+                uber_means = []
+                uber_means_frac = []
+
+                from tqdm import tqdm
+
+                for i in tqdm(range(n_reps), desc="MC", unit="rep"):
+
+                    # Draw one random value for EVERY galaxy
+                    rep_samples = np.random.normal(
+                        loc=shared_mean,
+                        scale=shared_std,
+                        size=n_gals_tot
+                    )
+
+                    set_mean_diffs_rep = []
+                    set_mean_diffs_frac_rep = []
+
+                    # ---------------------------------------------------------
+                    # Calculate mean difference for every matching set
+                    # ---------------------------------------------------------
+
+                    for pair_indices in set_pair_indices:
+
+                        if len(pair_indices) == 0:
+                            continue
+
+                        agn_idx = np.array(
+                            [pair[0] for pair in pair_indices],
+                            dtype=int
+                        )
+
+                        inactive_idx = np.array(
+                            [pair[1] for pair in pair_indices],
+                            dtype=int
+                        )
+
+                        val_agn = rep_samples[agn_idx]
+                        val_inactive = rep_samples[inactive_idx]
+
+                        # Pair differences
+                        diffs = val_agn - val_inactive
+
+                        # Fractional differences
+                        diffs_frac = diffs / val_agn
+
+                        # Remove non-finite values
+                        diffs = diffs[np.isfinite(diffs)]
+                        diffs_frac = diffs_frac[np.isfinite(diffs_frac)]
+
+                        if len(diffs) > 0:
+                            set_mean_diffs_rep.append(
+                                np.mean(diffs)
+                            )
+
+                        if len(diffs_frac) > 0:
+                            set_mean_diffs_frac_rep.append(
+                                np.mean(diffs_frac)
+                            )
+
+
+                    # ---------------------------------------------------------
+                    # Uber mean
+                    # ---------------------------------------------------------
+
+                    uber_means.append(
+                        np.mean(set_mean_diffs_rep)
+                    )
+
+                    uber_means_frac.append(
+                        np.mean(set_mean_diffs_frac_rep)
+                    )
+
+
+                # -------------------------------------------------------------
+                # Convert to arrays
+                # -------------------------------------------------------------
+
+                uber_means = np.asarray(
+                    uber_means,
+                    dtype=float
+                )
+
+                uber_means_frac = np.asarray(
+                    uber_means_frac,
+                    dtype=float
+                )
+
+
+########################################################################################################################
+
+                #####################################################################
+                # Calculate mean and standard deviation for each matching set
+                #####################################################################
+
+                set_diff_means = np.array([
+                    np.mean(result["diffs"])
+                    for result in set_results
+                    if len(result["diffs"]) > 0
+                ])
+
+                set_ns = np.array([
+                    len(result["diffs"])
+                    for result in set_results
+                    if len(result["diffs"]) > 0
+                ])
+                set_diff_sigmas = np.array([
+                    np.std(result["diffs"], ddof=1)
+                    for result in set_results
+                    if len(result["diffs"]) > 1
+                ])
+
+                set_diff_mean_errs = np.array([
+                    np.std(result["diffs"], ddof=1) / np.sqrt(len(result["diffs"]))
+                    for result in set_results
+                    if len(result["diffs"]) > 1
+                ])
+
+
+
+                #####################################################################
+                # output to table
+                #####################################################################
+
+                global diff_sets_rows
+
+
+                for i in range(len(set_means)):
+
+                    new_row = {
+                    "index": i+1,
+                    f"{y_column}_{masky}_{R_kpcy}_mean": round(set_means[i],4),
+                    f"{y_column}_{masky}_{R_kpcy}_sigma": round(set_stds[i],4),
+                }
+
+                    # Check whether this index already exists
+                    existing_row = next(
+                        (row for row in diff_sets_rows if row["index"] == i+1),
+                        None
+                    )
+
+                    if existing_row is not None:
+                        # Add/update the new columns in the existing row
+                        existing_row[f"{y_column}_{masky}_{R_kpcy}_mean"] = round(set_means[i],4)
+                        existing_row[f"{y_column}_{masky}_{R_kpcy}_sigma"] = round(set_stds[i],4)
+                    else:
+                        # No row with this index yet
+                        diff_sets_rows.append(new_row)
+
+                #####################################################################
+                # Mean of the set means and mean of the set standard deviations
+                #####################################################################
+
+                mean_of_means = np.mean(set_diff_means)
+                sigma_of_means = np.std(set_diff_means,ddof=1)
+                mean_of_sigmas = np.mean(set_diff_sigmas)
+                sigma_of_sigmas = np.std(set_diff_sigmas,ddof=1)
+                mean_of_n = np.mean(set_ns)
+                sigma_of_n = np.std(set_ns,ddof=1)
+                mean_mean_err = np.mean(set_diff_mean_errs)
+                # med_of_p = np.median([result["p"] for result in set_results])
+
+                print("\n==============================================")
+                print("Statistics across pair sets")
+                print("==============================================")
+                print(f"Number of matching sets: {len(set_results)}")
+                print(f"Number of set means: {len(set_means)}")
+                print(f"Number of set sigmas: {len(set_diff_sigmas)}")
+                print(fr"mean n = {mean_of_n:.4g} ± {sigma_of_n:.4g}")
+                print(f"mean of set means = {mean_of_means:.4g} ± {mean_mean_err:.4g}")
+                print(f"mean of set standard deviations = {mean_of_sigmas:.4g} ± {sigma_of_sigmas:.4g}")
+                # print(f"median p val = {(med_of_p*100):.4g}")
+                print("==============================================\n")
+
+
+                #####################################################################
+                # Monte Carlo p-value
+                #####################################################################
+
+                uber_means = uber_means[np.isfinite(uber_means)]
+
+                if len(uber_means) > 0:
+
+                    k = np.sum(
+                        np.abs(uber_means) >= np.abs(mean_of_means)
+                    )
+
+                    p_mc = (k + 1) / (len(uber_means) + 1)
+
+                else:
+                    p_mc = np.nan
+
+                print(f"\nMC p-value = {p_mc:.4g}\n")
+
+
+                #####################################################################
+                # Plot Monte Carlo null distribution
+                #####################################################################
+
                 font = 20
-                bin_edges = np.histogram_bin_edges(diffs, bins=12)
-                # print('\nbin edges=\n')
-                # print(list(bin_edges))
-                if y_column == 'avg_mass_dens':
-                    bin_edges = bin_edges_mass_dens_large
 
-                fig, ax = plt.subplots(figsize=(8, 5))
-                ax.hist(diffs, bins=bin_edges, color="lightgrey", histtype='bar', linewidth=4)
-                ax.axvline(mean, color="red", linestyle="-", label=f"Mean = {mean:.2g} ± {mean_err:.2g}",linewidth=3)
-                ax.axvline(mean - sigma, color="blue", linestyle="--")
-                ax.axvline(mean + sigma, color="blue", linestyle="--",label=fr"$1\sigma = {(sigma):.2g}$" if sigma > 0 else r"$1\sigma = \infty$")
-                ax.axvline(0, color="black", linestyle="solid")  # reference line
+                outputdir = (
+                    f'/Users/administrator/Astro/LLAMA/ALMA/'
+                    f'gas_distribution_fits/Plots/pair_diffs/'
+                    f'{masky}_{R_kpcy}kpc/'
+                )
 
+                fig_mc, ax_mc = plt.subplots(
+                    figsize=(8, 5)
+                )
+
+                ax_mc.hist(
+                    uber_means,
+                    bins=45,
+                    color="lightgrey",
+                    alpha=0.7,
+                    edgecolor=None
+                )
+
+                # Observed mean of means
+                ax_mc.axvline(
+                    mean_of_means,
+                    color="red",
+                    linestyle="-",
+                    linewidth=3,
+                    label=(
+                        f"Observed = {mean_of_means:.2g}"
+                    )
+                )
+
+                # Zero reference
+                ax_mc.axvline(
+                    np.nanmean(uber_means),
+                    color="black",
+                    linestyle="-",
+                    linewidth=2
+                )
+
+                ax_mc.set_xlabel(
+                    fr"Super-mean $\Delta$ "
+                    fr"{axis_label_lookup[y_column]} "
+
+                    if not logy else
+                    fr"Super-mean $\Delta$ log "
+                    fr"{axis_label_lookup[y_column]} "
+,
+                    fontsize=font
+                )
+
+                ax_mc.set_ylabel(
+                    "Number of MC realisations",
+                    fontsize=font
+                )
+
+                ax_mc.set_title(
+                                            f"$p = {p_mc:.3g}$",
+                    fontsize=font
+                )
+
+                ax_mc.legend(
+                    fontsize=font_leg
+                )
+
+                plt.tight_layout()
+
+                mc_output_path = (
+                    outputdir +
+                    f'{y_column}_MC_null_{len(set_results)}sets'
+                )
+
+                if co21only:
+                    mc_output_path += '_co21only'
+
+                if nativey:
+                    mc_output_path += '_native'
+
+                if not fitc:
+                    mc_output_path += '_nofit'
+
+                mc_output_path += '.pdf'
+
+                if y_column == "flux (Jy km/s)":
+
+                    mc_output_path = (
+                        outputdir +
+                        f'fluxjykms_MC_null_{len(set_results)}sets.pdf'
+                    )
+
+                plt.savefig(
+                    mc_output_path
+                )
+
+                print(
+                    f"Saved MC null distribution plot to: "
+                    f"{mc_output_path}"
+                )
+
+                plt.close(fig_mc)
+
+                #####################################################################
+                # Construct common histogram bins
+                #
+                # All 120 sets use exactly the same bins.
+                # The bins are determined from the complete range of all diff values.
+                #####################################################################
+
+                all_diffs = np.concatenate([
+                    result["diffs"]
+                    for result in set_results
+                    if len(result["diffs"]) > 0
+                ])
+
+                all_diffs = all_diffs[
+                    np.isfinite(all_diffs)
+                ]
+
+                bin_edges = np.histogram_bin_edges(
+                    all_diffs,
+                    bins=12
+                )
+
+                # print(bin_edges)
+
+                if y_column == "avg_mass_dens" and mask == 'broad':
+                    bin_edges = np.asarray(bin_edges_mass_dens_large, dtype=float)
+
+                bin_centres = 0.5 * (
+                    bin_edges[:-1] + bin_edges[1:]
+                )
+
+                bin_widths = np.diff(bin_edges)
+
+
+                #####################################################################
+                # Calculate histogram population for every matching set
+                #####################################################################
+
+                hist_counts = []
+
+                for result in set_results:
+
+                    diffs_set = np.asarray(
+                        result["diffs"],
+                        dtype=float
+                    )
+
+                    diffs_set = diffs_set[
+                        np.isfinite(diffs_set)
+                    ]
+
+                    counts, _ = np.histogram(
+                        diffs_set,
+                        bins=bin_edges
+                    )
+
+                    hist_counts.append(counts)
+
+                hist_counts = np.asarray(hist_counts)
+
+
+                #####################################################################
+                # Mean and standard deviation of the population in each bin
+                #####################################################################
+
+                mean_bin_counts = np.mean(
+                    hist_counts,
+                    axis=0
+                )
+
+                std_bin_counts = np.std(
+                    hist_counts,
+                    axis=0,
+                    ddof=1
+                )
+
+                n_sets = hist_counts.shape[0]
+
+                mean_err_bin_counts = std_bin_counts / np.sqrt(n_sets)
+
+
+                #####################################################################
+                # Print histogram information
+                #####################################################################
+
+                # print("Common histogram bin edges:")
+                # print(bin_edges)
+
+                # print("\nMean bin populations:")
+                # print(mean_bin_counts)
+
+                # print("\nStandard deviation of bin populations:")
+                # print(std_bin_counts)
+
+                # print(
+                #     "\nHistogram count array shape:",
+                #     hist_counts.shape
+                # )
+
+
+                #####################################################################
+                # Plot mean histogram across all matching sets
+                #####################################################################
+
+                fig, ax = plt.subplots(
+                    figsize=(8, 5)
+                )
+
+                # -------------------------------------------------------------
+                # Mean histogram population
+                # -------------------------------------------------------------
+
+                ax.bar(
+                    bin_centres,
+                    mean_bin_counts,
+                    width=bin_widths,
+                    color="lightgrey",
+                    edgecolor=None,
+                    linewidth=4,
+                    align="center"
+                )
+
+                # -------------------------------------------------------------
+                # Standard deviation of bin population across matching sets
+                # -------------------------------------------------------------
+
+                ax.errorbar(
+                    bin_centres,
+                    mean_bin_counts,
+                    yerr=mean_err_bin_counts,
+                    fmt="none",
+                    ecolor="black",
+                    elinewidth=2,
+                    capsize=4,
+                    capthick=2
+                )
+
+                # -------------------------------------------------------------
+                # Mean of the mean differences
+                # -------------------------------------------------------------
+
+                ax.axvline(
+                    mean_of_means,
+                    color="red",
+                    linestyle="-",
+                    linewidth=3,
+                    label=f"Mean = {mean_of_means:.2g}±{mean_mean_err:.2g}"
+                )
+
+                # -------------------------------------------------------------
+                # Mean standard deviation
+                # -------------------------------------------------------------
+
+                ax.axvline(
+                    mean_of_means - mean_of_sigmas,
+                    color="blue",
+                    linestyle="-",
+                    linewidth=2
+                )
+
+                ax.axvline(
+                    mean_of_means + mean_of_sigmas,
+                    color="blue",
+                    linestyle="--",
+                    linewidth=2,
+                    label=(
+fr"$1\sigma = {mean_of_sigmas:.2g} \pm {sigma_of_sigmas:.2g}$"
+                        if mean_of_sigmas > 0
+                        else r"$1\sigma = \infty$"
+                    )
+                )
+
+                # -------------------------------------------------------------
+                # Zero reference
+                # -------------------------------------------------------------
+
+                ax.axvline(
+                    0,
+                    color="black",
+                    linestyle="solid",
+                    linewidth=2
+                )
+
+
+                #####################################################################
+                # Axis labels
+                #####################################################################
 
                 try:
-                    ax.set_xlabel(fr"$\Delta$ {axis_label_lookup[y_column]} (AGN - Inactive)", fontsize=font) if not logy else ax.set_xlabel(fr"$\Delta$ log {axis_label_lookup[y_column]} (AGN - Inactive)", fontsize=font)
+
+                    ax.set_xlabel(
+                        fr"$\Delta$ {axis_label_lookup[y_column]} "
+                        "(AGN - Inactive)",
+                        fontsize=font
+                    ) if not logy else ax.set_xlabel(
+                        fr"$\Delta$ log {axis_label_lookup[y_column]} "
+                        "(AGN - Inactive)",
+                        fontsize=font
+                    )
+
                 except:
-                    ax.set_xlabel(fr"$\Delta$ {y_column} (AGN - Inactive)", fontsize=font)  if not logy else ax.set_xlabel(fr"$\Delta$ log {y_column} (AGN - Inactive)", fontsize=font)
 
-                ax.set_ylabel("Number of pairs", fontsize=font)
+                    ax.set_xlabel(
+                        fr"$\Delta$ {y_column} "
+                        "(AGN - Inactive)",
+                        fontsize=font
+                    ) if not logy else ax.set_xlabel(
+                        fr"$\Delta$ log {y_column} "
+                        "(AGN - Inactive)",
+                        fontsize=font
+                    )
 
-                ax.set_title(fr"p = {(p_value_t*100):.3f}\% \qquad N = {n}", fontsize=font)
-                # else:
-                #     ax.set_title(f"Wilcoxon test p-value: {p_value_w:.3f}")
-                ax.legend(fontsize=font_leg)
-                outputdir = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/{masky}_{R_kpcy}kpc/'
-                os.makedirs(outputdir, exist_ok=True)
-                output_path = outputdir+f'{y_column}_pair_differences'
+
+                ax.set_ylabel(
+                    "Mean number of pairs",
+                    fontsize=font
+                )
+                ax.set_title(
+fr"$N_{{\mathrm{{pairs}}}} = {mean_of_n:.2g} \pm {sigma_of_n:.2g} $",
+                   #fr"$\, p = {p_mc * 100:.2f}\%$",
+                    fontsize=font
+                )
+                ax.legend(
+                    fontsize=font_leg
+                )
+
+
+
+                #####################################################################
+                # Save figure
+                #####################################################################
+
+                outputdir = (
+                    f'/Users/administrator/Astro/LLAMA/ALMA/'
+                    f'gas_distribution_fits/Plots/pair_diffs/'
+                    f'{masky}_{R_kpcy}kpc/'
+                )
+
+                os.makedirs(
+                    outputdir,
+                    exist_ok=True
+                )
+
+                output_path = (
+                    outputdir +
+                    f'{y_column}_pair_differences_{len(set_results)}sets'
+                )
 
                 if co21only:
                     output_path += '_co21only'
+
                 if nativey:
                     output_path += '_native'
+
                 if not fitc:
                     output_path += '_nofit'
-                output_path += '.pdf'         
 
+                output_path += '.pdf'
 
-                if y_column =="flux (Jy km/s)":
-                    output_path = outputdir+'fluxjykms_pair_differences.pdf'
+                if y_column == "flux (Jy km/s)":
+
+                    output_path = (
+                        outputdir +
+                        f'fluxjykms_pair_differences_{len(set_results)}sets.pdf'
+                    )
+
                 plt.tight_layout()
-                plt.savefig(output_path)
-                print(f"Saved matched-pairs plot to: {output_path}")
+
+                plt.savefig(
+                    output_path
+                )
+
+                print(
+                    f"Saved mean matched-pairs plot to: "
+                    f"{output_path}"
+                )
+
                 plt.close(fig)
 
+                # # ###########################################################
+                # # Fractional version
                 # ###########################################################
-                # Fractional version
-                ###########################################################
 
-                fig, ax = plt.subplots(figsize=(8, 5))
-                ax.hist(diffs_frac , bins=bin_edges, color="lightgrey", histtype='bar', linewidth=4)
-                ax.axvline(mean_frac , color="red", linestyle="-", label=f"Mean = {mean_frac :.2g} ± {mean_err_frac:.2g}",linewidth=3)
-                ax.axvline(mean_frac  - sigma_frac , color="blue", linestyle="--")
-                ax.axvline(mean_frac  + sigma_frac , color="blue", linestyle="--",label=fr"$1\sigma = {(sigma_frac):.2g}$" if sigma_frac > 0 else r"$1\sigma = \infty$")
-                ax.axvline(0, color="black", linestyle="solid")  # reference line
+                # fig, ax = plt.subplots(figsize=(8, 5))
+                # ax.hist(diffs_frac , bins=bin_edges, color="lightgrey", histtype='bar', linewidth=4)
+                # ax.axvline(mean_frac , color="red", linestyle="-", label=f"Mean = {mean_frac :.2g} ± {mean_err_frac:.2g}",linewidth=3)
+                # ax.axvline(mean_frac  - sigma_frac , color="blue", linestyle="-")
+                # ax.axvline(mean_frac  + sigma_frac , color="blue", linestyle="-",label=fr"$1\sigma = {(sigma_frac):.2g}$" if sigma_frac > 0 else r"$1\sigma = \infty$")
+                # ax.axvline(0, color="black", linestyle="solid")  # reference line
 
 
-                try:
-                    ax.set_xlabel(fr"$\Delta$ {axis_label_lookup[y_column]} (1 - Inactive/AGN)", fontsize=font) if not logy else ax.set_xlabel(fr"$\Delta$ log {axis_label_lookup[y_column]} (1 - Inactive/AGN)", fontsize=font)
-                except:
-                    ax.set_xlabel(fr"$\Delta$ {y_column} (1 - Inactive/AGN)", fontsize=font) if not logy else  ax.set_xlabel(fr"$\Delta$ log {y_column} (1 - Inactive/AGN)", fontsize=font)
+                # try:
+                #     ax.set_xlabel(fr"$\Delta$ {axis_label_lookup[y_column]} (1 - Inactive/AGN)", fontsize=font) if not logy else ax.set_xlabel(fr"$\Delta$ log {axis_label_lookup[y_column]} (1 - Inactive/AGN)", fontsize=font)
+                # except:
+                #     ax.set_xlabel(fr"$\Delta$ {y_column} (1 - Inactive/AGN)", fontsize=font) if not logy else  ax.set_xlabel(fr"$\Delta$ log {y_column} (1 - Inactive/AGN)", fontsize=font)
 
-                ax.set_ylabel("Number of pairs", fontsize=font)
+                # ax.set_ylabel("Number of pairs", fontsize=font)
 
-                ax.set_title(fr"p = {(p_value_t_frac*100):.3f}\% \qquad N = {n_frac}", fontsize=font)
-                # else:
-                #     ax.set_title(f"Wilcoxon test p-value: {p_value_w:.3f}")
-                ax.legend( fontsize=font_leg)
-                outputdir_frac = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/frac/{masky}_{R_kpcy}kpc/'
-                os.makedirs(outputdir_frac, exist_ok=True)
-                output_path = outputdir_frac+f'{y_column}_pair_differences.pdf'
-                if y_column =="flux (Jy km/s)":
-                    output_path = outputdir_frac+'fluxjykms_pair_differences.pdf'
-                if co21only:
-                    output_path = outputdir_frac+f'{y_column}_pair_differences_co21only.pdf'
-                if nativey and y_column =="flux (Jy km/s)":
-                    output_path = outputdir_frac+f'fluxjykms_native_pair_differences.pdf'
-                elif nativey and not y_column =="flux (Jy km/s)":
-                    output_path = outputdir_frac+f'{y_column}_native_pair_differences.pdf'
-                plt.tight_layout()
-                plt.savefig(output_path)
-                print(f"Saved matched-pairs plot to: {output_path}")
-                plt.close(fig)
+                # ax.set_title(fr"p = {(p_value_t_frac*100):.3f}\% \qquad N = {n_frac}", fontsize=font)
+                # # else:
+                # #     ax.set_title(f"Wilcoxon test p-value: {p_value_w:.3f}")
+                # ax.legend( fontsize=font_leg)
+                # outputdir_frac = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/frac/{masky}_{R_kpcy}kpc/'
+                # os.makedirs(outputdir_frac, exist_ok=True)
+                # output_path = outputdir_frac+f'{y_column}_pair_differences.pdf'
+                # if y_column =="flux (Jy km/s)":
+                #     output_path = outputdir_frac+'fluxjykms_pair_differences.pdf'
+                # if co21only:
+                #     output_path = outputdir_frac+f'{y_column}_pair_differences_co21only.pdf'
+                # if nativey and y_column =="flux (Jy km/s)":
+                #     output_path = outputdir_frac+f'fluxjykms_native_pair_differences.pdf'
+                # elif nativey and not y_column =="flux (Jy km/s)":
+                #     output_path = outputdir_frac+f'{y_column}_native_pair_differences.pdf'
+                # plt.tight_layout()
+                # plt.savefig(output_path)
+                # print(f"Saved matched-pairs plot to: {output_path}")
+                # plt.close(fig)
 
 
 
-                # ###########################################################
+
+                #####################################################################
+                # Calculate obscuration statistics for every matching set
+                #####################################################################
+
+                obs_set_results = {
+                    obsclass: []
+                    for obsclass in obs_groups
+                }
+
+                for result in set_results:
+
+                    for obsclass in obs_groups:
+
+                        diffs_class = np.asarray(
+                            result["diffs_obs"][obsclass],
+                            dtype=float
+                        )
+
+                        diffs_class = diffs_class[
+                            np.isfinite(diffs_class)
+                        ]
+
+                        if len(diffs_class) == 0:
+                            continue
+
+                        # ---------------------------------------------------------
+                        # Statistics for this matching set
+                        # ---------------------------------------------------------
+
+                        mean_class = np.mean(diffs_class)
+
+                        if len(diffs_class) > 1:
+
+                            sigma_class = np.std(
+                                diffs_class,
+                                ddof=1
+                            )
+
+                            mean_err_class = (
+                                sigma_class /
+                                np.sqrt(len(diffs_class))
+                            )
+
+                        else:
+
+                            sigma_class = np.nan
+                            mean_err_class = np.nan
+
+                        obs_set_results[obsclass].append({
+                            "diffs": diffs_class,
+                            "n": len(diffs_class),
+                            "mean": mean_class,
+                            "sigma": sigma_class,
+                            "mean_err": mean_err_class,
+                        })
+
+
+                #####################################################################
+                # Statistics across matching sets
+                #
+                # Exactly analogous to the non-obscuration-split analysis:
+                #
+                #   mean_of_means = mean of the set means
+                #   sigma_of_means = std of the set means
+                #   mean_mean_err = mean of the set mean errors
+                #####################################################################
+
+                obs_stats = {}
+
+                for obsclass in obs_groups:
+
+                    results_class = obs_set_results[obsclass]
+
+                    if len(results_class) == 0:
+                        obs_stats[obsclass] = None
+                        continue
+
+                    class_means = np.asarray([
+                        result["mean"]
+                        for result in results_class
+                        if np.isfinite(result["mean"])
+                    ], dtype=float)
+
+                    class_sigmas = np.asarray([
+                        result["sigma"]
+                        for result in results_class
+                        if np.isfinite(result["sigma"])
+                    ], dtype=float)
+
+                    class_mean_errs = np.asarray([
+                        result["mean_err"]
+                        for result in results_class
+                        if np.isfinite(result["mean_err"])
+                    ], dtype=float)
+
+                    class_ns = np.asarray([
+                        result["n"]
+                        for result in results_class
+                    ], dtype=float)
+
+                    mean_of_means_class = (
+                        np.mean(class_means)
+                        if len(class_means) > 0
+                        else np.nan
+                    )
+
+                    sigma_of_means_class = (
+                        np.std(class_means, ddof=1)
+                        if len(class_means) > 1
+                        else np.nan
+                    )
+
+                    mean_of_sigmas_class = (
+                        np.mean(class_sigmas)
+                        if len(class_sigmas) > 0
+                        else np.nan
+                    )
+
+                    sigma_of_sigmas_class = (
+                        np.std(class_sigmas, ddof=1)
+                        if len(class_sigmas) > 1
+                        else np.nan
+                    )
+
+                    mean_of_n_class = (
+                        np.mean(class_ns)
+                        if len(class_ns) > 0
+                        else np.nan
+                    )
+
+                    sigma_of_n_class = (
+                        np.std(class_ns, ddof=1)
+                        if len(class_ns) > 1
+                        else np.nan
+                    )
+
+                    mean_mean_err_class = (
+                        np.mean(class_mean_errs)
+                        if len(class_mean_errs) > 0
+                        else np.nan
+                    )
+
+                    obs_stats[obsclass] = {
+                        "mean_of_means": mean_of_means_class,
+                        "sigma_of_means": sigma_of_means_class,
+                        "mean_of_sigmas": mean_of_sigmas_class,
+                        "sigma_of_sigmas": sigma_of_sigmas_class,
+                        "mean_of_n": mean_of_n_class,
+                        "sigma_of_n": sigma_of_n_class,
+                        "mean_mean_err": mean_mean_err_class,
+                    }
+
+                    print("\n==============================================")
+                    print(f"{labels[obsclass]} statistics across pair sets")
+                    print("==============================================")
+                    print(
+                        f"Number of matching sets: "
+                        f"{len(results_class)}"
+                    )
+                    print(
+                        f"mean n = "
+                        f"{mean_of_n_class:.4g} ± "
+                        f"{sigma_of_n_class:.4g}"
+                    )
+                    print(
+                        f"mean of set means = "
+                        f"{mean_of_means_class:.4g} ± "
+                        f"{mean_mean_err_class:.4g}"
+                    )
+                    print(
+                        f"mean of set standard deviations = "
+                        f"{mean_of_sigmas_class:.4g} ± "
+                        f"{sigma_of_sigmas_class:.4g}"
+                    )
+                    print("==============================================\n")
+
+
+                #####################################################################
+                # PRECOMPUTE OBSCURATION COEFFICIENT MATRICES
+                #
+                # This reproduces the exact MC calculation above, but removes
+                # ALL dataframe/name/pair loops from the MC loop.
+                #
+                # For each matching set:
+                #
+                #   set_mean =
+                #       sum(AGN values) / N
+                #       -
+                #       sum(inactive values) / N
+                #
+                # Therefore each set can be represented as a coefficient vector
+                # acting on the galaxy values:
+                #
+                #   set_mean = coefficient_matrix @ galaxy_values
+                #
+                # AGN galaxy  -> +1/N
+                # inactive    -> -1/N
+                #
+                # Repeated galaxies are automatically handled because the
+                # coefficients are accumulated.
+                #####################################################################
+
+                obs_coefficient_matrices = {}
+                obs_valid_sets = {}
+
+                for obsclass in obs_groups:
+
+                    coefficient_rows = []
+                    valid_sets = []
+
+                    for set_number, df_pairs_set in enumerate(df_sets):
+
+                        # ---------------------------------------------------------
+                        # Normalise names ONCE
+                        # ---------------------------------------------------------
+
+                        active_names = normalize_name(
+                            df_pairs_set["Active Galaxy"]
+                        ).str.strip()
+
+                        inactive_names = normalize_name(
+                            df_pairs_set["Inactive Galaxy"]
+                        ).str.strip()
+
+                        # ---------------------------------------------------------
+                        # Identify valid pairs belonging to this obscuration class
+                        # ---------------------------------------------------------
+
+                        class_pairs = []
+
+                        for agn_name, inactive_name in zip(
+                            active_names,
+                            inactive_names
+                        ):
+
+                            obsclass_pair = agn_obs.get(
+                                agn_name,
+                                {}
+                            ).get("obsclass")
+
+                            if obsclass_pair != obsclass:
+                                continue
+
+                            if (
+                                agn_name not in galaxy_index
+                                or inactive_name not in galaxy_index
+                            ):
+                                continue
+
+                            class_pairs.append((
+                                galaxy_index[agn_name],
+                                galaxy_index[inactive_name]
+                            ))
+
+                        # ---------------------------------------------------------
+                        # No pairs of this class in this matching set
+                        # ---------------------------------------------------------
+
+                        if len(class_pairs) == 0:
+                            continue
+
+                        # ---------------------------------------------------------
+                        # Build coefficient vector for this matching set
+                        # ---------------------------------------------------------
+
+                        n_pairs = len(class_pairs)
+
+                        coefficients = np.zeros(
+                            n_gals_tot,
+                            dtype=float
+                        )
+
+                        for agn_idx, inactive_idx in class_pairs:
+
+                            coefficients[agn_idx] += (
+                                1.0 / n_pairs
+                            )
+
+                            coefficients[inactive_idx] -= (
+                                1.0 / n_pairs
+                            )
+
+                        coefficient_rows.append(coefficients)
+                        valid_sets.append(set_number)
+
+                    # -------------------------------------------------------------
+                    # Store matrix
+                    # -------------------------------------------------------------
+
+                    if len(coefficient_rows) > 0:
+
+                        obs_coefficient_matrices[obsclass] = np.vstack(
+                            coefficient_rows
+                        )
+
+                        obs_valid_sets[obsclass] = np.asarray(
+                            valid_sets,
+                            dtype=int
+                        )
+
+                    else:
+
+                        obs_coefficient_matrices[obsclass] = None
+                        obs_valid_sets[obsclass] = np.asarray(
+                            [],
+                            dtype=int
+                        )
+
+
+                #####################################################################
+                # Monte Carlo p-values for obscured / unobscured
+                #
+                # Same null distribution as the main analysis:
+                #
+                #   shared_mean
+                #   shared_std
+                #   one random value per galaxy
+                #
+                # The only difference is that the pair differences are restricted
+                # to either the obscured or unobscured pairs.
+                #
+                # This implementation is vectorised over MC realisations in
+                # batches, rather than looping over every matching set and pair
+                # for every realisation.
+                #####################################################################
+
+                uber_means_obs = {
+                    obsclass: np.full(
+                        n_reps,
+                        np.nan,
+                        dtype=float
+                    )
+                    for obsclass in obs_groups
+                }
+
+                # -------------------------------------------------------------
+                # Batch MC calculations
+                #
+                # Keeping batches avoids creating an unnecessarily large
+                # (n_reps x n_gals_tot) array.
+                # -------------------------------------------------------------
+
+                if domc:
+
+                    mc_batch_size = 1000
+
+                    for batch_start in tqdm(
+                        range(0, n_reps, mc_batch_size),
+                        desc="MC obscuration",
+                        unit="batch"
+                    ):
+
+                        batch_end = min(
+                            batch_start + mc_batch_size,
+                            n_reps
+                        )
+
+                        n_batch = batch_end - batch_start
+
+                        # ---------------------------------------------------------
+                        # Draw one random value for EVERY galaxy in every MC
+                        # realisation in this batch.
+                        #
+                        # Shape:
+                        #     (n_batch, n_gals_tot)
+                        # ---------------------------------------------------------
+
+                        rep_samples = np.random.normal(
+                            loc=shared_mean,
+                            scale=shared_std,
+                            size=(n_batch, n_gals_tot)
+                        )
+
+                        # ---------------------------------------------------------
+                        # Calculate obscured / unobscured uber means
+                        # ---------------------------------------------------------
+
+                        for obsclass in obs_groups:
+
+                            coefficient_matrix = (
+                                obs_coefficient_matrices[obsclass]
+                            )
+
+                            if coefficient_matrix is None:
+                                continue
+
+                            # -----------------------------------------------------
+                            # Each row of coefficient_matrix gives the mean
+                            # pair-difference for one matching set.
+                            #
+                            # Matrix multiplication gives:
+                            #
+                            #   (MC realisation, matching set)
+                            #
+                            # -----------------------------------------------------
+
+                            set_mean_diffs = (
+                                rep_samples
+                                @ coefficient_matrix.T
+                            )
+
+                            # -----------------------------------------------------
+                            # Mean of the set means
+                            #
+                            # This is exactly the statistic used for the observed
+                            # data.
+                            # -----------------------------------------------------
+
+                            uber_means_obs[obsclass][
+                                batch_start:batch_end
+                            ] = np.mean(
+                                set_mean_diffs,
+                                axis=1
+                            )
+
+
+                    #####################################################################
+                    # Calculate MC p-value for each obscuration class
+                    #####################################################################
+
+                    p_mc_obs = {}
+
+                    for obsclass in obs_groups:
+
+                        stats_class = obs_stats[obsclass]
+
+                        if stats_class is None:
+                            p_mc_obs[obsclass] = np.nan
+                            continue
+
+                        uber_class = np.asarray(
+                            uber_means_obs[obsclass],
+                            dtype=float
+                        )
+
+                        uber_class = uber_class[
+                            np.isfinite(uber_class)
+                        ]
+
+                        observed_class = stats_class[
+                            "mean_of_means"
+                        ]
+
+                        if (
+                            len(uber_class) > 0
+                            and np.isfinite(observed_class)
+                        ):
+
+                            k = np.sum(
+                                np.abs(uber_class)
+                                >=
+                                np.abs(observed_class)
+                            )
+
+                            p_mc_obs[obsclass] = (
+                                (k + 1) /
+                                (len(uber_class) + 1)
+                            )
+
+                        else:
+
+                            p_mc_obs[obsclass] = np.nan
+
+                        print(
+                            f"{labels[obsclass]} MC p-value = "
+                            f"{p_mc_obs[obsclass]:.4g}"
+                        )
+
+
+                    #####################################################################
+                    # Plot Monte Carlo null distributions for obscured / unobscured
+                    #####################################################################
+
+                    outputdir = (
+                        f'/Users/administrator/Astro/LLAMA/ALMA/'
+                        f'gas_distribution_fits/Plots/pair_diffs/obsclass/'
+                        f'{masky}_{R_kpcy}kpc/'
+                    )
+
+                    for obsclass in obs_groups:
+
+                        uber_class = np.asarray(
+                            uber_means_obs[obsclass],
+                            dtype=float
+                        )
+
+                        uber_class = uber_class[
+                            np.isfinite(uber_class)
+                        ]
+
+                        observed_class = obs_stats[obsclass][
+                            "mean_of_means"
+                        ]
+
+                        p_class = p_mc_obs[obsclass]
+
+                        #################################################################
+                        # Figure
+                        #################################################################
+
+                        fig_mc, ax_mc = plt.subplots(
+                            figsize=(8, 5)
+                        )
+
+                        ax_mc.hist(
+                            uber_class,
+                            bins=45,
+                            color="lightgrey",
+                            alpha=0.7,
+                            edgecolor=None
+                        )
+
+                        # Observed mean of means
+                        ax_mc.axvline(
+                            observed_class,
+                            color="red",
+                            linestyle="-",
+                            linewidth=3,
+                            label=(
+                                f"Observed = {observed_class:.2g}\n"
+                                f"$p = {p_class:.3g}$"
+                            )
+                        )
+
+                        # Null reference
+                        ax_mc.axvline(
+                            np.nanmean(uber_class),
+                            color="black",
+                            linestyle="-",
+                            linewidth=2
+                        )
+
+                        ax_mc.set_xlabel(
+                            fr"Mean of set mean $\Delta$ "
+                            fr"{axis_label_lookup[y_column]} "
+                            "(AGN - Inactive)"
+                            if not logy else
+                            fr"Mean of set mean $\Delta$ log "
+                            fr"{axis_label_lookup[y_column]} "
+                            "(AGN - Inactive)",
+                            fontsize=font
+                        )
+
+                        ax_mc.set_ylabel(
+                            "Number of MC realisations",
+                            fontsize=font
+                        )
+
+                        ax_mc.set_title(
+                            f"Monte Carlo null distribution "
+                            f"({labels[obsclass]}, {n_reps:,} realisations)",
+                            fontsize=font
+                        )
+
+                        ax_mc.legend(
+                            fontsize=font_leg
+                        )
+
+                        plt.tight_layout()
+
+                        #################################################################
+                        # Output path
+                        #################################################################
+
+                        mc_output_path = (
+                            outputdir +
+                            f'{y_column}_MC_null_{obsclass}_'
+                            f'{len(set_results)}sets'
+                        )
+
+                        if co21only:
+                            mc_output_path += '_co21only'
+
+                        if nativey:
+                            mc_output_path += '_native'
+
+                        if not fitc:
+                            mc_output_path += '_nofit'
+
+                        mc_output_path += '.pdf'
+
+                        if y_column == "flux (Jy km/s)":
+
+                            mc_output_path = (
+                                outputdir +
+                                f'fluxjykms_MC_null_{obsclass}_'
+                                f'{len(set_results)}sets.pdf'
+                            )
+
+                        #################################################################
+                        # Save
+                        #################################################################
+
+                        plt.savefig(
+                            mc_output_path
+                        )
+
+                        print(
+                            f"Saved {labels[obsclass]} MC null distribution "
+                            f"plot to: {mc_output_path}"
+                        )
+
+                        plt.close(fig_mc)
+
+
+                #####################################################################
                 # Obscuration-split histogram
-                # ###########################################################
+                #####################################################################
 
                 obs_colors = {
                     "o": "red",
                     "u": "blue",
                 }
 
-                fig, ax = plt.subplots(figsize=(8, 5))
+                fig, ax = plt.subplots(
+                    figsize=(8, 5)
+                )
 
-                for obsclass in ["o", "u"]:
+                for obsclass in obs_groups:
 
-                    stats = stats_by_class[obsclass]
-                    if obsclass == 'u':
-                        ax.hist(
-                            diffs_obs[obsclass],
-                            bins=bin_edges,
-                            histtype="step",
-                            linewidth=5,
-                            color=obs_colors[obsclass],
-                            label=f"{labels[obsclass]} (N={stats['n']})",alpha=0.7
+                    results_class = obs_set_results[obsclass]
+
+                    if len(results_class) == 0:
+                        continue
+
+                    stats_class = obs_stats[obsclass]
+
+                    # -------------------------------------------------------------
+                    # Histogram for every matching set
+                    # -------------------------------------------------------------
+
+                    hist_counts_class = []
+
+                    for result in results_class:
+
+                        counts, _ = np.histogram(
+                            result["diffs"],
+                            bins=bin_edges
                         )
-                    else:
-                        ax.hist(diffs_obs[obsclass] , bins=bin_edges, color=obs_colors[obsclass], histtype='bar', linewidth=4,label=f"{labels[obsclass]} (N={stats['n']})",alpha=0.5)
 
+                        hist_counts_class.append(counts)
+
+                    hist_counts_class = np.asarray(
+                        hist_counts_class,
+                        dtype=float
+                    )
+
+                    # -------------------------------------------------------------
+                    # Mean histogram population
+                    # -------------------------------------------------------------
+
+                    mean_counts_class = np.mean(
+                        hist_counts_class,
+                        axis=0
+                    )
+
+                    # -------------------------------------------------------------
+                    # Scatter between matching sets
+                    # -------------------------------------------------------------
+
+                    if hist_counts_class.shape[0] > 1:
+
+                        std_counts_class = np.std(
+                            hist_counts_class,
+                            axis=0,
+                            ddof=1
+                        )
+
+                        mean_err_counts_class = (
+                            std_counts_class /
+                            np.sqrt(hist_counts_class.shape[0])
+                        )
+
+                    else:
+
+                        std_counts_class = np.zeros(
+                            hist_counts_class.shape[1]
+                        )
+
+                        mean_err_counts_class = (
+                            std_counts_class
+                        )
+
+                    # -------------------------------------------------------------
+                    # Plot mean histogram
+                    # -------------------------------------------------------------
+
+                    mean_of_means_class = (
+                        stats_class["mean_of_means"]
+                    )
+
+                    mean_mean_err_class = (
+                        stats_class["mean_mean_err"]
+                    )
+
+                    mean_of_n_class = (
+                        stats_class["mean_of_n"]
+                    )
+
+                    sigma_of_n_class = (
+                        stats_class["sigma_of_n"]
+                    )
+
+                    # p_class = p_mc_obs[obsclass]
+
+                    if obsclass == "u":
+
+                        # Unobscured: unfilled histogram
+                        ax.stairs(
+                            mean_counts_class,
+                            bin_edges,
+                            color=obs_colors[obsclass],
+                            linewidth=5,
+                            label=(
+                                f"{labels[obsclass]} "
+                                f"(N={mean_of_n_class:.1f}"
+                                f"±{sigma_of_n_class:.1f})"
+                            )
+                        )
+
+                    else:
+
+                        # Obscured: filled histogram
+                        ax.bar(
+                            bin_centres,
+                            mean_counts_class,
+                            width=bin_widths,
+                            color=obs_colors[obsclass],
+                            alpha=0.5,
+                            edgecolor=None,
+                            linewidth=2,
+                            align="center",
+                            label=(
+                                f"{labels[obsclass]} "
+                                f"(N={mean_of_n_class:.1f}"
+                                f"±{sigma_of_n_class:.1f})"
+                            )
+                        )
+
+                    # -------------------------------------------------------------
+                    # Error bars on mean histogram
+                    # -------------------------------------------------------------
+
+                    ax.errorbar(
+                        bin_centres,
+                        mean_counts_class,
+                        yerr=mean_err_counts_class,
+                        fmt="none",
+                        ecolor=obs_colors[obsclass],
+                        elinewidth=2,
+                        capsize=3,
+                        capthick=2,
+                        alpha=0.8
+                    )
+
+                    # -------------------------------------------------------------
+                    # Mean of the set means
+                    # -------------------------------------------------------------
 
                     ax.axvline(
-                        stats["mean"],
+                        mean_of_means_class,
                         color=obs_colors[obsclass],
                         linestyle="-",
-                        linewidth=3,  label=f"{labels[obsclass]} Mean = {stats['mean'] :.2g} ± {stats['mean_err']:.2g}")
-                    
+                        linewidth=3,
+                        label=(
+                            f"{labels[obsclass]} Mean = "
+                            f"{mean_of_means_class:.2g}"
+                            f"±{mean_mean_err_class:.2g}"
+                        )
+                    )
 
-                    # ax.axvline(
-                    #     stats["mean"] - stats["sigma"],
-                    #     color=obs_colors[obsclass],
-                    #     linestyle=":",
-                    #     linewidth=1.5,
+                    # -------------------------------------------------------------
+                    # Print statistics
+                    # -------------------------------------------------------------
+
+                    print(
+                        f"{labels[obsclass]}:"
+                    )
+
+                    print(
+                        f"  Number of sets = "
+                        f"{len(results_class)}"
+                    )
+
+                    print(
+                        f"  Mean N = "
+                        f"{mean_of_n_class:.4g} "
+                        f"± {sigma_of_n_class:.4g}"
+                    )
+
+                    print(
+                        f"  Mean of set means = "
+                        f"{mean_of_means_class:.4g} "
+                        f"± {mean_mean_err_class:.4g}"
+                    )
+
+                    # print(
+                    #     f"  MC p = "
+                    #     f"{p_class:.4g}"
                     # )
 
-                    # ax.axvline(
-                    #     stats["mean"] + stats["sigma"],
-                    #     color=obs_colors[obsclass],
-                    #     linestyle=":",
-                    #     linewidth=1.5,
-                    # )
 
-                ax.axvline(0, color="black", linestyle="-")
-                
-                try:
-                    ax.set_xlabel(fr"$\Delta$ {axis_label_lookup[y_column]} (AGN - Inactive)", fontsize=font) if not logy else ax.set_xlabel(fr"$\Delta$ log {axis_label_lookup[y_column]} (AGN - Inactive)", fontsize=font)
-                except:
-                    ax.set_xlabel(fr"$\Delta$ {y_column} (AGN - Inactive)", fontsize=font) if not logy else  ax.set_xlabel(fr"$\Delta$ log {y_column} (AGN - Inactive)", fontsize=font)
-                ax.set_ylabel("Number of pairs", fontsize=font)
+                # -------------------------------------------------------------
+                # Zero reference
+                # -------------------------------------------------------------
 
-                title = "\n".join(
-                    [
-                        fr"{labels[o]}: p = {(float(stats_by_class[o]['p_value'])*100):.3g}\%"
-                        for o in ["o", "u"]
-                    ]
+                ax.axvline(
+                    0,
+                    color="black",
+                    linestyle="-",
+                    linewidth=2
                 )
 
 
-                ax.set_title(title, fontsize=font-2)
+                # -------------------------------------------------------------
+                # Axis labels
+                # -------------------------------------------------------------
 
-                ax.legend(fontsize=font_leg)
+                try:
 
-                outputdir_obs = f'/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/pair_diffs/obsclass/{masky}_{R_kpcy}kpc/'
-                os.makedirs(outputdir_obs, exist_ok=True)
+                    ax.set_xlabel(
+                        fr"$\Delta$ "
+                        f"{axis_label_lookup[y_column]} "
+                        "(AGN - Inactive)",
+                        fontsize=font
+                    ) if not logy else ax.set_xlabel(
+                        fr"$\Delta$ log "
+                        f"{axis_label_lookup[y_column]} "
+                        "(AGN - Inactive)",
+                        fontsize=font
+                    )
 
-                output_path_obs = outputdir_obs + f'{y_column}_pair_differences_obsclass.pdf'
+                except:
+
+                    ax.set_xlabel(
+                        fr"$\Delta$ {y_column} "
+                        "(AGN - Inactive)",
+                        fontsize=font
+                    ) if not logy else ax.set_xlabel(
+                        fr"$\Delta$ log {y_column} "
+                        "(AGN - Inactive)",
+                        fontsize=font
+                    )
+
+                ax.set_ylabel(
+                    "Mean number of pairs",
+                    fontsize=font
+                )
+
+
+                # -------------------------------------------------------------
+                # Title
+                # -------------------------------------------------------------
+
+                title_lines = []
+
+                for obsclass in obs_groups:
+
+                    if obs_stats[obsclass] is None:
+                        continue
+
+                    # p_class = p_mc_obs[obsclass]
+
+                    # if not np.isfinite(p_class):
+                    #     continue
+
+                    # title_lines.append(
+                    #     fr"{labels[obsclass]}: "
+                    #     fr"$p = {p_class * 100:.2g}\%$"
+                    # )
+
+                ax.set_title(
+                    "\n".join(title_lines),
+                    fontsize=font - 2
+                )
+
+                ax.legend(
+                    fontsize=font_leg
+                )
+
+
+                # -------------------------------------------------------------
+                # Save figure
+                # -------------------------------------------------------------
+
+                outputdir_obs = (
+                    f'/Users/administrator/Astro/LLAMA/ALMA/'
+                    f'gas_distribution_fits/Plots/pair_diffs/'
+                    f'obsclass/{masky}_{R_kpcy}kpc/'
+                )
+
+                os.makedirs(
+                    outputdir_obs,
+                    exist_ok=True
+                )
+
+                output_path_obs = (
+                    outputdir_obs +
+                    f'{y_column}_pair_differences_obsclass.pdf'
+                )
 
                 if co21only:
-                    output_path_obs = outputdir_obs + f'{y_column}_pair_differences_obsclass_co21only.pdf'
+
+                    output_path_obs = (
+                        outputdir_obs +
+                        f'{y_column}_pair_differences_'
+                        f'obsclass_co21only.pdf'
+                    )
+
                 if nativey:
-                    output_path_obs = outputdir_obs + f'{y_column}_native_pair_differences_obsclass.pdf'
+
+                    output_path_obs = (
+                        outputdir_obs +
+                        f'{y_column}_native_pair_differences_'
+                        f'obsclass.pdf'
+                    )
+
                 if y_column == "flux (Jy km/s)":
-                    output_path_obs = outputdir_obs + 'fluxjykms_pair_differences_obsclass.pdf'
+
+                    output_path_obs = (
+                        outputdir_obs +
+                        'fluxjykms_pair_differences_obsclass.pdf'
+                    )
 
                 plt.tight_layout()
-                plt.savefig(output_path_obs)
-                print(f"Saved obscuration-split plot to: {output_path_obs}")
+
+                plt.savefig(
+                    output_path_obs
+                )
+
+                print(
+                    f"Saved obscuration-split plot to: "
+                    f"{output_path_obs}"
+                )
+
                 plt.close(fig)
-
-
-                ###########################################################
-                # Scatter plot: diff vs independent variable
-                ##########################################################
-
-                # Only valid if indeps were populated (i.e. native resolution mode)
-                if len(indeps) == len(diffs) and len(diffs) > 0:
-
-                    indeps = np.asarray(indeps)
-                    diffs = np.asarray(diffs)
-
-                    # Clean finite values jointly (important to keep pairing)
-                    mask = np.isfinite(indeps) & np.isfinite(diffs)
-                    indeps = indeps[mask]
-                    diffs = diffs[mask]
-
-                    fig, ax = plt.subplots(figsize=(8, 7))
-
-                    ax.scatter(indeps, diffs, color="black", alpha=0.7, s=30)
-
-                    # Reference lines
-                    ax.axhline(0, color="black", linestyle="solid")
-                    ax.axhline(mean, color="red", linestyle="--", label=rf"Mean $\Delta$ = {mean:.2g}")
-                    ax.axhline(mean + sigma, color="blue", linestyle="--")
-                    ax.axhline(mean - sigma, color="blue", linestyle="--",
-                            label=f"$1\\sigma = {sigma:.2g}$" if sigma > 0 else r"$1\sigma = \infty$")
-
-                    # Labels
-                    try:
-                        ax.set_xlabel(axis_label_lookup[x_column], fontsize=font)
-                    except:
-                        ax.set_xlabel(x_column, fontsize=font)
-
-                    try:
-                        ax.set_ylabel(fr"$\Delta$ {axis_label_lookup[y_column]}", fontsize=font)
-                    except:
-                        ax.set_ylabel(fr"$\Delta$ {y_column}", fontsize=font)
-
-                    ax.legend( fontsize=font_leg)
-
-                    # Save
-                    outputdir_scatter = outputdir + '/scatters/'
-                    os.makedirs(outputdir_scatter, exist_ok=True)
-                    scatter_path = outputdir_scatter + f'{y_column}_pair_differences_{x_column}_scatter.pdf'
-                    if nativey:
-                        scatter_path = outputdir_scatter + f'{y_column}_pair_differences_{x_column}_nativey_scatter.pdf'
-
-                    if co21only:
-                        scatter_path = outputdir_scatter + f'{y_column}_pair_differences_{x_column}_scatter_co21only.pdf'
-
-                    if y_column == "flux (Jy km/s)":
-                        scatter_path = outputdir_scatter + f'fluxjykms_pair_differences_{x_column}_scatter.pdf'
-
-                    plt.tight_layout
-                    plt.savefig(scatter_path)
-                    print(f"Saved scatter plot to: {scatter_path}")
-                    plt.close(fig)
-                else:
-                    print('diffs and indeps cannot be plotted together')
-
-                # ###########################################################
-                # Fractional version
-                ###########################################################
-                
-                                # Only valid if indeps were populated (i.e. native resolution mode)
-                if len(indeps) == len(diffs_frac) and len(diffs) > 0:
-
-                    indeps = np.asarray(indeps)
-                    diffs_frac = np.asarray(diffs_frac)
-
-                    # Clean finite values jointly (important to keep pairing)
-                    mask = np.isfinite(indeps) & np.isfinite(diffs_frac)
-                    indeps = indeps[mask]
-                    diffs_frac = diffs_frac[mask]
-
-                    fig, ax = plt.subplots(figsize=(8, 7))
-
-                    ax.scatter(indeps, diffs_frac, color="black", alpha=0.7, s=30)
-
-                    # Reference lines
-                    ax.axhline(0, color="black", linestyle="solid")
-                    ax.axhline(mean_frac, color="red", linestyle="--", label=rf"Mean $\Delta$ = {mean_frac:.2g}")
-                    ax.axhline(mean_frac + sigma_frac, color="blue", linestyle="--")
-                    ax.axhline(mean_frac - sigma_frac, color="blue", linestyle="--",
-                            label=f"$1\\sigma = {sigma_frac:.2g}$" if sigma_frac > 0 else r"$1\sigma = \infty$")
-
-                    # Labels
-                    try:
-                        ax.set_xlabel(axis_label_lookup[x_column], fontsize=font)
-                    except:
-                        ax.set_xlabel(x_column, fontsize=font)
-
-                    try:
-                        ax.set_ylabel(fr"frac$\Delta$ {axis_label_lookup[y_column]}", fontsize=font)
-                    except:
-                        ax.set_ylabel(fr"frac $\Delta$ {y_column}", fontsize=font)
-
-                    ax.legend( fontsize=font_leg)
-
-                    # Save
-                    outputdir_scatter = outputdir_frac + '/scatters/'
-                    os.makedirs(outputdir_scatter, exist_ok=True)
-                    scatter_path = outputdir_scatter + f'{y_column}_pair_differences_{x_column}_scatter.pdf'
-
-                    if co21only:
-                        scatter_path = outputdir_scatter + f'{y_column}_pair_differences_{x_column}_scatter_co21only.pdf'
-                    if nativey:
-                        scatter_path = outputdir_scatter + f'{y_column}_pair_differences_{x_column}_nativey_scatter.pdf'
-
-                    if y_column == "flux (Jy km/s)":
-                        scatter_path = outputdir_scatter + f'fluxjykms_pair_differences_{x_column}_scatter.pdf'
-
-                    plt.tight_layout
-                    plt.savefig(scatter_path)
-                    print(f"Saved scatter plot to: {scatter_path}")
-                    plt.close(fig)
-                else:
-                    print('diffs and indeps cannot be plotted together')
 
 
 
@@ -4418,7 +6129,10 @@ def plot_llama_property(x_column: str, y_column: str, AGN_data, inactive_data, a
 
 
 
-bin_edges_mass_dens_large =  [-1.6453252557068394, -1.301824039101714, -0.9583228224965886, -0.6148216058914633, -0.27132038928633784, 0.07218082731878761, 0.41568204392391284, 0.7591832605290385, 1.1026844771341637, 1.446185693739289, 1.7896869103444146, 2.13318812694954, 2.4766893435546646]
+bin_edges_mass_dens_large =  [-1.64532526 ,-1.30182404, -0.95832282, -0.61482161, -0.27132039 , 0.07218083,
+  0.41568204 , 0.75918326  ,1.10268448 , 1.44618569 , 1.78968691 , 2.13318813,
+  2.47668934]
+
 
 AGN_data = [
     {"Name": "NGC 1365", "Distance (Mpc)": 18.0, "AGN Classification": "Sy 1.8a", "log LH (L⊙)": 10.58,
@@ -4670,13 +6384,13 @@ df_sets = [
     for match_set in all_sets
 ]
 
-for i, df in enumerate(df_sets):
+# for i, df in enumerate(df_sets):
 
-    print(f"\n{'='*60}")
-    print(f"SET {i + 1}")
-    print(f"{'='*60}")
+    # print(f"\n{'='*60}")
+    # print(f"SET {i + 1}")
+    # print(f"{'='*60}")
 
-    print(df.to_string(index=False))
+    # print(df.to_string(index=False))
 
 for i, df in enumerate(df_sets):
 
@@ -4684,6 +6398,8 @@ for i, df in enumerate(df_sets):
     assert df["Active Galaxy"].nunique() == 19
 
     counts = df["Inactive Galaxy"].value_counts()
+
+    # print(df)
 
     # No inactive appears more than twice
     assert counts.max() <= 1
@@ -4775,6 +6491,49 @@ inactive_Rosario2018 = pd.DataFrame([
     {"Name": "NGC 4429",     "log L′ CO": "NaN", "log LGAL": "NaN", "log LAGN": "NaN"}
 
 ])
+
+lco_errors = {
+    "ESO 021-G004": 0.075,
+    "ESO 137-G034": 0.076,
+    "MCG-05-14-012": np.nan,
+    "MCG-05-23-016": 0,
+    "MCG-06-30-015": 0.090,
+    "NGC 1365": 0.066,
+    "NGC 2110": 0.073,
+    "NGC 2992": 0.067,
+    "NGC 3081": 0.105,
+    "NGC 3783": 0.076,
+    "NGC 4235": 0.080,
+    "NGC 4388": 0.068,
+    "NGC 4593": 0.090,
+    "NGC 5506": 0.076,
+    "NGC 5728": 0.075,
+    "NGC 6814": 0.108,
+    "NGC 7172": 0.063,
+    "NGC 7213": 0.066,
+    "NGC 7582": 0.061,
+    "ESO 093-G003": 0.065,
+    "ESO 208-G021": 0,
+    "IC 4653": 0.068,
+    "NGC 1079": 0.118,
+    "NGC 1947": 0.067,
+    "NGC 2775": 0,
+    "NGC 3175": 0.061,
+    "NGC 3351": 0.061,
+    "NGC 3717": 0.062,
+    "NGC 3749": 0.068,
+    "NGC 4224": 0.070,
+    "NGC 4254": 0.061,
+    "NGC 4260": 0,
+    "NGC 5037": 0.071,
+    "NGC 5845": 0,
+    "NGC 5921": 0.062,
+    "NGC 718": 0.067,
+    "NGC 7727": 0.075,
+}
+
+agn_Rosario2018["log L′ CO_err"] = agn_Rosario2018["Name"].map(lco_errors)
+inactive_Rosario2018["log L′ CO_err"] = inactive_Rosario2018["Name"].map(lco_errors)
 
 
 
@@ -5026,8 +6785,8 @@ axis_label_lookup = {
     "Asymmetry": "A",
     "Gini": "G",
     "log LX": r"$\log{L_{2-10}}$ (erg s$^{-1}$)",
-    "total_mass (M_sun)": r"Total Molecular Gas Mass ($M_\odot$)",
-    "avg_mass_dens": r"H$_2$ Mass Surface Density ($M_\odot$kpc$^{-2}$)",
+    "total_mass (M_sun)": r"Total Molecular Gas Mass ($\mathrm{M}_\odot$)",
+    "avg_mass_dens": r"H$_2$ Mass Surface Density ($\mathrm{M}_\odot\,$kpc$^{-2}$)",
     "L'CO_JCMT (K km s pc2)": "ALMA L$'$ CO (K km s pc$^2$)",
     "L'CO_APEX (K km s pc2)": "ALMA L$'$ CO (K km s pc$^2$)",
     'log L′ CO': "Single-dish L$'$ CO (K km s pc$^2$)",
@@ -5045,10 +6804,10 @@ axis_label_lookup = {
 
 
 masks = ['broad','strict']
-radii = [0.3,1.5]
+radii = [1.5,0.3]
 
 masks = ['broad']
-radii = [1.5]
+radii = [1.5,0.3]
 
 for mask in masks:
     for R_kpc in radii:
@@ -5118,7 +6877,7 @@ for mask in masks:
 
 # #         ############# L'CO comparison with Ros18 #####################
 
-        # plot_llama_property('log L′ CO',"L'CO_JCMT (K km s pc2)",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True, logy=True,square=True,best_fit=False,mask=mask,R_kpc=R_kpc,comb_llama=True, exclude_names=None,yhist=False)
+        # plot_llama_property('log L′ CO',"L'CO_JCMT (K km s pc2)",AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,logx=True, logy=True,square=True,best_fit=False,mask=mask,R_kpc=R_kpc,comb_llama=True, exclude_names=None,yhist=False, force_names=True)
 
 
 ########################## Clumpiness with LX, differing aperture and sigma #######################################
@@ -5134,12 +6893,13 @@ for mask in masks:
 
 #### safe for pairdiffs
 
-        # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
         # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False,fitc=False)
         # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False,fitc=True)
 
         # plot_llama_property('emission_pixels', 'Gini', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
         # plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+        # plot_llama_property('emission_pixels', 'Smoothness_davis', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
+
         # plot_llama_property('emission_pixels', 'smoothness_espocito50_sig100', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,nativey=True,co21only=False)
 
 
@@ -5150,8 +6910,6 @@ for mask in masks:
 
         
         # plot_llama_property('emission_pixels', 'Resolution (pc)', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=None,co21only=False,nativex=True,nativey=True)
-
-        # plot_llama_property('emission_pixels', 'clumping_factor', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude,co21only=False)
 
         # plot_llama_property('emission_pixels', 'Concentration', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude_co21only,nativey=True,co21only=True)
         # plot_llama_property('emission_pixels', 'Asymmetry', AGN_data, inactive_data, agn_Rosario2018, inactive_Rosario2018,False,mask=mask,R_kpc=R_kpc,exclude_names=exclude_co21only,co21only=True)
@@ -5175,3 +6933,7 @@ stats_table.to_csv(
     index=False
 )
 print("Saved all statistics → statistics_summary.csv")
+diff_sets_table = pd.DataFrame(diff_sets_rows)
+diff_sets_table.to_csv("/Users/administrator/Astro/LLAMA/ALMA/gas_distribution_fits/Plots/diff_sets_summary.csv", index = False)
+print('Saved all pairdiffs sets')
+
